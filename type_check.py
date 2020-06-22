@@ -19,7 +19,6 @@ def check_channel_count(node):
   elif isinstance(node, BinopIcJcKc):
     lchild_c = check_channel_count(node.lchild)
     rchild_c = check_channel_count(node.rchild)
-    print("node {} lchild out {} rchild out {}".format(node.name, lchild_c, rchild_c))
     assert(lchild_c == node.Ic() and rchild_c == node.Jc())
     return node.Kc()
   elif isinstance(node, UnopII):
@@ -107,11 +106,8 @@ attempts to fix input channels of parent tree to match output channels of subtre
 by finding closest UnopIJ ancestor and changing its input channels to out_c
 if a Binop is encountered, fix the channel counts downwards for the other child
 """
-def fix_channel_count_upwards(subtree, in_c):
-  parent = subtree.parent
+def fix_channel_count_upwards_helper(subtree, parent, in_c):
   cur_node = subtree
-  if parent:
-    print("fixing channel counts upwards parent {}".format(parent.name))
   if parent is None:
     return True
   elif isinstance(parent, BinopIII):
@@ -136,13 +132,23 @@ def fix_channel_count_upwards(subtree, in_c):
     parent.in_c = in_c
     return True
   elif isinstance(parent, BinopIcJcKc) or isinstance(parent, Const):
-    if parent.in_c == in_c:
-      return True
+    if cur_node is parent.lchild:
+      return parent.in_c[0] == in_c
     else:
-      return False
+      return parent.in_c[1] == in_c
   else:
     return fix_channel_count_upwards(parent, in_c)
   
+
+def fix_channel_count_upwards(subtree, in_c):
+  if type(subtree.parent) is tuple:
+    for p in subtree.parent:
+      if not fix_channel_count_upwards_helper(subtree, p, in_c):
+        return False
+    return True
+  else:
+    return fix_channel_count_upwards_helper(subtree, subtree.parent, in_c)
+
 
 """
 type check that linear operators are followed by nonlinear operators
@@ -155,6 +161,8 @@ def check_linear_types(root):
       check_linear_types(root.lchild)
       check_linear_types(root.rchild)
     elif root.num_children == 1:
+      if not (isinstance(root.child, NonLinear) or isinstance(root.child, Special)):
+        print("root children should be NonLinear or Special: {}".format(root.dump()))
       assert(isinstance(root.child, NonLinear) or isinstance(root.child, Special))
       check_linear_types(root.child)
   if isinstance(root, NonLinear):
@@ -164,6 +172,9 @@ def check_linear_types(root):
       check_linear_types(root.lchild)
       check_linear_types(root.rchild)
     elif root.num_children == 1:
+      if not (isinstance(root.child, Linear) or isinstance(root.child, Special)):
+        print("root children should be Linear or Special: {}".format(root.dump()))
+      
       assert(isinstance(root.child, Linear) or isinstance(root.child, Special))
       check_linear_types(root.child)
   else:
@@ -174,5 +185,17 @@ def check_linear_types(root):
       check_linear_types(root.child)
       
 
-
+"""
+returns if tree is linear - meaning only has Add, Sub, or Convs
+"""
+def is_linear(tree):
+  tree_type = type(tree)
+  if tree_type is Input:
+    return True
+  if tree_type is Add or tree_type is Sub or isinstance(tree, Linear):
+    if tree.num_children == 2:
+      return is_linear(tree.lchild) and is_linear(tree.rchild)
+    elif tree.num_children == 1:
+      return is_linear(tree.child)
+  return False
 

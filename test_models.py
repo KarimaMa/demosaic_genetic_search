@@ -15,8 +15,9 @@ def build_linear_model():
 """
 check that green model type checks
 """
-def build_green_model(bayer):
+def build_green_model():
   # detector model
+  bayer = Input(1, "Bayer")
   d1filters_d = Conv1D(bayer, 8)
   relu1 = Relu(d1filters_d)
   fc1 = Conv1x1(relu1, 8)
@@ -32,7 +33,8 @@ def build_green_model(bayer):
   return out
 
 
-def build_full_model(green_model, bayer):
+def build_full_model(green_model):
+  bayer = Input(1, "Bayer")
   green = GreenExtractor(green_model, bayer)
   green_input = Input(1, node=green)
 
@@ -43,5 +45,6 @@ def build_full_model(green_model, bayer):
   red_blue = ChromaExtractor(chroma, bayer)
   rgb = Stack(red_blue, green)
   out = Conv2D(rgb, 3)
-  return out, set((bayer, green_input))
+  out.assign_parents()
+  return out, set((bayer.name, green_input.name))
 
