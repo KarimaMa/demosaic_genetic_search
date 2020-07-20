@@ -6,16 +6,16 @@ Build a default model
 def build_green_model():
   # detector model
   bayer = Input(1, "Bayer")
-  d1filters_d = Conv1D(bayer, 8)
+  d1filters_d = Conv1D(bayer, 16)
   relu1 = Relu(d1filters_d)
-  fc1 = Conv1x1(relu1, 8)
+  fc1 = Conv1x1(relu1, 16)
   relu2 = Relu(fc1)
-  fc2 = Conv1x1(relu2, 4)
+  fc2 = Conv1x1(relu2, 16)
   softmax = Softmax(fc2)
 
   # filter model
   bayer = Input(1, "Bayer")
-  d1filters_f = Conv1D(bayer, 4)
+  d1filters_f = Conv1D(bayer, 16)
 
   mul = Mul(d1filters_f, softmax)
   missing_green = SumR(mul)
@@ -31,7 +31,7 @@ def build_chroma_model(green):
 
   # build chroma model
   diff = Sub(bayer, green_input)
-  chroma_diff = Conv2D(diff, 3)
+  chroma_diff = Conv2D(diff, 16)
   missing_chroma = Add(chroma_diff, green_input)
 
   bayer = Input(1, "Bayer")
