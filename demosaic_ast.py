@@ -7,9 +7,11 @@ from tree import Node, hash_combine
 import copy
 import sys
 import pickle
-from util import extclass
 
 
+# from a github gist by victorlei
+def extclass(cls):
+  return lambda f: (setattr(cls,f.__name__,f) or f)
 """ ----------------------------------------------"""
 
 class Binop(ABC):

@@ -46,8 +46,8 @@ class CostTiers():
 		for tid, tier in enumerate(self.tiers):
 			sorted_models = sorted(tier.items(), key=operator.itemgetter(1)[1])
 			new_tier = {}
-			for item in sorted_models:
-				new_tier[item[0]] = item[1]
+      for i in range(min(k, len(sorted_models))):
+				new_tier[sorted_models[i][0]] = sorted_models[i][1]
 			self.tiers[tid] = new_tier
 
 

@@ -82,7 +82,6 @@ class GreenDataset(data.Dataset):
     img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
     img = np.transpose(img, [2, 0, 1])
     green = np.expand_dims(img[1,...], axis=0)
-    print(green.shape)
     mosaic = bayer(img)
-
+    mosaic = np.sum(mosaic, axis=0, keepdims=True)
     return (mosaic, green) 

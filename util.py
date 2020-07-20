@@ -1,11 +1,11 @@
 import logging
+import torch
 import os
+from demosaic_ast import load_ast
 
 # from a github gist by victorlei
 def extclass(cls):
   return lambda f: (setattr(cls,f.__name__,f) or f)
-
-
 
 class AvgrageMeter(object):
 
@@ -40,7 +40,7 @@ def create_dir(path):
   if os.path.exists(path):
     assert False, f"Attempting to overwrite existing folder {path}"
 
-  os.mkdir(path)
+  os.makedirs(path)
   print('Created folder: {}'.format(path))
 
 
@@ -69,7 +69,7 @@ def load_model_from_file(model_file, model_version):
     pytorch_files = [l.strip() for l in f]
 
   model = torch.load(pytorch_files[model_version])
-  model_ast = demosaic_ast.load_ast(ast_file)
+  model_ast = load_ast(ast_file)
   return model, model_ast
 
 
@@ -102,12 +102,12 @@ class ModelManager():
 
     pytorch_files = [get_model_pytorch_file(model_dir, model_version) \
                     for model_version in range(len(models))]
-    for i, model in enummerate(models):
-      model.save(pytorch_files[i])
+    for i, model in enumerate(models):
+      torch.save(model, pytorch_files[i])
 
     info_file = get_model_info_file(model_dir)
     with open(info_file, "w+") as f:
-      f.write(ast_file)
+      f.write(ast_file + "\n")
       for pf in pytorch_files:
         f.write(pf)
 
