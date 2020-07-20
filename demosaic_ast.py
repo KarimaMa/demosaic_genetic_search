@@ -5,7 +5,9 @@ TODO:
 from abc import ABC, abstractmethod
 from tree import Node, hash_combine
 import copy
-
+import sys
+import pickle
+from util import extclass
 
 
 """ ----------------------------------------------"""
@@ -72,7 +74,6 @@ class Special(ABC):
 
 """----------------------------------------------------------------------"""
 
-
 class Input(Const, Special, Node):
   def __init__(self, out_c, name="Input", node=None):
     if node:
@@ -82,23 +83,11 @@ class Input(Const, Special, Node):
     self.in_c = out_c
     self.out_c = out_c 
 
-  def compute_input_output_channels(self):
-    return self.in_c, self.out_c
-
-
 class Add(BinopIII, Special, Node):
   def __init__(self, lchild, rchild):
     Node.__init__(self, "Add", 2)
     self.lchild = lchild
     self.rchild = rchild
-
-  def compute_input_output_channels(self):
-    leftchild_in_c, leftchild_out_c = self.lchild.compute_input_output_channels()
-    rightchild_in_c, rightchild_out_c = self.rchild.compute_input_output_channels()
-    self.in_c = (leftchild_out_c, rightchild_out_c)
-    self.out_c = max(leftchild_out_c, rightchild_out_c)
-    return self.in_c, self.out_c
-
 
 class Sub(BinopIII, Special, Node):
   def __init__(self, lchild, rchild):
@@ -106,26 +95,11 @@ class Sub(BinopIII, Special, Node):
     self.lchild = lchild
     self.rchild = rchild
 
-  def compute_input_output_channels(self):
-    leftchild_in_c, leftchild_out_c = self.lchild.compute_input_output_channels()
-    rightchild_in_c, rightchild_out_c = self.rchild.compute_input_output_channels()
-    self.in_c = (leftchild_out_c, rightchild_out_c)
-    self.out_c = max(leftchild_out_c, rightchild_out_c)
-    return self.in_c, self.out_c
-
 class Mul(BinopIII, Special, Node):
   def __init__(self, lchild, rchild):
     Node.__init__(self, "Mul", 2)
     self.lchild = lchild
     self.rchild = rchild
-
-  def compute_input_output_channels(self):
-    leftchild_in_c, leftchild_out_c = self.lchild.compute_input_output_channels()
-    rightchild_in_c, rightchild_out_c = self.rchild.compute_input_output_channels()
-    self.in_c = (leftchild_out_c, rightchild_out_c)
-    self.out_c = max(leftchild_out_c, rightchild_out_c)
-    return self.in_c, self.out_c
-
 
 class LogSub(BinopIII, Special, Node):
   def __init__(self, lchild, rchild):
@@ -133,41 +107,17 @@ class LogSub(BinopIII, Special, Node):
     self.lchild = lchild
     self.rchild = rchild
 
-  def compute_input_output_channels(self):
-    leftchild_in_c, leftchild_out_c = self.lchild.compute_input_output_channels()
-    rightchild_in_c, rightchild_out_c = self.rchild.compute_input_output_channels()
-    self.in_c = (leftchild_out_c, rightchild_out_c)
-    self.out_c = max(leftchild_out_c, rightchild_out_c)
-    return self.in_c, self.out_c
-
-
 class AddExp(BinopIII, Special, Node):
   def __init__(self, lchild, rchild):
     Node.__init__(self, "AddExp", 2)
     self.lchild = lchild
     self.rchild = rchild
 
-  def compute_input_output_channels(self):
-    leftchild_in_c, leftchild_out_c = self.lchild.compute_input_output_channels()
-    rightchild_in_c, rightchild_out_c = self.rchild.compute_input_output_channels()
-    self.in_c = (leftchild_out_c, rightchild_out_c)
-    self.out_c = max(leftchild_out_c, rightchild_out_c)
-    return self.in_c, self.out_c
-
-
 class Stack(BinopIJK, Special, Node):
   def __init__(self, lchild, rchild):
     Node.__init__(self, "Stack", 2)
     self.lchild = lchild
     self.rchild = rchild
-
-  def compute_input_output_channels(self):
-    _, lout_c = self.lchild.compute_input_output_channels()
-    _, rout_c = self.rchild.compute_input_output_channels()
-    self.in_c = (lout_c, rout_c)
-    self.out_c = lout_c + rout_c
-    return self.in_c, self.out_c
-
 
 class ChromaExtractor(BinopIcJcKc, Special, Node):
   def __init__(self, lchild, rchild):
@@ -176,19 +126,12 @@ class ChromaExtractor(BinopIcJcKc, Special, Node):
     self.rchild = rchild
     self.in_c = (3, 1) # CH, CV, CQ and Bayer
     self.out_c = 2
-
-  def compute_input_output_channels(self):
-    self.lchild.compute_input_output_channels()
-    self.rchild.compute_input_output_channels()
-    return self.in_c, self.out_c
-
   def Ic(self):
     return 3
   def Jc(self):
     return 1
   def Kc(self):
     return 2
-
 
 class GreenExtractor(BinopIcJcKc, Special, Node):
   def __init__(self, lchild, rchild):
@@ -197,12 +140,6 @@ class GreenExtractor(BinopIcJcKc, Special, Node):
     self.rchild = rchild
     self.in_c = (1, 1) # G and Bayer
     self.out_c = 1
-
-  def compute_input_output_channels(self):
-    self.lchild.compute_input_output_channels()
-    self.rchild.compute_input_output_channels()
-    return self.in_c, self.out_c
-
   def Ic(self):
     return 1
   def Jc(self):
@@ -210,78 +147,35 @@ class GreenExtractor(BinopIcJcKc, Special, Node):
   def Kc(self):
     return 1
 
-
 class Softmax(UnopII, NonLinear, Node):
   def __init__(self, child):
     Node.__init__(self, "Softmax", 1)
     self.child = child
-
-  def compute_input_output_channels(self):
-    _, lout_c = self.child.compute_input_output_channels()
-    self.in_c = lout_c
-    self.out_c = lout_c
-    return self.in_c, self.out_c
-    
 
 class Relu(UnopII, NonLinear, Node):
   def __init__(self, child):
     Node.__init__(self, "Relu", 1)
     self.child = child
 
-  def compute_input_output_channels(self):
-    _, lout_c = self.child.compute_input_output_channels()
-    self.in_c = lout_c
-    self.out_c = lout_c
-    return self.in_c, self.out_c
-
-
 class Log(UnopII, NonLinear, Node):
   def __init__(self, child):
     Node.__init__(self, "Log", 1)
     self.child = child
-
-  def compute_input_output_channels(self):
-    _, lout_c = self.child.compute_input_output_channels()
-    self.in_c = lout_c
-    self.out_c = lout_c
-    return self.in_c, self.out_c
-
 
 class Exp(UnopII, NonLinear, Node):
   def __init__(self, child):
     Node.__init__(self, "Exp", 1)
     self.child = child
 
-  def compute_input_output_channels(self):
-    _, lout_c = self.child.compute_input_output_channels()
-    self.in_c = lout_c
-    self.out_c = lout_c
-    return self.in_c, self.out_c
-
-
 class Downsample(UnopII, Special, Node):
   def __init__(self, child):
     Node.__init__(self, "Downsample", 1)
     self.child = child
 
-  def compute_input_output_channels(self):
-    _, lout_c = self.child.compute_input_output_channels()
-    self.in_c = lout_c
-    self.out_c = lout_c
-    return self.in_c, self.out_c
-
-
 class Upsample(UnopII, Special, Node):
   def __init__(self, child):
     Node.__init__(self, "Upsample", 1)
     self.child = child
-
-  def compute_input_output_channels(self):
-    _, lout_c = self.child.compute_input_output_channels()
-    self.in_c = lout_c
-    self.out_c = lout_c
-    return self.in_c, self.out_c
-
 
 class Conv1x1(UnopIJ, Linear, Node):
   def __init__(self, child, out_c: int):
@@ -289,23 +183,11 @@ class Conv1x1(UnopIJ, Linear, Node):
     self.child = child
     self.out_c = out_c
 
-  def compute_input_output_channels(self):
-    child_in_c, child_out_c = self.child.compute_input_output_channels()
-    self.in_c = child_out_c
-    return self.in_c, self.out_c
-
-
 class Conv1D(UnopIJ, Linear, Node):
   def __init__(self, child, out_c: int):
     Node.__init__(self, "Conv1D", 1)
     self.child = child
     self.out_c = out_c
-
-  def compute_input_output_channels(self):
-    child_in_c, child_out_c = self.child.compute_input_output_channels()
-    self.in_c = child_out_c
-    return self.in_c, self.out_c
-
 
 class Conv2D(UnopIJ, Linear, Node):
   def __init__(self, child, out_c: int):
@@ -313,22 +195,223 @@ class Conv2D(UnopIJ, Linear, Node):
     self.child = child
     self.out_c = out_c
 
-  def compute_input_output_channels(self):
-    child_in_c, child_out_c = self.child.compute_input_output_channels()
-    self.in_c = child_out_c
-    return self.in_c, self.out_c
-
-
 class SumR(UnopI1, Special, Node):
   def __init__(self, child):
     Node.__init__(self, "SumR", 1)
     self.child = child
     self.out_c = 1
 
-  def compute_input_output_channels(self):
-    _, child_out_c = self.child.compute_input_output_channels()
-    self.in_c = child_out_c
-    return self.in_c, self.out_c
+
+@extclass(Input)
+def compute_input_output_channels(self):
+  return self.in_c, self.out_c
+
+@extclass(Add)
+def compute_input_output_channels(self):
+  leftchild_in_c, leftchild_out_c = self.lchild.compute_input_output_channels()
+  rightchild_in_c, rightchild_out_c = self.rchild.compute_input_output_channels()
+  self.in_c = (leftchild_out_c, rightchild_out_c)
+  self.out_c = max(leftchild_out_c, rightchild_out_c)
+  return self.in_c, self.out_c
+
+@extclass(Sub)
+def compute_input_output_channels(self):
+  leftchild_in_c, leftchild_out_c = self.lchild.compute_input_output_channels()
+  rightchild_in_c, rightchild_out_c = self.rchild.compute_input_output_channels()
+  self.in_c = (leftchild_out_c, rightchild_out_c)
+  self.out_c = max(leftchild_out_c, rightchild_out_c)
+  return self.in_c, self.out_c
+
+@extclass(Mul)
+def compute_input_output_channels(self):
+  leftchild_in_c, leftchild_out_c = self.lchild.compute_input_output_channels()
+  rightchild_in_c, rightchild_out_c = self.rchild.compute_input_output_channels()
+  self.in_c = (leftchild_out_c, rightchild_out_c)
+  self.out_c = max(leftchild_out_c, rightchild_out_c)
+  return self.in_c, self.out_c
+
+@extclass(LogSub)
+def compute_input_output_channels(self):
+  leftchild_in_c, leftchild_out_c = self.lchild.compute_input_output_channels()
+  rightchild_in_c, rightchild_out_c = self.rchild.compute_input_output_channels()
+  self.in_c = (leftchild_out_c, rightchild_out_c)
+  self.out_c = max(leftchild_out_c, rightchild_out_c)
+  return self.in_c, self.out_c
+
+@extclass(AddExp)
+def compute_input_output_channels(self):
+  leftchild_in_c, leftchild_out_c = self.lchild.compute_input_output_channels()
+  rightchild_in_c, rightchild_out_c = self.rchild.compute_input_output_channels()
+  self.in_c = (leftchild_out_c, rightchild_out_c)
+  self.out_c = max(leftchild_out_c, rightchild_out_c)
+  return self.in_c, self.out_c
+
+@extclass(Stack)
+def compute_input_output_channels(self):
+  _, lout_c = self.lchild.compute_input_output_channels()
+  _, rout_c = self.rchild.compute_input_output_channels()
+  self.in_c = (lout_c, rout_c)
+  self.out_c = lout_c + rout_c
+  return self.in_c, self.out_c
+
+@extclass(ChromaExtractor)
+def compute_input_output_channels(self):
+  self.lchild.compute_input_output_channels()
+  self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(GreenExtractor)
+def compute_input_output_channels(self):
+  self.lchild.compute_input_output_channels()
+  self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(Softmax)
+def compute_input_output_channels(self):
+  _, lout_c = self.child.compute_input_output_channels()
+  self.in_c = lout_c
+  self.out_c = lout_c
+  return self.in_c, self.out_c
+    
+@extclass(Relu)
+def compute_input_output_channels(self):
+  _, lout_c = self.child.compute_input_output_channels()
+  self.in_c = lout_c
+  self.out_c = lout_c
+  return self.in_c, self.out_c
+
+@extclass(Log)
+def compute_input_output_channels(self):
+  _, lout_c = self.child.compute_input_output_channels()
+  self.in_c = lout_c
+  self.out_c = lout_c
+  return self.in_c, self.out_c
+
+@extclass(Exp)
+def compute_input_output_channels(self):
+  _, lout_c = self.child.compute_input_output_channels()
+  self.in_c = lout_c
+  self.out_c = lout_c
+  return self.in_c, self.out_c
+
+@extclass(Downsample)
+def compute_input_output_channels(self):
+  _, lout_c = self.child.compute_input_output_channels()
+  self.in_c = lout_c
+  self.out_c = lout_c
+  return self.in_c, self.out_c
+
+@extclass(Upsample)
+def compute_input_output_channels(self):
+  _, lout_c = self.child.compute_input_output_channels()
+  self.in_c = lout_c
+  self.out_c = lout_c
+  return self.in_c, self.out_c
+
+@extclass(Conv1x1)
+def compute_input_output_channels(self):
+  child_in_c, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
+  return self.in_c, self.out_c
+
+@extclass(Conv1D)
+def compute_input_output_channels(self):
+  child_in_c, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
+  return self.in_c, self.out_c
+
+@extclass(Conv2D)
+def compute_input_output_channels(self):
+  child_in_c, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
+  return self.in_c, self.out_c
+
+@extclass(SumR)
+def compute_input_output_channels(self):
+  _, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
+  return self.in_c, self.out_c
+
+"""
+Converts AST structure to array format
+"""
+@extclass(Node)
+def structure_to_array(self):
+  preorder = self.preorder()
+  array = []
+  for i, n in enumerate(preorder):
+    node_info = {"type": instance_to_classnamme(n), "in_c": n.in_c, "out_c": n.out_c}
+    if n.num_children == 2:
+      lchild_id = None
+      rchild_id = None
+      for j in range(i, len(preorder)):
+        if preorder[j] is n.lchild:
+          lchild_id = j
+        elif preorder[j] is n.rchild:
+          rchild_id = j
+        if not lchild_id is None and not rchild_id is None:
+          break
+      node_info["children"] = [lchild_id, rchild_id]
+
+    elif n.num_children == 1:
+      child_id = None
+      for j in range(i, len(preorder)):
+        if preorder[j] is n.child:
+          child_id = j
+          break
+      node_info["children"] = [child_id]
+  
+    if hasattr(n, 'name'):
+      node_info["name"] = n.name.lstrip("Input(").rstrip(")")
+
+    array.append(node_info)
+
+  return array
+
+"""
+Saves the AST into a file
+"""
+@extclass(Node)
+def save_ast(self, filename):
+  tree_data = self.structure_to_array()
+
+  with open(filename, "wb") as f:
+    pickle.dump(tree_data, f)
+    
+
+def build_tree_from_data(node_id, preorder_nodes):
+  node_info = preorder_nodes[node_id]
+  node_type = node_info["type"]
+  node_class = str_to_class(node_type)
+  if "children" in node_info:
+    children_ids = node_info["children"]
+    if len(children_ids) == 2:
+      lchild_node = build_tree_from_data(children_ids[0], preorder_nodes)
+      rchild_node = build_tree_from_data(children_ids[1], preorder_nodes)
+      new_node = node_class(lchild_node, rchild_node)
+    else:
+      child_node = build_tree_from_data(children_ids[0], preorder_nodes)
+      if issubclass(node_class, UnopIJ):
+        new_node = node_class(child_node, node_info["out_c"])
+      else:
+        new_node = node_class(child_node)
+  else: # is input node
+    name = node_info["name"]
+    new_node = node_class(node_info["in_c"], name=name)
+
+  return new_node
+
+def load_ast(filename):
+  with open(filename, "rb") as f:
+    tree_data = pickle.load(f)
+  tree = build_tree_from_data(0, tree_data)
+  return tree
+
+def instance_to_classnamme(o):
+  return o.__class__.__name__
+
+def str_to_class(str):
+  return getattr(sys.modules[__name__], str)
 
 
 """
@@ -385,8 +468,8 @@ NOTE: currently if a node has multiple parents it is always the
 case that the parents are Binops but this might not be true
 in the future.
 Assumes assign_parents() has already been called on the full tree.
-Returns all the nodes between the binop ancestor and the node 
-including the binop ancestor and the node
+Returns all the nodes between the found ancestor and the node 
+including the ancestor and the node
 
 """
 def find_closest_ancestor(node, OpClasses):
@@ -398,6 +481,7 @@ def find_closest_ancestor(node, OpClasses):
       break
     node = node.parent
   return nodes
+
 
 
 
@@ -424,3 +508,14 @@ border_ops = set((ChromaExtractor, GreenExtractor, Input))
 nl_and_sp = nonlinear_ops.union(special_ops)
 l_and_sp = linear_ops.union(special_ops)
 all_ops = nl_and_sp.union(l_and_sp)
+
+
+if __name__ == "__main__":
+  x = str_to_class("Add")
+  i1 = Input(1, "Bayer")
+  i2 = Input(1, "Bayer")
+  new = x(i1, i2)
+  print(new)
+  print(new.compute_input_output_channels())
+  print(new.__class__.__name__)
+

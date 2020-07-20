@@ -29,6 +29,7 @@ def multires_green_model():
   missing_green = SumR(mul)
   green = GreenExtractor(missing_green, bayer)
   green.assign_parents()
+  green.compute_input_output_channels()
   return green
 
 def multires_green_model2():
@@ -61,6 +62,7 @@ def multires_green_model2():
   missing_green = SumR(mul)
   green = GreenExtractor(missing_green, bayer)
   green.assign_parents()
+  green.compute_input_output_channels()
   return green
 
 
@@ -93,6 +95,8 @@ def multires_green_model3():
   missing_green = SumR(mul)
   green = GreenExtractor(missing_green, bayer)
   green.assign_parents()
+  green.compute_input_output_channels()
+
   return green
 
 
@@ -109,5 +113,6 @@ def build_full_model(green_model):
   rgb = Stack(red_blue, green)
   out = Conv2D(rgb, 3)
   out.assign_parents()
+  
   return out, set((bayer.name, green_input.name))
 

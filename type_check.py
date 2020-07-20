@@ -97,7 +97,7 @@ def fix_channel_count_downwards(root, out_c):
       return False
     else:
       return True
-  else:
+  else: # is type UnopII
     return fix_channel_count_downwards(root.child, out_c)
 
 

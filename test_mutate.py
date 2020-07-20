@@ -1,12 +1,16 @@
 import time
 from test_models import *
-from mutate import insert_mutation, accept_tree, delete_mutation
+from mutate import Mutator, accept_tree
 from demosaic_ast import *
 from type_check import check_channel_count, check_linear_types
 import copy
 import meta_model
 from model_lib import *
 import random
+from graph_viz import vis_ast
+import logging
+import os
+import util
 
 """
 green_model = build_green_model()
@@ -225,12 +229,23 @@ def test_deletion_and_insertion():
   print("----------")
 
 
-def find_default_green_from_multires(multires):
+def find_default_green_from_multires(multires, mutator):
   full_model = meta_model.MetaModel()
   full_model.build_default_model() 
   green = full_model.green
 
+  graph = vis_ast(green, 'green_model')
+  green.compute_size(set(), count_all_inputs=True)
+  print(green.size)
+  graph.render()
+
+  graph = vis_ast(multires, 'multires')
+  multires.compute_size(set(), count_all_inputs=True)
+  print(multires.size)
+  graph.render()
+
   print("--------------- MUTATING GREEN MODEL ------------------")
+
   allowed_inputs = full_model.green_inputs
   failed_mutations = 0
   mutations = 0
@@ -245,7 +260,7 @@ def find_default_green_from_multires(multires):
     try:
       while True:
         multires_copy = copy.deepcopy(multires)
-        mut1 = delete_mutation(multires_copy)
+        mut1 = mutator.delete_mutation(multires_copy)
         if accept_tree(mut1):
           break 
         else:
@@ -257,7 +272,7 @@ def find_default_green_from_multires(multires):
       try:
         while True:
           mut1copy = copy.deepcopy(mut1)
-          mut2 = delete_mutation(mut1copy)
+          mut2 = mutator.delete_mutation(mut1copy)
           if accept_tree(mut2):
             break
           else:
@@ -283,7 +298,7 @@ def find_default_green_from_multires(multires):
     else:
       seen_models[mut2] = 1
 
-    #print("model after insertion {}".format(mut1.dump()))
+    print("model after deletion {}".format(mut2.dump()))
     
     if mutations % 500 == 0:
       t1 = time.time()
@@ -308,7 +323,29 @@ def find_default_green_from_multires(multires):
 
 
 if __name__ == "__main__":
+  import argparse
+
+  parser = argparse.ArgumentParser("Demosaic")
+  parser.add_argument('--save', type=str, default='test_mutate_log', help='where to store test log')
+  parser.add_argument('--default_channels', type=int, default=16, help='num of output channels for conv layers')
+  parser.add_argument('--max_nodes', type=int, default=30, help='max number of nodes in a tree')
+  parser.add_argument('--min_subtree_size', type=int, default=2, help='minimum size of subtree in insertion')
+  parser.add_argument('--max_subtree_size', type=int, default=11, help='maximum size of subtree in insertion')
+  parser.add_argument('--structural_sim_reject', type=float, default=0.66, help='rejection probability threshold for structurally similar trees')
+  args = parser.parse_args()
+
+  util.create_dir(args.save)
+
+  log_format = '%(asctime)s %(levelname)s %(message)s'
+  logging.basicConfig(stream=sys.stdout, level=logging.INFO, \
+    format=log_format, datefmt='%m/%d %I:%M:%S %p')
+  debug_logger = util.create_logger('debug_logger', logging.DEBUG, log_format, \
+                                os.path.join(args.save, 'debug_log'))
+
+  mutator = Mutator(args, debug_logger)
+
   #find_multires_green_from_default_green()
   #test_deletion_and_insertion()
   multires = multires_green_model()
-  find_default_green_from_multires(multires)
+  find_default_green_from_multires(multires, mutator)
+ 
