@@ -2,6 +2,7 @@ import logging
 import torch
 import os
 from demosaic_ast import load_ast
+import shutil
 
 # from a github gist by victorlei
 def extclass(cls):
@@ -73,8 +74,8 @@ def load_model_from_file(model_file, model_version):
   return model, model_ast
 
 
-def model_id_generator():
-  index = 1
+def model_id_generator(base_val):
+  index = base_val+1
   while True:
     yield index
     index += 1
@@ -83,10 +84,11 @@ def model_id_generator():
 class ModelManager():
   def __init__(self, model_path):
     self.base_dir = model_path
-    self.model_id_generator = model_id_generator()
+    self.SEED_ID = 0
+    self.model_id_generator = model_id_generator(self.SEED_ID)
 
-  def load_model(self, model_name, model_version):
-    model_dir = os.path.join(self.base_dir, model_name)
+  def load_model(self, model_id, model_version):
+    model_dir = os.path.join(self.base_dir, str(model_id))
     model_info_file = get_model_info_file(model_dir)
     return load_model_from_file(model_info_file, model_version)
 
@@ -98,6 +100,7 @@ class ModelManager():
 
   def save_model(self, models, model_ast, model_dir):
     ast_file = get_model_ast_file(model_dir)
+    print(f"ast file {ast_file}")
     model_ast.save_ast(ast_file)
 
     pytorch_files = [get_model_pytorch_file(model_dir, model_version) \
@@ -106,6 +109,8 @@ class ModelManager():
       torch.save(model, pytorch_files[i])
 
     info_file = get_model_info_file(model_dir)
+    print(f"info file {info_file}")
+    
     with open(info_file, "w+") as f:
       f.write(ast_file + "\n")
       for pf in pytorch_files:
