@@ -33,8 +33,8 @@ class CostTiers():
 	model_file is file with model topology and model weights
 	"""
 	def add(self, model_id, compute_cost, model_accuracy):
-		for i, cost_range in enumerate(self.cost_ranges):
-			if commpute_cost < cost_range[1]:
+		for i, cost_range in enumerate(self.compute_cost_ranges):
+			if compute_cost < cost_range[1]:
 				self.tiers[i][model_id] = (compute_cost, model_accuracy)
 				return
 		assert False, f"model cost {compute_cost} exceeds max tier cost range"
@@ -44,9 +44,9 @@ class CostTiers():
 	"""
 	def keep_topk(self, k):
 		for tid, tier in enumerate(self.tiers):
-			sorted_models = sorted(tier.items(), key=operator.itemgetter(1)[1])
+			sorted_models = sorted(tier.items(), key= lambda item: item[1][1])
 			new_tier = {}
-      for i in range(min(k, len(sorted_models))):
+			for i in range(min(k, len(sorted_models))):
 				new_tier[sorted_models[i][0]] = sorted_models[i][1]
 			self.tiers[tid] = new_tier
 
@@ -159,56 +159,56 @@ class ModelEvaluator():
 		return [loss_tracker.avg for loss_tracker in loss_trackers]
 
 
-	def compute_cost(root):
+	def compute_cost(self, root):
 		cost = 0
 		if isinstance(root, Input):
 			return cost
 		elif isinstance(root, Add) or isinstance(root, Sub):
 			cost += root.in_c[0] * ADD_COST
-			cost += compute_cost(root.lchild)
-			cost += compute_cost(root.rchild)
+			cost += self.compute_cost(root.lchild)
+			cost += self.compute_cost(root.rchild)
 		elif isinstance(root, Mul):
 			cost += root.in_c[0] * MUL_COST
-			cost += compute_cost(root.lchild)
-			cost += compute_cost(root.rchild) 
+			cost += self.compute_cost(root.lchild)
+			cost += self.compute_cost(root.rchild) 
 		elif isinstance(root, LogSub) or isinstance(root, AddExp):
 			cost += root.in_c[0] * (2*LOGEXP_COST + ADD_COST)
-			cost += compute_cost(root.lchild)
-			cost += compute_cost(root.rchild) 
+			cost += self.compute_cost(root.lchild)
+			cost += self.compute_cost(root.rchild) 
 		elif isinstance(root, Stack):
-			cost += compute_cost(root.lchild)
-			cost += compute_cost(root.rchild) 
+			cost += self.compute_cost(root.lchild)
+			cost += self.compute_cost(root.rchild) 
 		elif isinstance(root, ChromaExtractor) or isinstance(root, GreenExtractor):
-			cost += compute_cost(root.lchild)
-			cost += compute_cost(root.rchild) 
+			cost += self.compute_cost(root.lchild)
+			cost += self.compute_cost(root.rchild) 
 		elif isinstance(root, Softmax):
 			cost += root.in_c * (LOGEXP_COST + DIV_COST + ADD_COST)
-			cost += compute_cost(root.child)
+			cost += self.compute_cost(root.child)
 		elif isinstance(root, Relu):
 			cost += root.in_c * RELU_COST
-			cost += compute_cost(root.child)
+			cost += self.compute_cost(root.child)
 		elif isinstance(root, Log) or isinstance(root, Exp):
 			cost += root.in_c * LOGEXP_COST	
-			cost += compute_cost(root.child)
+			cost += self.compute_cost(root.child)
 		elif isinstance(root, Downsample):
 			cost += root.in_c * ADD_COST 
-			cost += compute_cost(root.child) 
+			cost += self.compute_cost(root.child) 
 			cost *= DOWNSAMPLE_FACTOR_SQ
 		elif isinstance(root, Upsample):
 			cost += root.in_c * ADD_COST
-			cost += compute_cost(root.child) / DOWNSAMPLE_FACTOR_SQ
+			cost += self.compute_cost(root.child) / DOWNSAMPLE_FACTOR_SQ
 		elif isinstance(root, Conv1x1):
 			cost += root.in_c * root.out_c * MUL_COST
-			cost += compute_cost(root.child)
+			cost += self.compute_cost(root.child)
 		elif isinstance(root, Conv1D):
 			cost += root.in_c * root.out_c * DIRECTIONS * KERNEL_W * MUL_COST
-			cost += compute_cost(root.child)
+			cost += self.compute_cost(root.child)
 		elif isinstance(root, Conv2D):
 			cost += root.in_c * root.out_c * KERNEL_W * KERNEL_W * MUL_COST
-			cost += compute_cost(root.child)
+			cost += self.compute_cost(root.child)
 		elif isinstance(root, SumR):
 			cost += root.in_c * ADD_COST
-			cost += compute_cost(root.child)
+			cost += self.compute_cost(root.child)
 		else:
 			assert False, "compute cost encountered unexpected node type"
 		return cost

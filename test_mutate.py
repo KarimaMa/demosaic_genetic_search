@@ -44,7 +44,7 @@ if multires_mut:
   print(mut2.dump())
 """
 
-def find_multires_green_from_default_green():
+def find_multires_green_from_default_green(mutator):
   full_model = meta_model.MetaModel()
   full_model.build_default_model() 
   print("------ testing model equality ---------")
@@ -73,8 +73,8 @@ def find_multires_green_from_default_green():
     try:
       while True:
         green_copy = copy.deepcopy(full_model.green)
-        #mut1 = insert_mutation(green_copy, allowed_inputs, insert_above_node_id=10, insert_op=Stack)
-        mut1 = insert_mutation(green_copy, allowed_inputs)
+        #mut1 = mutator.insert_mutation(green_copy, allowed_inputs, insert_above_node_id=10, insert_op=Stack)
+        mut1 = mutator.insert_mutation(green_copy, allowed_inputs)
         if accept_tree(mut1):
           break 
         else:
@@ -86,8 +86,13 @@ def find_multires_green_from_default_green():
       try:
         while True:
           mut1copy = copy.deepcopy(mut1)
-          #green = insert_mutation(mut1copy, allowed_inputs)
-          #green = insert_mutation(mut1copy, allowed_inputs, insert_above_node_id=18, insert_op=Downsample)
+          green = mutator.insert_mutation(mut1copy, allowed_inputs)
+          #green = mutator.insert_mutation(mut1copy, allowed_inputs, insert_above_node_id=18, insert_op=Downsample)
+          # print(green.dump())
+          # print("------------")
+          # print(multires_green.dump())
+          # print(green.is_same_as(multires_green))
+          # print("=============")
           if accept_tree(green):
             break
       except AssertionError:
@@ -126,7 +131,7 @@ def find_multires_green_from_default_green():
   sorted_models = sorted(seen_models.items(), key=operator.itemgetter(1))
   sorted_models.reverse()
 
-  for i in range(100):
+  for i in range(min(100, len(sorted_models))):
     print("model occurred {} times".format(sorted_models[i][1]))
     print(sorted_models[i][0].dump())
   print("----------")
@@ -202,9 +207,6 @@ def test_deletion_and_insertion():
       seen_models[green] += 1
     else:
       seen_models[green] = 1
-    #print("-----------------")
-    #print("model after insertion {}".format(mut1.dump()))
-    #print("model after deletion {}".format(green.dump()))
     
     pn = green.preorder()
     if any([type(n) is LogSub for n in pn]):
@@ -344,8 +346,8 @@ if __name__ == "__main__":
 
   mutator = Mutator(args, debug_logger)
 
-  #find_multires_green_from_default_green()
+  find_multires_green_from_default_green(mutator)
   #test_deletion_and_insertion()
-  multires = multires_green_model()
-  find_default_green_from_multires(multires, mutator)
+  # multires = multires_green_model()
+  # find_default_green_from_multires(multires, mutator)
  

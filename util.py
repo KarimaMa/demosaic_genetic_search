@@ -42,7 +42,6 @@ def create_dir(path):
     assert False, f"Attempting to overwrite existing folder {path}"
 
   os.makedirs(path)
-  print('Created folder: {}'.format(path))
 
 
 def create_logger(name, level, log_format, log_file):
@@ -64,12 +63,15 @@ def get_model_ast_file(model_dir):
 def get_model_info_file(model_dir):  
   return os.path.join(model_dir, 'model_info')
 
-def load_model_from_file(model_file, model_version):
+def load_model_from_file(model_file, model_version, cpu=False):
   with open(model_file, "r") as f:
     ast_file = f.readline().strip()
     pytorch_files = [l.strip() for l in f]
 
-  model = torch.load(pytorch_files[model_version])
+  if cpu:
+    model = torch.load(pytorch_files[model_version], map_location=torch.device('cpu'))
+  else:
+    model = torch.load(pytorch_files[model_version])
   model_ast = load_ast(ast_file)
   return model, model_ast
 
@@ -93,14 +95,13 @@ class ModelManager():
     return load_model_from_file(model_info_file, model_version)
 
   def get_next_model_id(self):
-    next(self.model_id_generator)
+    return next(self.model_id_generator)
 
   def model_dir(self, model_id):
     return os.path.join(self.base_dir, f'{model_id}')
 
   def save_model(self, models, model_ast, model_dir):
     ast_file = get_model_ast_file(model_dir)
-    print(f"ast file {ast_file}")
     model_ast.save_ast(ast_file)
 
     pytorch_files = [get_model_pytorch_file(model_dir, model_version) \
@@ -109,12 +110,11 @@ class ModelManager():
       torch.save(model, pytorch_files[i])
 
     info_file = get_model_info_file(model_dir)
-    print(f"info file {info_file}")
-    
+
     with open(info_file, "w+") as f:
       f.write(ast_file + "\n")
       for pf in pytorch_files:
-        f.write(pf)
+        f.write(pf + "\n")
 
 
 

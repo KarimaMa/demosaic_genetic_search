@@ -82,6 +82,13 @@ def fix_channel_count_downwards(root, out_c):
     else:
       return False
   elif isinstance(root, BinopIJK):
+    lchild_out_c = out_c // 2
+    if out_c % 2 == 1:
+      rchild_out_c = lchild_out_c + 1
+    else:
+      rchild_out_c = lchild_out_c
+    if lchild_out_c == 0:
+      return False
     # naively divide out_c evenly across inputs
     lfixed = fix_channel_count_downwards(root.lchild, out_c//2)
     if lfixed:

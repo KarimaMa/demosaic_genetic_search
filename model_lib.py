@@ -5,25 +5,25 @@ def multires_green_model():
   # lowres model
   bayer = Input(1, "Bayer")
   downsample = Downsample(bayer)
-  selection_f_lowres = Conv1D(downsample, 8)
+  selection_f_lowres = Conv1D(downsample, 16)
   relu1 = Relu(selection_f_lowres)
-  fc1 = Conv1x1(relu1, 8)
+  fc1 = Conv1x1(relu1, 16)
   relu2 = Relu(fc1)
-  fc2 = Conv1x1(relu2, 4)
+  fc2 = Conv1x1(relu2, 16)
   upsample = Upsample(fc2)
 
   # fullres model
   bayer = Input(1, "Bayer")
-  selection_f_fullres = Conv1D(bayer, 8)
+  selection_f_fullres = Conv1D(bayer, 16)
   stack = Stack(upsample, selection_f_fullres)
   relu1 = Relu(stack)
-  fc1 = Conv1x1(relu1, 8)
+  fc1 = Conv1x1(relu1, 16)
   relu2 = Relu(fc1)
-  fc2 = Conv1x1(relu2, 4)
+  fc2 = Conv1x1(relu2, 16)
   softmax = Softmax(fc2)
 
   # filter model
-  interp_filters = Conv1D(bayer, 4)
+  interp_filters = Conv1D(bayer, 16)
 
   mul = Mul(interp_filters, softmax)
   missing_green = SumR(mul)
@@ -37,26 +37,26 @@ def multires_green_model2():
   # lowres model
   bayer = Input(1, "Bayer")
   downsample = Downsample(bayer)
-  selection_f_lowres = Conv1D(downsample, 8)
+  selection_f_lowres = Conv1D(downsample, 16)
   relu1 = Relu(selection_f_lowres)
-  fc1 = Conv1x1(relu1, 8)
+  fc1 = Conv1x1(relu1, 16)
   relu2 = Relu(fc1)
-  fc2 = Conv1x1(relu2, 4)
+  fc2 = Conv1x1(relu2, 16)
   softmax = Softmax(fc2)
   upsample = Upsample(softmax)
 
   # fullres model
   bayer = Input(1, "Bayer")
-  selection_f_fullres = Conv1D(bayer, 8)
+  selection_f_fullres = Conv1D(bayer, 16)
   stack = Stack(upsample, selection_f_fullres)
   relu1 = Relu(stack)
-  fc1 = Conv1x1(relu1, 8)
+  fc1 = Conv1x1(relu1, 16)
   relu2 = Relu(fc1)
-  fc2 = Conv1x1(relu2, 4)
+  fc2 = Conv1x1(relu2, 16)
   softmax = Softmax(fc2)
 
   # filter model
-  interp_filters = Conv1D(bayer, 4)
+  interp_filters = Conv1D(bayer, 16)
 
   mul = Mul(interp_filters, softmax)
   missing_green = SumR(mul)
@@ -71,25 +71,25 @@ def multires_green_model3():
   # lowres model
   bayer = Input(1, "Bayer")
   downsample = Downsample(bayer)
-  selection_f_lowres = Conv1D(downsample, 8)
+  selection_f_lowres = Conv1D(downsample, 16)
   relu1 = Relu(selection_f_lowres)
-  fc1 = Conv1x1(relu1, 8)
+  fc1 = Conv1x1(relu1, 16)
   relu2 = Relu(fc1)
-  fc2 = Conv1x1(relu2, 4)
+  fc2 = Conv1x1(relu2, 16)
   upsample = Upsample(fc2)
 
   # fullres model
   bayer = Input(1, "Bayer")
-  selection_f_fullres = Conv1D(bayer, 8)
+  selection_f_fullres = Conv1D(bayer, 16)
   relu1 = Relu(selection_f_fullres)
-  fc1 = Conv1x1(relu1, 8)
+  fc1 = Conv1x1(relu1, 16)
   stack = Stack(upsample, fc1)
   relu2 = Relu(stack)
-  fc2 = Conv1x1(relu2, 4)
+  fc2 = Conv1x1(relu2, 16)
   softmax = Softmax(fc2)
 
   # filter model
-  interp_filters = Conv1D(bayer, 4)
+  interp_filters = Conv1D(bayer, 16)
 
   mul = Mul(interp_filters, softmax)
   missing_green = SumR(mul)

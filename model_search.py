@@ -13,11 +13,12 @@ import sys
 import time
 import os
 import glob
+import copy
 
 import torch
 import cost
-from demosaic_ast import ast_to_model
-from mutate import mutate, Mutator
+from demosaic_ast import structural_hash
+from mutate import Mutator
 import util
 from model_database import ModelDatabase 
 
@@ -30,7 +31,6 @@ class Searcher():
     self.debug_logger = debug_logger
     self.mutator = Mutator(args, debug_logger)
     self.evaluator = cost.ModelEvaluator(args)
-    self.model_file_generator = model_filename_generator()
     self.model_manager = util.ModelManager(args.model_path)
     self.model_database = ModelDatabase(args.model_database_dir)
     
@@ -41,22 +41,26 @@ class Searcher():
     seed_model, seed_ast = util.load_model_from_file(self.args.seed_model_file)
     # cost the initial tree
     compute_cost = self.evaluator.compute_cost(seed_model)
-    performance_cost = self.evaluator.performance_cost(seed_model)
-    cost_tiers.add(model_file, compute_cost, model_accuracy):
+    model_accuracy = self.args.seed_model_accuracy
+    cost_tiers.add(self.model_manager.SEED_ID, compute_cost, model_accuracy)
+    
+    self.model_database.add(self.model_manager.SEED_ID,\
+                        [self.model_manager.SEED_ID, structural_hash(seed_ast), 1, \
+                        0, [model_accuracy], compute_cost, -1])
 
     # CHANGE TO NOT BE FIXED - SHOULD BE INFERED FROM TASK
     model_inputs = set(("Input(Bayer)",))
 
     for generation in range(self.args.generations):
-      new_cost_tiers = cost_tiers.copy() 
+      new_cost_tiers = copy.deepcopy(cost_tiers) 
 
-      for tier in cost_tiers:
+      for tier in cost_tiers.tiers:
         for model_id, costs in tier.items():
           best_model_version = self.model_database.get_best_version_id(model_id)
           model, model_ast = self.model_manager.load_model(model_id, best_model_version)
 
-          new_model_ast, structural_hash = self.mutator.mutate(model_id, model_ast, model_inputs)
-          new_models = [ast_to_model(new_model_ast) for i in range(args.model_initializations)]
+          new_model_ast, shash = self.mutator.mutate(model_id, model_ast, model_inputs)
+          new_models = [new_model_ast.ast_to_model() for i in range(args.model_initializations)]
 
           # TODO
           #new_model.weight_transfer(model) # try to reuse weights from parent model
@@ -75,14 +79,15 @@ class Searcher():
           new_cost_tiers.add(new_model_id, compute_cost, min_perf_cost)
 
           self.model_database.add(new_model_id,\
-                        (new_model_id, structural_hash, 1, \
-                        best_new_model_version, perf_costs, compute_cost, model_id))
+                        [new_model_id, shash, 1, \
+                        best_new_model_version, perf_costs, compute_cost, model_id])
 
       new_cost_tiers.keep_topk(tier_size)
       cost_tiers = new_cost_tiers
 
       if generation % self.args.database_save_freq == 0:
         self.model_database.save()
+        self.update_model_occurences()
 
     return cost_tiers
 
@@ -112,8 +117,8 @@ if __name__ == "__main__":
   parser.add_argument('--learning_rate', type=float, default=0.025, help='init learning rate')
   parser.add_argument('--momentum', type=float, default=90., help='momentum')
   parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay')
-  parser.add_argument('--report_freq', type=float, default=50, help='report frequency')
-  parser.add_argument('--save_freq', type=float, default=500, help='save frequency')
+  parser.add_argument('--report_freq', type=float, default=1000, help='report frequency')
+  parser.add_argument('--save_freq', type=float, default=5000, help='save frequency')
   parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
   parser.add_argument('--epochs', type=int, default=50, help='num of training epochs')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
@@ -127,6 +132,7 @@ if __name__ == "__main__":
   parser.add_argument('--database_save_freq', type=int, default=5, help='model database save frequency')
   parser.add_argument('--save', type=str, default='SEARCH', help='experiment name')
   parser.add_argument('--seed', type=int, default=2, help='random seed')
+  parser.add_argument('--seed_model_accuracy', type=float, help='accuracy of seed model')
   parser.add_argument('--train_portion', type=float, default=0.2, help='portion of training data')
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
@@ -138,7 +144,7 @@ if __name__ == "__main__":
 
   args.save = 'search-{}-{}'.format(args.save, time.strftime("%Y%m%d-%H%M%S"))
   util.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
-  args.model_path = os.path.join(arg.save, args.model_path)
+  args.model_path = os.path.join(args.save, args.model_path)
   util.create_dir(args.model_path)
   args.model_database_dir = os.path.join(args.save, args.model_database_dir)
   util.create_dir(args.model_database_dir)
@@ -156,7 +162,6 @@ if __name__ == "__main__":
     search_logger.info('no gpu device available')
     sys.exit(1)
 
-  random.seed(args.seed)
   np.random.seed(args.seed)
   torch.cuda.set_device(args.gpu)
   cudnn.benchmark = False

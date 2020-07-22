@@ -8,6 +8,8 @@ from demosaic_ast import *
 from config import IMG_H, IMG_W
 from util import extclass
 
+cuda = False
+
 class InputOp(nn.Module):
   def __init__(self):
     super(InputOp, self).__init__()
@@ -77,7 +79,7 @@ class MulOp(nn.Module):
 
 class LogSubOp(nn.Module):
   def __init__(self, loperand, roperand):
-    super(LogSub, self).__init__()
+    super(LogSubOp, self).__init__()
     self._operands = nn.ModuleList([loperand, roperand])
 
   def _initialize_parameters(self):
@@ -150,7 +152,8 @@ class GreenExtractorOp(nn.Module):
     self.mask = torch.zeros((IMG_H, IMG_W))
     self.mask[0::2,1::2] = 1
     self.mask[1::2,0::2] = 1
-    self.mask = self.mask.cuda()
+    if cuda:
+      self.mask = self.mask.cuda()
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -326,7 +329,8 @@ class DiagRLConv(nn.Module):
     # self.mask = torch.zeros(C_out, C_in, kernel_size, kernel_size).cuda()
     self.filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size, kernel_size))
     self.mask = torch.zeros(C_out, C_in, kernel_size, kernel_size)
-    self.mask = self.mask.cuda()
+    if cuda:
+      self.mask = self.mask.cuda()
 
     for i in range(kernel_size):
       self.mask[..., i, kernel_size-i-1] = 1.0
@@ -413,6 +417,7 @@ def ast_to_model(self):
 @extclass(Mul)
 def ast_to_model(self):
   lmodel = self.lchild.ast_to_model()
+
   rmodel = self.rchild.ast_to_model()
   return MulOp(lmodel, rmodel)
 

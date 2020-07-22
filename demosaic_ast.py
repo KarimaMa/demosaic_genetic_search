@@ -335,6 +335,7 @@ def compute_input_output_channels(self):
   return self.in_c, self.out_c
 
 """
+
 Converts AST structure to array format
 """
 @extclass(Node)
@@ -407,6 +408,8 @@ def load_ast(filename):
   with open(filename, "rb") as f:
     tree_data = pickle.load(f)
   tree = build_tree_from_data(0, tree_data)
+  tree.assign_parents()
+  tree.compute_input_output_channels()
   return tree
 
 def instance_to_classnamme(o):

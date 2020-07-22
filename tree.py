@@ -164,13 +164,12 @@ class Node:
       return self.child.is_same_as(other.child)
     elif self.num_children == 2:
       if self.out_c != other.out_c:
-        return False
-      if self.in_c[0] == other.in_c[0] and self.in_c[1] == other.in_c[1]:
-        return self.lchild.is_same_as(other.lchild) and self.rchild.is_same_as(other.rchild) 
-      elif self.in_c[0] == other.in_c[1] and self.in_c[1] == other.in_c[0]:
-        return self.rchild.is_same_as(other.lchild) and self.lchild.is_same_as(other.rchild)
-      else:
-        return False
+        return False      
+      #if self.in_c[0] == other.in_c[1] and self.in_c[1] == other.in_c[0]:
+      same = self.rchild.is_same_as(other.lchild) and self.lchild.is_same_as(other.rchild)
+      #if self.in_c[0] == other.in_c[0] and self.in_c[1] == other.in_c[1]:
+      flipped_same = self.lchild.is_same_as(other.lchild) and self.rchild.is_same_as(other.rchild) 
+      return same or flipped_same
 
   """
   returns whether or not two ASTs are the same - IGNORING channel count
@@ -195,4 +194,23 @@ class Node:
 
   def __eq__(self, other):
     return self.is_same_as(other)
+
+
+"""
+detects if there is loop in tree
+"""
+def has_loop(tree, seen=None):
+  # loop if and node has a descendant that is also a parent
+  if seen is None:
+    seen = set()
+  if id(tree) in seen:
+    return True
+  seen.add(id(tree))
+  if tree.num_children == 2:
+    return has_loop(tree.lchild) or has_loop(tree.rchild)
+  if tree.num_children == 1:
+    return has_loop(tree.child)
+  return False
+
+
 
