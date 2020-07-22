@@ -10,6 +10,58 @@ from util import extclass
 
 cuda = False
 
+"""
+Converts flat activation map to 4 channel-wise groups
+of activations
+Assumes activation map points are centered on input
+bayer values with format 
+              Gb B
+              R  Gr
+Moves the values from the flat activation map into 
+channels based on where they're centered with format: 
+             Gr R B Gb
+If input flat activation map has k channels then the 
+output will have 4*k channels
+"""
+def init_flat2dense(weights):
+  assert(weights.shape[0] == weights.shape[1]*4), \
+  "Expected output channels of flat2dense to be 4x the input channels"
+  assert(weights.shape[-2:] == (2,2)), "Expected kernel size of flat2dense to be (2,2)"
+  weights.fill_(0.0)
+  c_stride = weights.shape[1]
+  offset = 0
+  for i in range(c_stride):
+    weights[offset+i, i, 1, 1] = 1
+
+  offset += c_stride
+  for i in range(c_stride):
+    weights[offset+i, i, 1, 0] = 1
+
+  offset += c_stride
+  for i in range(c_stride):
+    weights[offset+i, i, 0, 1] = 1
+
+  offset += c_stride
+  for i in range(c_stride):
+    weights[offset+i, i, 0, 0] = 1
+
+"""
+splats values of a 4 group channel-wise activation map centered 
+at Gr, R, B, Gb in a downsampled input bayer to their locations in an upsampled 
+4 group channel-wise bayer. 
+Assumes that the input channel order is Gr, R, B, Gb
+"""
+def init_dense2fullres_bayer(weights):
+  assert(weights.shape[-2:] == (6, 6)), "Expected kernel size of dense2fullres_bayer to be (6,6)"
+  weights.fill_(0.0)
+  c_stride = weights.shape[0]//4
+  weights[0         :c_stride  , 0, 0::2, 0::2] = 1
+  weights[c_stride  :c_stride*2, 0, 0::2, 1::2] = 1
+  weights[c_stride*2:c_stride*3, 0, 1::2, 0::2] = 1
+  weights[c_stride*3:          , 0, 1::2, 1::2] = 1
+
+
+
 class InputOp(nn.Module):
   def __init__(self):
     super(InputOp, self).__init__()
