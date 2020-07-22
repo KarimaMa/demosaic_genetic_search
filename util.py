@@ -37,11 +37,16 @@ def create_exp_dir(path, scripts_to_save=None):
       dst_file = os.path.join(path, 'scripts', os.path.basename(script))
       shutil.copyfile(script, dst_file)
  
-def create_dir(path):
+def create_dir(path, scripts_to_save=None):
   if os.path.exists(path):
     assert False, f"Attempting to overwrite existing folder {path}"
-
   os.makedirs(path)
+
+  if scripts_to_save is not None:
+    os.mkdir(os.path.join(path, 'scripts'))
+    for script in scripts_to_save:
+      dst_file = os.path.join(path, 'scripts', os.path.basename(script))
+      shutil.copyfile(script, dst_file)
 
 
 def create_logger(name, level, log_format, log_file):
