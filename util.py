@@ -25,10 +25,11 @@ class AvgrageMeter(object):
 
 
 def create_exp_dir(path, scripts_to_save=None):
-  if os.path.exists(path):
-  	assert False, f"Attempting to overwrite existing experiment {path}"
-  
-  os.mkdir(path)
+  if not os.path.exists(path):
+    os.mkdir(path)
+  else:
+  	print("Directory already exists {path}")
+
   print('Experiment dir : {}'.format(path))
 
   if scripts_to_save is not None:
@@ -38,12 +39,15 @@ def create_exp_dir(path, scripts_to_save=None):
       shutil.copyfile(script, dst_file)
  
 def create_dir(path, scripts_to_save=None):
-  if os.path.exists(path):
-    assert False, f"Attempting to overwrite existing folder {path}"
-  os.makedirs(path)
+  if not os.path.exists(path):
+    os.makedirs(path)
+  else:
+  	print("Directory already exists {path}")
 
   if scripts_to_save is not None:
-    os.mkdir(os.path.join(path, 'scripts'))
+    scripts_dir = os.path.join(path, 'scripts')
+    if not os.path.exists(scripts_dir):
+      os.mkdir(scripts_dir)
     for script in scripts_to_save:
       dst_file = os.path.join(path, 'scripts', os.path.basename(script))
       shutil.copyfile(script, dst_file)
