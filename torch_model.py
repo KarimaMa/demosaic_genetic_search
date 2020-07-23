@@ -8,7 +8,7 @@ from demosaic_ast import *
 from config import IMG_H, IMG_W
 from util import extclass
 
-cuda = False
+cuda = True
 
 """
 Converts flat activation map to 4 channel-wise groups

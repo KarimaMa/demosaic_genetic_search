@@ -60,16 +60,16 @@ def train(args, models, model_id, model_dir):
 
   for epoch in range(args.epochs):
     # training
-    train_losses = train_epoch(train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files)
+    train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files)
     # validation
-    valid_losses = infer(validation_queue, models, criterion)
+    valid_losses = infer(args, validation_queue, models, criterion, validation_loggers)
     for i in range(len(models)):
       validation_loggers[i].info('validation epoch %03d %e', epoch, valid_losses[i])
 
-  return valid_losses
+  return valid_losses, train_losses
 
 
-def train_epoch(train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files):
+def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files):
   loss_trackers = [util.AvgrageMeter() for m in models]
   for m in models:
     m.train()
@@ -85,7 +85,6 @@ def train_epoch(train_queue, models, criterion, optimizers, train_loggers, model
       loss = criterion(pred, target)
 
       loss.backward()
-      momentum=args.momentum,
       optimizers[i].step()
 
       loss_trackers[i].update(loss.item(), n)
@@ -101,7 +100,7 @@ def train_epoch(train_queue, models, criterion, optimizers, train_loggers, model
   return [loss_tracker.avg for loss_tracker in loss_trackers]
 
 
-def infer(valid_queue, models, criterion):
+def infer(args, valid_queue, models, criterion, validation_loggers):
   loss_trackers = [util.AvgrageMeter() for m in models]
   for m in models:
     m.eval()
@@ -116,6 +115,9 @@ def infer(valid_queue, models, criterion):
       loss = criterion(pred, target)
 
       loss_trackers[i].update(loss.item(), n)
+    if step % args.report_freq == 0:
+      for i in range(len(models)):
+        validation_loggers[i].info("validation %03d %e", step, loss_trackers[i].avg)
 
   return [loss_tracker.avg for loss_tracker in loss_trackers]
 
