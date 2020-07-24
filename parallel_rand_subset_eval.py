@@ -23,7 +23,7 @@ if __name__ == "__main__":
   parser.add_argument('--save', type=str, default='RAND_DATA_SUBSET_EVAL', help='experiment name')
   parser.add_argument('--seed', type=int, default=2, help='random seed')
   parser.add_argument('--model_path', type=str, help='directory where subset models are stored')
-  parser.add_argument('--subsets', type=int, help='the number of subset models')
+  parser.add_argument('--subset_id', type=int, help='the subset model id')
   parser.add_argument('--training_file', type=str, help='a file with list of training data images')
   parser.add_argument('--results_file', type=str, default='eval_results', help='where to store evaluation results')
   parser.add_argument('--report_freq', type=float, default=1000, help='report frequency')
@@ -66,32 +66,27 @@ if __name__ == "__main__":
       sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
       pin_memory=True, num_workers=0)
 
+  print(f"evaluating subset {args.subset_id} models")
+  model_id = f'subset_{args.subset_id}'
+  model_dir = model_manager.model_dir(model_id)
 
-  for subset in range(args.subsets):
-    print(f"evaluating subset {subset} models")
-    model_id = f'subset_{subset}'
-    model_dir = model_manager.model_dir(model_id)
+  with open(os.path.join(model_dir, "model_info")) as f:
+    lines = len([l for l in f])
+    model_versions = lines-1
 
-    with open(os.path.join(model_dir, "model_info")) as f:
-      lines = len([l for l in f])
-      model_versions = lines-1
+  infer_loggers = [util.create_logger(f'{model_id}_v{version}_inference_logger', logging.INFO, log_format, \
+                                      os.path.join(args.save, f'{model_id}_v{version}_inference_log'))\
+                  for version in range(model_versions)]
+  models = []
+  for version in range(model_versions):
+    model, ast = model_manager.load_model(model_id, version)
+    models.append(model)
 
-    infer_loggers = [util.create_logger(f'{model_id}_v{version}_inference_logger', logging.INFO, log_format, \
-                                        os.path.join(args.save, f'{model_id}_v{version}_inference_log'))\
-                    for version in range(model_versions)]
-    models = []
-    for version in range(model_versions):
-      model, ast = model_manager.load_model(model_id, version)
-      models.append(model)
+  full_training_losses = infer(args, train_queue, [models], criterion, [infer_loggers])
 
-    full_training_losses = infer(args, train_queue, [models], criterion, [infer_loggers])
-
-    with open(args.results_file, "a+") as f:
-      full_training_losses = [str(tl) for tl in full_training_losses]
-      full_training_losses_str = ",".join(full_training_losses)
-      data_string = f"subset {subset} full training losses: {full_training_losses_str} \n"
-      f.write(data_string)
-
-
-
+  with open(args.results_file, "a+") as f:
+    full_training_losses = [str(tl) for tl in full_training_losses]
+    full_training_losses_str = ",".join(full_training_losses)
+    data_string = f"subset {args.subset_id} full training losses: {full_training_losses_str} \n"
+    f.write(data_string)
 
