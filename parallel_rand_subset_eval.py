@@ -20,7 +20,7 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
   parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
-  parser.add_argument('--save', type=str, default='RAND_DATA_SUBSET_EVAL', help='experiment name')
+  parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--seed', type=int, default=2, help='random seed')
   parser.add_argument('--model_path', type=str, help='directory where subset models are stored')
   parser.add_argument('--subset_id', type=int, help='the subset model id')
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     model, ast = model_manager.load_model(model_id, version)
     models.append(model)
 
-  full_training_losses = infer(args, train_queue, [models], criterion, [infer_loggers])
+  full_training_losses = infer(args, train_queue, models, criterion, infer_loggers)
 
   with open(args.results_file, "a+") as f:
     full_training_losses = [str(tl) for tl in full_training_losses]
