@@ -91,7 +91,7 @@ if __name__ == "__main__":
     validation_losses = [str(vl) for vl in validation_losses]
     validation_losses_str = ",".join(validation_losses)
 
-    data_string = f"subset {args.subset_id} training losses: {training_losses_str} validation_losses: {validation_losses_str}\n"
+    data_string = f"subset {args.subset_id} training losses: {training_losses_str} validation losses: {validation_losses_str}\n"
 
     f.write(data_string)
 
