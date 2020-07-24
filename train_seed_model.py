@@ -23,7 +23,7 @@ def train(args, models, model_id, model_dir):
                                       log_format, os.path.join(model_dir, f'v{i}_train_log'))\
                   for i in range(len(models))]
 
-  validation_loggers = [util.create_logger(f'{model_id}_validation_logger', logging.INFO, \
+  validation_loggers = [util.create_logger(f'{model_id}_v{i}_validation_logger', logging.INFO, \
                                           log_format, os.path.join(model_dir, f'v{i}_validation_log')) \
                       for i in range(len(models))]
 
