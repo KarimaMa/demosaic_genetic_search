@@ -1,7 +1,7 @@
 import os
 import ast
 import time
-
+import csv
 
 class ModelDatabase():
 	"""
@@ -15,21 +15,21 @@ class ModelDatabase():
 							4	model losses for each version, 
 							5	model compute cost, 
 							6	model parent id,
-							7	killed_mutations, // how many times this model could not be mutated to a new model
+							7	killed_children, // how many times this model could not be mutated to a new model
 							8	failed_mutations, // how many mutations failed to get to this model
 							9	prune_rejections, // how many mutations were pruned to get to this model
 							10 structural_rejections, // how many mutations were rejected structurally to get to this model
 							11 seen_rejections) // how many mutations were rejected as repeats to get to this model
 	"""
 	def __init__(self, database_dir, database_file=None):
-		self.database = []
+		self.database = {}
 		self.database_dir = database_dir
 		if not database_file is None:
 			database_path = os.path.join(database_dir, database_file)
 			self.load(database_path)
 
 	def add(self, model_id, data):
-		self.database.append(data)
+		self.database[model_id] = data
 
 	def increment_killed_mutations(self, model_id):
 		self.database[model_id][7] += 1 
@@ -38,17 +38,44 @@ class ModelDatabase():
 		return self.database[model_id][3]
 
 	def update_occurence_count(self, model_id, occurence_count):
-		self.database[model_id][2] = occurence_count
+		if model_id in self.database: 
+			self.database[model_id][2] = occurence_count
 
 	def save(self):
 		database_file = 'snapshot-{}'.format(time.strftime("%Y%m%d-%H%M%S"))
 		database_path = os.path.join(self.database_dir, database_file)
-		with open(database_path, "w+") as f:
-			for item in self.database:
-				f.write(f"{item[0]},{item[1]},{item[2]},\
-									{item[3]},{item[4]},{item[5]},\
-									{item[6]},{item[7]},{item[8]},\
-									{item[9]},{item[10]},{item[11]}\n")
+
+		database_f = open(database_path, "w", newline='\n')
+		database_writer = csv.writer(database_f, delimiter=',')
+		database_writer.writerow(["model_id",
+								"structural_hash",
+								"model_occurences",
+								"best_version_id",
+								"version_0_loss",
+								"version_1_loss",
+								"version_2_loss",
+								"compute_cost",
+								"parent_id",
+								"killed_children",
+								"failed_mutations",
+								"prune_rejections",
+								"structural_rejections",
+								"seen_rejections"])
+
+		for model_id, data in self.database.items():
+			model_accuracies = data[4]
+			row = data[0:4]
+			for acc in model_accuracies:
+				row += [acc]
+			row += data[5:]
+			database_writer.writerow(row)
+
+		# with open(database_path, "w+") as f:
+		# 	for model_id, data in self.database.items():
+		# 		f.write(f"{data[0]},{data[1]},{data[2]}"+\
+		# 				f"{data[3]},{data[4]},{data[5]}"+\
+		# 				f"{data[6]},{data[7]},{data[8]}"+\
+		# 				f"{data[9]},{data[10]},{data[11]}\n")
 
 	def load(self, database_path):
 		with open(database_path, "r+") as f:
@@ -62,6 +89,6 @@ class ModelDatabase():
 				compute_cost = float(data[5])
 				parent_id = int(data[6])
 
-				self.database.append([model_id, structural_hash, occurence_count,\
-									 best_model_version, losses, compute_cost, parent_id])
+				self.database[model_id] = [model_id, structural_hash, occurence_count,\
+									 best_model_version, losses, compute_cost, parent_id]
 

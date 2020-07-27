@@ -158,6 +158,8 @@ if __name__ == "__main__":
   debug_logger = util.create_logger('debug_logger', logging.DEBUG, log_format, \
                                 os.path.join(args.save, 'debug_log'))
 
+  search_logger.info("args = %s", args)
+
   if not torch.cuda.is_available():
     search_logger.info('no gpu device available')
     sys.exit(1)

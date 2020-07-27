@@ -8,7 +8,7 @@ while [ $proc_id -lt $n_procs ]; do
 		python3 parallel_rand_subset_eval.py --gpu=$gpu_id --subset_id=$proc_id \
 		--training_file="/home/karima/cnn-data/train_files.txt" \
 		--model_path="./RAND_DATA_SUBSET_TRAIN_MULTIRES_SMALL_WEIGHT_DECAY/models/" \
-		--save="RAND_DATA_SUBSET_EVAL_MULTIRES_SMALL_WEIGHT_DECAY"
+		--save="RAND_DATA_SUBSET_EVAL_MULTIRES_SMALL_WEIGHT_DECAY" &
     echo $gpu_id $proc_id
 		pids[${proc_id}]=$!
 		proc_id=$[$proc_id+1]

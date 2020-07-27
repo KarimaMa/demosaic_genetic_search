@@ -36,6 +36,7 @@ if __name__ == "__main__":
   parser.add_argument('--training_subset', type=str, help='file with list of training subset files')
   parser.add_argument('--validation_file', type=str, help='file with list of validation image files')
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
+  parser.add_argument('--multires_model', action='store_true')
 
   args = parser.parse_args()
   util.create_dir(args.save, scripts_to_save=glob.glob('*.py'))
@@ -52,7 +53,12 @@ if __name__ == "__main__":
 
   model_manager = util.ModelManager(args.model_path)
 
-  green = model_lib.multires_green_model()
+  if args.multires_model:
+    green = model_lib.multires_green_model()
+  else:
+    full_model = meta_model.MetaModel()
+    full_model.build_default_model() 
+    green = full_model.green
 
   random.seed(args.seed)
   np.random.seed(args.seed)

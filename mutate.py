@@ -31,6 +31,13 @@ logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG)
 CHANNELS = set((1,4,8,12))
 CHANNELS = set((8,))
 
+class MutationStats():
+  def __init__(self, failures, prune_rejections, structural_rejections, seen_rejections):
+    self.failures = failures
+    self.prune_rejections = prune_rejections
+    self.structural_rejections = structural_rejections
+    self.seen_rejections = seen_rejections
+
 """
 mutates the given tree 
 50/50 percent chance of doing an insertion or deletion mutation
@@ -39,38 +46,48 @@ only performs deletion mutation
 """
 class Mutator():
   def __init__(self, args, debug_logger):
+    
     self.args = args
     self.debug_logger = debug_logger
 
-    self.failed_mutations = 0
-    self.mutations = 0
-    self.structual_rejections = 0
     self.seen_models = {}
     self.seen_structures = set()
 
   def mutate(self, model_id, tree, input_set):
+    failures = 0
+    prune_rejections = 0
+    structural_rejections = 0
+    seen_rejections = 0
+
     tree_size = tree.compute_size(set(), count_all_inputs=True)
-    if tree_size > self.args.max_nodes:
-      do_insertion = False
-    else:
-      do_insertion = random.randint(0,1)
-  
+    
     while True:
+      total_tries = structural_rejections + prune_rejections + seen_rejections + failures 
+      if total_tries > self.args.mutation_failure_threshold:
+        stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections)
+        print(f'killed mutation from {model_id}')
+        return None, None, stats
       try:
         while True:
+          if tree_size > self.args.max_nodes:
+            do_insertion = False
+          else:
+            do_insertion = random.randint(0,1)
           tree_copy = copy.deepcopy(tree)
+
           if do_insertion:  
             new_tree = self.insert_mutation(tree_copy, input_set)
           else:
-            new_tree = delete_mutation(tree)
+            new_tree = self.delete_mutation(tree_copy)
           if accept_tree(new_tree):
             break
+          prune_rejections += 1
       except AssertionError:
         if do_insertion:
           self.debug_logger.debug(f'insertion mutation failed on model {model_id}')
         else:
           self.debug_logger.debug(f'deletion mutation failed on model {model_id}')
-        self.failed_mutations += 1
+        failures += 1
         continue
       else: # successfully mutated tree
         # reject trees we've seen already 
@@ -79,18 +96,19 @@ class Mutator():
           h = structural_hash(new_tree)
           if h in self.seen_structures:
             if random.random() < self.args.structural_sim_reject:
-              self.structual_rejections += 1
+              structural_rejections += 1
               continue
           else: # successfully mutated tree!
             check_channel_count(new_tree) # these should not fire...
             check_linear_types(new_tree)
             self.seen_structures.add(h)
-            self.mutations += 1
-            seen_models[new_tree] = [int(model_id)]
-            return new_tree, h
+            self.seen_models[new_tree] = [int(model_id)]
+            stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections)
+            return new_tree, h, stats
 
-        else: # we've seen and evaluated this exact tree before 
-          seen_models[new_tree].append(int(model_id))
+        else: # we've seen and evaluated this exact tree before
+          self.seen_models[new_tree].append(int(model_id))
+          seen_rejections += 1
           continue
 
 
@@ -285,7 +303,7 @@ def delete_mutation(self, tree):
   # delete the selected node
   node = select_node_to_delete(tree)
   deletion_child = self.delete_nodes(tree, node)
-
+  tree.compute_input_output_channels()
   return tree 
 
 
@@ -363,8 +381,8 @@ def link_insertion_parent_to_new_child(self, insert_parent, insert_child, node):
 
 @extclass(Mutator)
 def insert_binop(self, tree, input_set, insert_op, insert_child):
-  op_class, use_child, use_right = insert_op
-  if issubclass(op_class, BinopIII):
+  OpClass, use_child, use_right = insert_op
+  if issubclass(OpClass, BinopIII):
     # make subtree's output channels match other child's output channels
     if use_child is None:
       subtree = self.pick_subtree(tree, input_set, target_out_c=insert_child.out_c)
@@ -377,16 +395,16 @@ def insert_binop(self, tree, input_set, insert_op, insert_child):
         assert False, f"Could not make channel counts of insert_child agree with required child"
       
   else: # Op is BinopIJK - keep the output channels of the chosen subtree
-    # subtree = pick_subtree(tree, input_set, root_id=6)
+    #subtree = self.pick_subtree(tree, input_set, root_id=6)
     subtree = self.pick_subtree(tree, input_set)
   
   if not use_right:
     use_right = random.randint(0,1)
 
   if use_right:
-    new_node = OpClass(cur_child, subtree)
+    new_node = OpClass(insert_child, subtree)
   else:
-    new_node = OpClass(subtree, cur_child)
+    new_node = OpClass(subtree, insert_child)
 
   if use_child: # add a second parent if we're given a child to use
     subtree.parent = (subtree.parent, new_node)
@@ -397,8 +415,8 @@ def insert_binop(self, tree, input_set, insert_op, insert_child):
   return new_node
 
 @extclass(Mutator)
-def insert_unary_op(self, op_class, insert_child):
-  params = list(signature(op_class).parameters.items())
+def insert_unary_op(self, OpClass, insert_child):
+  params = list(signature(OpClass).parameters.items())
   if len(params) == 2:
     # set output channels = input channels so that we can use skip connections
     out_c = insert_child.out_c # self.defualt_channels
@@ -481,9 +499,9 @@ def insert_activation_under_mul(self, tree, input_set, mul_node):
 """
 chooses were to insert sandwich op's partner
 """
-def choose_partner_op_loc(op_node, op_class, partner_op_class):
+def choose_partner_op_loc(op_node, OpClass, partner_op_class):
   # decide where to insert partner node
-  if op_class is LogSub:
+  if OpClass is LogSub:
     # don't insert AddExp as parent of a Softmax or a binary op
     insertion_child_options = find_closest_ancestor(op_node, set((Binop,Softmax)))[1:] 
   else:
@@ -497,7 +515,7 @@ def choose_partner_op_loc(op_node, op_class, partner_op_class):
 
   if OpClass is LogSub:
     # NOTE: we are passing a REFERENCE to LogSub's child -> creating a DAG
-    insert_ops = [(partner_op_class, new_node.rchild, True)] # LogSub subtracts the right child so must add back
+    insert_ops = [(partner_op_class, op_node.rchild, True)] # LogSub subtracts the right child so must add back
   else:
     insert_ops = [(partner_op_class, None, None)]
 
@@ -583,22 +601,27 @@ Tries to mutate tree by inserting random op(s) at a random location
 If op is a binary op, picks a subtree to add as the other child
 """
 @extclass(Mutator)
-def insert_mutation(self, tree, input_set):
+def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=None):
   preorder_nodes = tree.preorder()
 
   while True:
     # insert above the selected node
-    insert_above_node_id = random.randint(1, len(preorder_nodes)-1)
+    if not insert_above_node_id:
+      insert_above_node_id = random.randint(1, len(preorder_nodes)-1)
     insert_child = preorder_nodes[insert_above_node_id]
     insert_parent = insert_child.parent
 
     # pick op(s) to insert
     insert_types = self.get_insert_types(insert_parent, insert_child)
+   
     while True:
-      new_ops = []
-      for n in range(len(insert_types)):
-        OpClass = random.sample(insert_types[n], 1)[0]
-        new_ops += [OpClass]
+      if not insert_op:
+        new_ops = []
+        for n in range(len(insert_types)):
+          OpClass = random.sample(insert_types[n], 1)[0]
+          new_ops += [OpClass]
+      else:
+        new_ops = [insert_op]
       # allow at most one sandwich op to be inserted
       if sum(map(lambda x : x in sandwich_ops, new_ops)) <= 1: 
         break
@@ -709,6 +732,10 @@ def accept_tree(tree):
         break
       parent = parent.parent
 
+  # Conv1D must have output channels % 4 == 0
+  if tree_type is Conv1D and tree.out_c % 4 != 0:
+    return False
+
   # don't allow subtraction or addition of same trees
   if tree_type is Sub or tree_type is Add:
     if tree.lchild.is_same_as(tree.rchild):
@@ -734,6 +761,10 @@ def accept_tree(tree):
     if tree.lchild.is_same_mod_channels(tree.rchild):
       logging.debug("rejecting stacking structurally same children")
       return False
+
+  # don't allow softmax over a single channel
+  if tree_type is Softmax and tree.out_c == 1:
+    return False
 
   # don't allow nested upsample / downsample and don't allow two softmaxes in same branch
   if tree_type is Upsample or tree_type is Softmax:

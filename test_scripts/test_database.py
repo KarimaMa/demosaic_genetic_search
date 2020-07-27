@@ -67,8 +67,18 @@ class Searcher():
     cost_tiers.add(self.model_manager.SEED_ID, compute_cost, model_accuracy)
     
     self.model_database.add(self.model_manager.SEED_ID,\
-                        [self.model_manager.SEED_ID, structural_hash(seed_ast), 1, \
-                        0, [model_accuracy], compute_cost, -1])
+                        [self.model_manager.SEED_ID, 
+                        structural_hash(seed_ast), 
+                        1, 
+                        0, 
+                        [model_accuracy, -1, -1], 
+                        compute_cost, 
+                        -1,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0])
 
     # CHANGE TO NOT BE FIXED - SHOULD BE INFERED FROM TASK
     model_inputs = set(("Input(Bayer)",))
@@ -77,7 +87,6 @@ class Searcher():
       new_cost_tiers = copy.deepcopy(cost_tiers) 
       avg_iter_time = 0 
       for tier in cost_tiers.tiers:
-        print(f"tier size {len(tier.items())}")
         for model_id, costs in tier.items():
           itert0 = time.time()
           best_model_version = self.model_database.get_best_version_id(model_id)
@@ -98,7 +107,7 @@ class Searcher():
           new_models = [new_model_ast.ast_to_model() for i in range(args.model_initializations)]
           for m in new_models:
             m._initialize_parameters()
-            
+
           new_model_dir = self.model_manager.model_dir(new_model_id)
           util.create_dir(new_model_dir)
 
@@ -120,8 +129,8 @@ class Searcher():
                         compute_cost,
                         model_id,
                         0, # killed mutations from this model 
-                        mutation_stats.failures,
-                        mutation_stats.prune_rejections,
+                        mutation_stats.failures, 
+                        mutation_stats.prune_rejections, 
                         mutation_stats.structural_rejections,
                         mutation_stats.seen_rejections])
 
