@@ -31,4 +31,3 @@ with open(args.input_data, "r") as f:
 		print("-----------")
 		train_writer.writerow([subset_id] + training_losses)  
 		valid_writer.writerow([subset_id] + validation_losses)
-

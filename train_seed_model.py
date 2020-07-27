@@ -134,7 +134,7 @@ if __name__ == "__main__":
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
   parser.add_argument('--default_channels', type=int, default=16, help='num of output channels for conv layers')
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
-  parser.add_argument('--save', type=str, default='SEARCH', help='experiment name')
+  parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--seed', type=int, default=2, help='random seed')
   parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
@@ -151,6 +151,7 @@ if __name__ == "__main__":
   full_model.build_default_model() 
   green = full_model.green
   #green = model_lib.multires_green_model()
+
   green.compute_input_output_channels()
 
   if not torch.cuda.is_available():
@@ -168,17 +169,19 @@ if __name__ == "__main__":
 
   models = [green.ast_to_model().cuda() for i in range(args.model_initializations)]
 
-  valid_losses = train(args, models, 'seed', model_dir) 
-  # only save the best model
-  min_validation_loss = min(valid_losses)
-  best_model_version = valid_losses.index(min_validation_loss)
-  model_manager.save_model([ models[best_model_version] ], green, model_dir)
+  validation_losses, training_losses = train(args, models, 'seed', model_dir) 
 
-  """
-  reloaded_model_dir = model_manager.model_dir('reloaded')
-  util.create_dir(reloaded_model_dir)
-  reloaded_model, reloaded_ast = model_manager.load_model('seed', 0)
-  print(reloaded_ast.dump())
-  valid_losses = train(args, [reloaded_model], 'reloaded', reloaded_model_dir)
-  """
+  model_manager.save_model(models, green, model_dir)
+
+  with open(args.results_file, "a+") as f:
+    training_losses = [str(tl) for tl in training_losses]
+    training_losses_str = ",".join(training_losses)
+
+    validation_losses = [str(vl) for vl in validation_losses]
+    validation_losses_str = ",".join(validation_losses)
+
+    data_string = f"training losses: {training_losses_str} validation losses: {validation_losses_str}\n"
+
+    f.write(data_string)
+
 
