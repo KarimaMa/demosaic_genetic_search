@@ -8,6 +8,9 @@ import argparse
 import os
 import random 
 import numpy as np
+import sys
+
+sys.path.append(sys.path[0].split("/")[0])
 
 import util
 import meta_model
@@ -132,7 +135,7 @@ if __name__ == "__main__":
   parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
   parser.add_argument('--epochs', type=int, default=10, help='num of training epochs')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
-  parser.add_argument('--default_channels', type=int, default=16, help='num of output channels for conv layers')
+  parser.add_argument('--multires_model', action='store_true')
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
   parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--seed', type=int, default=2, help='random seed')
@@ -147,12 +150,12 @@ if __name__ == "__main__":
   model_dir = model_manager.model_dir('seed')
   util.create_dir(model_dir)
 
-  full_model = meta_model.MetaModel()
-  full_model.build_default_model() 
-  green = full_model.green
-  #green = model_lib.multires_green_model()
-
-  green.compute_input_output_channels()
+  if args.multires_model:
+    green = model_lib.multires_green_model()
+  else:
+    full_model = meta_model.MetaModel()
+    full_model.build_default_model() 
+    green = full_model.green
 
   if not torch.cuda.is_available():
     sys.exit(1)
@@ -171,6 +174,10 @@ if __name__ == "__main__":
   for m in models:
     m._initialize_parameters()
     
+  for name, param in models[0].named_parameters():
+    print(f"{name} {param.size()}")
+  exit()
+
   validation_losses, training_losses = train(args, models, 'seed', model_dir) 
 
   model_manager.save_model(models, green, model_dir)

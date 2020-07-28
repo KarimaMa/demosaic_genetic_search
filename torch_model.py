@@ -291,10 +291,10 @@ class DownsampleOp(nn.Module):
     setattr(self, param_name, pool)
 
   def _initialize_parameters(self):
-    w = 1.0/9.0
-    weights = torch.zeros(self.pool.weight.shape) 
-    weights[:,:,0::2,0::2] = w
     pool = getattr(self, self.param_name)
+    w = 1.0/9.0
+    weights = torch.zeros(pool.weight.shape) 
+    weights[:,:,0::2,0::2] = w
     pool.weight.data = weights
     pool.weight.requires_grad = False
     self._operands[0]._initialize_parameters()
