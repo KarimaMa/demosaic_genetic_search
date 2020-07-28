@@ -5,7 +5,7 @@ proc_id=0
 
 while [ $proc_id -lt $n_procs ]; do
   for gpu_id in $(seq 0 $n_gpus); do
-		python3 parallel_rand_subset_eval.py --gpu=$gpu_id --subset_id=$proc_id \
+		python3 train_eval_scripts/parallel_rand_subset_eval.py --gpu=$gpu_id --subset_id=$proc_id \
 		--training_file="/home/karima/cnn-data/train_files.txt" \
 		--model_path="./RAND_DATA_SUBSET_TRAIN_MULTIRES_SMALL_WEIGHT_DECAY/models/" \
 		--save="RAND_DATA_SUBSET_EVAL_MULTIRES_SMALL_WEIGHT_DECAY" &

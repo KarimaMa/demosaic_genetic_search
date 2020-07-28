@@ -23,6 +23,8 @@ def build_green_model():
   full_green = GreenExtractor(missing_green, bayer)
   full_green.is_root = True
   full_green.assign_parents()
+  full_green.compute_input_output_channels()
+
   return full_green
 
 def build_chroma_model(green):
@@ -38,6 +40,7 @@ def build_chroma_model(green):
   full_chroma = ChromaExtractor(missing_chroma, bayer)
   full_chroma.is_root = True
   full_chroma.assign_parents()
+  full_chroma.compute_input_output_channels()
   return full_chroma
 
 def build_touchup_model(green, chroma):
@@ -47,6 +50,7 @@ def build_touchup_model(green, chroma):
   out = Conv2D(rgb, 3)
   out.is_root = True
   out.assign_parents()
+  out.compute_input_output_channels()
   return out
 
 

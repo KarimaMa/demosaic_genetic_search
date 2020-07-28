@@ -28,7 +28,7 @@ def create_exp_dir(path, scripts_to_save=None):
   if not os.path.exists(path):
     os.makedirs(path, exist_ok=True)
   else:
-  	print("Directory already exists {path}")
+  	print(f"Directory already exists {path}")
 
   print('Experiment dir : {}'.format(path))
 
@@ -43,7 +43,7 @@ def create_dir(path, scripts_to_save=None):
   if not os.path.exists(path):
     os.makedirs(path)
   else:
-  	print("Directory already exists {path}")
+  	print(f"Directory already exists {path}")
 
   if scripts_to_save is not None:
     scripts_dir = os.path.join(path, 'scripts')

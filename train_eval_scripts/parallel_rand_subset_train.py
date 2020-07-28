@@ -11,12 +11,15 @@ import sys
 import random 
 import numpy as np
 
+sys.path.append(sys.path[0].split("/")[0])
+
 import util
 import meta_model
 import model_lib
 from torch_model import ast_to_model
 from dataset import GreenDataset
 from train_seed_model import train
+
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
@@ -54,8 +57,10 @@ if __name__ == "__main__":
   model_manager = util.ModelManager(args.model_path)
 
   if args.multires_model:
+    experiment_logger.info("TRAINING MULTIRES GREEN")
     green = model_lib.multires_green_model()
   else:
+    experiment_logger.info("TRAINING BASIC GREEN")
     full_model = meta_model.MetaModel()
     full_model.build_default_model() 
     green = full_model.green
