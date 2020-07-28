@@ -168,7 +168,9 @@ if __name__ == "__main__":
   torch.cuda.manual_seed(args.seed)
 
   models = [green.ast_to_model().cuda() for i in range(args.model_initializations)]
-
+  for m in models:
+    m._initialize_parameters()
+    
   validation_losses, training_losses = train(args, models, 'seed', model_dir) 
 
   model_manager.save_model(models, green, model_dir)
