@@ -8,7 +8,7 @@ from demosaic_ast import *
 from config import IMG_H, IMG_W
 from util import extclass
 
-cuda = False
+cuda = True
 
 """
 Converts flat activation map to 4 channel-wise groups
@@ -304,7 +304,8 @@ class DownsampleOp(nn.Module):
     return self.forward(operand)
 
   def forward(self, x):
-    return self.pool(x)
+    pool = getattr(self, self.param_name)
+    return pool(x)
     
 class UpsampleOp(nn.Module):
   def __init__(self, operand, C_in, param_name):
@@ -334,11 +335,13 @@ class UpsampleOp(nn.Module):
     return self.forward(operand)
 
   def forward(self, x):
+    flat2dense = getattr(self, self.param_name_flat2dense)
+    dense2fullres_bayer = getattr(self, self.param_name_dense2fullres_bayer)
     # 1st channel centered at Gr, 2nd channel centered at R, 3rd channel at B, 4th channel at Gb
-    dense = self.flat2dense(x)
+    dense = flat2dense(x)
     
     # spread Gr, R, B, and Gb centered weights
-    fullres = self.dense2fullres_bayer(dense)
+    fullres = dense2fullres_bayer(dense)
     split = torch.split(fullres, self.in_c, dim=1)
 
     # crop centered values differently
@@ -367,14 +370,14 @@ class Conv1x1Op(nn.Module):
     return self.forward(operand)
 
   def forward(self, x): 
-    return self.f(x)
+    f = getattr(self, self.param_name)
+    return f(x)
 
 # 1D diagonal convolution from top left corner to bottom right corner
 class DiagLRConv(nn.Module):
   def __init__(self, C_in, C_out, kernel_size, padding, param_name):
     super(DiagLRConv, self).__init__()
     self.padding = padding
-    #self.filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size)).cuda()
     filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size))
     self.param_name = param_name
     setattr(self, param_name, filter_w)
@@ -385,14 +388,14 @@ class DiagLRConv(nn.Module):
 
   def forward(self, x):
     padding = self.padding
-    return nn.functional.conv2d(x, torch.diag_embed(self.filter_w), padding=padding)
+    filter_w = getattr(self, self.param_name)
+    return nn.functional.conv2d(x, torch.diag_embed(filter_w), padding=padding)
 
 # 1D diagonal convolution from top right corner to bottom left corner
 class DiagRLConv(nn.Module):
   def __init__(self, C_in, C_out, kernel_size, padding, param_name):
     super(DiagRLConv, self).__init__()
     self.padding = padding
-    # self.filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size, kernel_size)).cuda()
     # self.mask = torch.zeros(C_out, C_in, kernel_size, kernel_size).cuda()
     filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size, kernel_size))
     self.param_name = param_name
@@ -410,7 +413,8 @@ class DiagRLConv(nn.Module):
     nn.init.xavier_normal_(filter_w)
 
   def forward(self, x):
-    return nn.functional.conv2d(x, (self.filter_w * self.mask), padding=self.padding)
+    filter_w = getattr(self, self.param_name)
+    return nn.functional.conv2d(x, (filter_w * self.mask), padding=self.padding)
 
 class Conv1DOp(nn.Module):
   def __init__(self, operand, C_in, C_out, param_name):
@@ -445,7 +449,9 @@ class Conv1DOp(nn.Module):
     return self.forward(operand)
 
   def forward(self, x):
-    return torch.cat((self.v(x), self.h(x), self.diag1(x), self.diag2(x)), 1)
+    v = getattr(self, self.param_name_v)
+    h = getattr(self, self.param_name_h)
+    return torch.cat((v(x), h(x), self.diag1(x), self.diag2(x)), 1)
 
 class Conv2DOp(nn.Module):
   def __init__(self, operand, C_in, C_out, param_name):
@@ -465,7 +471,8 @@ class Conv2DOp(nn.Module):
     return self.forward(operand)
 
   def forward(self, x):
-    return self.f(x)
+    f = getattr(self, self.param_name)
+    return f(x)
 
 class SumROp(nn.Module):
   def __init__(self, operand):

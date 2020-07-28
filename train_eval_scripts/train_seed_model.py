@@ -184,7 +184,6 @@ if __name__ == "__main__":
     
   for name, param in models[0].named_parameters():
     print(f"{name} {param.size()}")
-  exit()
 
   validation_losses, training_losses = train(args, models, 'seed', model_dir) 
 
