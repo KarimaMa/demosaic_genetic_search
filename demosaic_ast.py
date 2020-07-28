@@ -86,44 +86,58 @@ class Input(Const, Special, Node):
     self.out_c = out_c 
 
 class Add(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild):
-    Node.__init__(self, "Add", 2)
+  def __init__(self, lchild, rchild, name=None):
+    if name is None:
+      name = "Add"
+    Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
 
 class Sub(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild):
-    Node.__init__(self, "Sub", 2)
+  def __init__(self, lchild, rchild, name=None):
+    if name is None:
+      name = "Sub"
+    Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
 
 class Mul(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild):
-    Node.__init__(self, "Mul", 2)
+  def __init__(self, lchild, rchild, name=None):
+    if name is None:
+      name = "Mul"
+    Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
 
 class LogSub(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild):
-    Node.__init__(self, "LogSub", 2)
+  def __init__(self, lchild, rchild, name=None):
+    if name is None:
+      name = "LogSub"
+    Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
 
 class AddExp(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild):
-    Node.__init__(self, "AddExp", 2)
+  def __init__(self, lchild, rchild, name=None):
+    if name is None:
+      name = "AddExp"
+    Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
 
 class Stack(BinopIJK, Special, Node):
-  def __init__(self, lchild, rchild):
-    Node.__init__(self, "Stack", 2)
+  def __init__(self, lchild, rchild, name=None):
+    if name is None:
+      name = "Stack"
+    Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
 
 class ChromaExtractor(BinopIcJcKc, Special, Node):
-  def __init__(self, lchild, rchild):
-    Node.__init__(self, "ChromaExtractor", 2)
+  def __init__(self, lchild, rchild, name=None):
+    if name is None:
+      name = "ChromaExtractor"
+    Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
     self.in_c = (3, 1) # CH, CV, CQ and Bayer
@@ -136,8 +150,10 @@ class ChromaExtractor(BinopIcJcKc, Special, Node):
     return 2
 
 class GreenExtractor(BinopIcJcKc, Special, Node):
-  def __init__(self, lchild, rchild):
-    Node.__init__(self, "GreenExtractor", 2)
+  def __init__(self, lchild, rchild, name=None):
+    if name is None:
+      name = "GreenExtractor"
+    Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
     self.in_c = (1, 1) # G and Bayer
@@ -150,56 +166,76 @@ class GreenExtractor(BinopIcJcKc, Special, Node):
     return 1
 
 class Softmax(UnopII, NonLinear, Node):
-  def __init__(self, child):
-    Node.__init__(self, "Softmax", 1)
+  def __init__(self, child, name=None):
+    if name is None:
+      name = "Softmax"
+    Node.__init__(self, name, 1)
     self.child = child
 
 class Relu(UnopII, NonLinear, Node):
-  def __init__(self, child):
-    Node.__init__(self, "Relu", 1)
+  def __init__(self, child, name=None):
+    if name is None:
+      name = "Relu"
+    Node.__init__(self, name, 1)
     self.child = child
 
 class Log(UnopII, NonLinear, Node):
-  def __init__(self, child):
-    Node.__init__(self, "Log", 1)
+  def __init__(self, child, name=None):
+    if name is None:
+      name = "Log"
+    Node.__init__(self, name, 1)
     self.child = child
 
 class Exp(UnopII, NonLinear, Node):
-  def __init__(self, child):
-    Node.__init__(self, "Exp", 1)
+  def __init__(self, child, name=None):
+    if name is None:
+      name = "Exp"
+    Node.__init__(self, name, 1)
     self.child = child
 
 class Downsample(UnopII, Special, Node):
-  def __init__(self, child):
-    Node.__init__(self, "Downsample", 1)
+  def __init__(self, child, name=None):
+    if name is None:
+      name = "Downsample"
+    Node.__init__(self, name, 1)
     self.child = child
 
 class Upsample(UnopII, Special, Node):
-  def __init__(self, child):
-    Node.__init__(self, "Upsample", 1)
+  def __init__(self, child, name=None):
+    if name is None:
+      name = "Upsample"
+    Node.__init__(self, name, 1)
     self.child = child
 
 class Conv1x1(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int):
-    Node.__init__(self, "Conv1x1", 1)
+  def __init__(self, child, out_c: int, name=None):
+    if name is None:
+      name = "Conv1x1"
+    Node.__init__(self, name, 1)
     self.child = child
     self.out_c = out_c
 
 class Conv1D(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int):
-    Node.__init__(self, "Conv1D", 1)
+  def __init__(self, child, out_c: int, name=None):
+    if name is None:
+      name = "Conv1D"
+    Node.__init__(self, name, 1)
     self.child = child
     self.out_c = out_c
 
 class Conv2D(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int):
-    Node.__init__(self, "Conv2D", 1)
+  def __init__(self, child, out_c: int, name=None):
+    if name is None:
+      name = "Conv2D"
+    Node.__init__(self, name, 1)
     self.child = child
     self.out_c = out_c
 
 class SumR(UnopI1, Special, Node):
-  def __init__(self, child):
-    Node.__init__(self, "SumR", 1)
+  def __init__(self, child, name=None):
+    if name is None:
+      name = "SumR"
+    Node.__init__(self, name, 1)
     self.child = child
     self.out_c = 1
 
