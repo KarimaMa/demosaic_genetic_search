@@ -283,17 +283,20 @@ class ExpOp(nn.Module):
     return torch.exp(x)
 
 class DownsampleOp(nn.Module):
-  def __init__(self, operand, C_in):
+  def __init__(self, operand, C_in, param_name):
     super(DownsampleOp, self).__init__()
     self._operands = nn.ModuleList([operand])
-    self.pool = nn.Conv2d(C_in, C_in, 5, stride=3, padding=(3,3), bias=False)
-  
+    pool = nn.Conv2d(C_in, C_in, 5, stride=3, padding=(3,3), bias=False)
+    self.param_name = param_name
+    setattr(self, param_name, pool)
+
   def _initialize_parameters(self):
     w = 1.0/9.0
     weights = torch.zeros(self.pool.weight.shape) 
     weights[:,:,0::2,0::2] = w
-    self.pool.weight.data = weights
-    self.pool.weight.requires_grad = False
+    pool = getattr(self, self.param_name)
+    pool.weight.data = weights
+    pool.weight.requires_grad = False
     self._operands[0]._initialize_parameters()
 
   def run(self, bayer):
@@ -304,20 +307,26 @@ class DownsampleOp(nn.Module):
     return self.pool(x)
     
 class UpsampleOp(nn.Module):
-  def __init__(self, operand, C_in):
+  def __init__(self, operand, C_in, param_name):
     super(UpsampleOp, self).__init__()
     self._operands = nn.ModuleList([operand])
-    # extract predicted values centered at Gr, R, B, Gb into a dense quad
-    self.flat2dense = nn.Conv2d(C_in, C_in*4, 2, padding=0, stride=2, bias=False)
-    # splat them into their corresponding locations in an upsampled bayer
-    self.dense2fullres_bayer = nn.ConvTranspose2d(C_in*4, C_in*4, 6, groups=C_in*4, stride=6, bias=False)
     self.in_c = C_in
-  
+    # extract predicted values centered at Gr, R, B, Gb into a dense quad
+    flat2dense = nn.Conv2d(C_in, C_in*4, 2, padding=0, stride=2, bias=False)
+    # splat them into their corresponding locations in an upsampled bayer
+    dense2fullres_bayer = nn.ConvTranspose2d(C_in*4, C_in*4, 6, groups=C_in*4, stride=6, bias=False)
+    self.param_name_flat2dense = f"{param_name}_flat2dense"
+    self.param_name_dense2fullres_bayer = f"{param_name}_dense2fullres_bayer"
+    setattr(self, self.param_name_flat2dense, flat2dense)
+    setattr(self, self.param_name_dense2fullres_bayer, dense2fullres_bayer)
+
   def _initialize_parameters(self):
-    init_flat2dense(self.flat2dense.weight.data)
-    init_dense2fullres_bayer(self.dense2fullres_bayer.weight.data)
-    self.flat2dense.weight.requires_grad = False
-    self.dense2fullres_bayer.weight.requires_grad = False
+    flat2dense = getattr(self, self.param_name_flat2dense)
+    dense2fullres_bayer = getattr(self, self.param_name_dense2fullres_bayer)
+    init_flat2dense(flat2dense.weight.data)
+    init_dense2fullres_bayer(dense2fullres_bayer.weight.data)
+    flat2dense.weight.requires_grad = False
+    dense2fullres_bayer.weight.requires_grad = False
     self._operands[0]._initialize_parameters()
 
   def run(self, bayer):
@@ -341,16 +350,16 @@ class UpsampleOp(nn.Module):
     return (croppedGr + croppedR + croppedB + croppedGb)
     
 class Conv1x1Op(nn.Module):
-  def __init__(self, operand, C_in, C_out, layername=None):
+  def __init__(self, operand, C_in, C_out, param_name):
     super(Conv1x1Op, self).__init__()
     self._operands = nn.ModuleList([operand])
     f = nn.Conv2d(C_in, C_out, (1, 1), bias=False, padding=0)
-    if layername is None:
-      layername = "f"
-    setattr(self, layername, f)
+    self.param_name = param_name
+    setattr(self, param_name, f)
 
   def _initialize_parameters(self):
-    nn.init.xavier_normal_(self.f.weight)
+    f = getattr(self, self.param_name)
+    nn.init.xavier_normal_(f.weight)
     self._operands[0]._initialize_parameters()
 
   def run(self, bayer):
@@ -362,14 +371,17 @@ class Conv1x1Op(nn.Module):
 
 # 1D diagonal convolution from top left corner to bottom right corner
 class DiagLRConv(nn.Module):
-  def __init__(self, C_in, C_out, kernel_size, padding):
+  def __init__(self, C_in, C_out, kernel_size, padding, param_name):
     super(DiagLRConv, self).__init__()
     self.padding = padding
     #self.filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size)).cuda()
-    self.filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size))
+    filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size))
+    self.param_name = param_name
+    setattr(self, param_name, filter_w)
 
   def _initialize_parameters(self):
-    nn.init.xavier_normal_(self.filter_w)
+    filter_w = getattr(self, self.param_name)
+    nn.init.xavier_normal_(filter_w)
 
   def forward(self, x):
     padding = self.padding
@@ -377,12 +389,15 @@ class DiagLRConv(nn.Module):
 
 # 1D diagonal convolution from top right corner to bottom left corner
 class DiagRLConv(nn.Module):
-  def __init__(self, C_in, C_out, kernel_size, padding):
+  def __init__(self, C_in, C_out, kernel_size, padding, param_name):
     super(DiagRLConv, self).__init__()
     self.padding = padding
     # self.filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size, kernel_size)).cuda()
     # self.mask = torch.zeros(C_out, C_in, kernel_size, kernel_size).cuda()
-    self.filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size, kernel_size))
+    filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size, kernel_size))
+    self.param_name = param_name
+    setattr(self, param_name, filter_w)
+
     self.mask = torch.zeros(C_out, C_in, kernel_size, kernel_size)
     if cuda:
       self.mask = self.mask.cuda()
@@ -391,24 +406,36 @@ class DiagRLConv(nn.Module):
       self.mask[..., i, kernel_size-i-1] = 1.0
 
   def _initialize_parameters(self):
-    nn.init.xavier_normal_(self.filter_w)
+    filter_w = getattr(self, self.param_name)
+    nn.init.xavier_normal_(filter_w)
 
   def forward(self, x):
     return nn.functional.conv2d(x, (self.filter_w * self.mask), padding=self.padding)
 
 class Conv1DOp(nn.Module):
-  def __init__(self, operand, C_in, C_out):
+  def __init__(self, operand, C_in, C_out, param_name):
     super(Conv1DOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     assert C_out % 4 == 0, "Output channels must be divisible by 4 to use separable conv"
-    self.v = nn.Conv2d(C_in, C_out//4, (5, 1), bias=False, padding=(2, 0))
-    self.h = nn.Conv2d(C_in, C_out//4, (1, 5), bias=False, padding=(0, 2))
-    self.diag1 = DiagLRConv(C_in, C_out//4, 5, 2)
-    self.diag2 = DiagRLConv(C_in, C_out//4, 5, 2)
+    self.param_name_v = f"{param_name}_v"
+    self.param_name_h = f"{param_name}_h"
+    param_name_diag1 = f"{param_name}_diag1"
+    param_name_diag2 = f"{param_name}_diag2"
+
+    v = nn.Conv2d(C_in, C_out//4, (5, 1), bias=False, padding=(2, 0))
+    h = nn.Conv2d(C_in, C_out//4, (1, 5), bias=False, padding=(0, 2))
+    self.diag1 = DiagLRConv(C_in, C_out//4, 5, 2, param_name_diag1)
+    self.diag2 = DiagRLConv(C_in, C_out//4, 5, 2, param_name_diag2)
+
+    setattr(self, self.param_name_v, v)
+    setattr(self, self.param_name_h, h)
 
   def _initialize_parameters(self):
-    nn.init.xavier_normal_(self.v.weight)
-    nn.init.xavier_normal_(self.h.weight)
+    v = getattr(self, self.param_name_v)
+    h = getattr(self, self.param_name_h)
+
+    nn.init.xavier_normal_(v.weight)
+    nn.init.xavier_normal_(h.weight)
     self.diag1._initialize_parameters()
     self.diag2._initialize_parameters()
     self._operands[0]._initialize_parameters()
@@ -421,13 +448,16 @@ class Conv1DOp(nn.Module):
     return torch.cat((self.v(x), self.h(x), self.diag1(x), self.diag2(x)), 1)
 
 class Conv2DOp(nn.Module):
-  def __init__(self, operand, C_in, C_out):
+  def __init__(self, operand, C_in, C_out, param_name):
     super(Conv2DOp, self).__init__()
     self._operands = nn.ModuleList([operand])
-    self.f = nn.Conv2d(C_in, C_out, (5,5), bias=False, padding=2)
+    self.param_name = param_name
+    f = nn.Conv2d(C_in, C_out, (5,5), bias=False, padding=2)
+    setattr(self, self.param_name, f)
 
   def _initialize_parameters(self):
-    nn.init.xavier_normal_(self.f.weight)
+    f = getattr(self, self.param_name)
+    nn.init.xavier_normal_(f.weight)
     self._operands[0]._initialize_parameters()
 
   def run(self, bayer):
@@ -472,7 +502,6 @@ def ast_to_model(self):
 @extclass(Mul)
 def ast_to_model(self):
   lmodel = self.lchild.ast_to_model()
-
   rmodel = self.rchild.ast_to_model()
   return MulOp(lmodel, rmodel)
 
@@ -529,12 +558,12 @@ def ast_to_model(self):
 @extclass(Downsample)
 def ast_to_model(self):
   child_model = self.child.ast_to_model()
-  return DownsampleOp(child_model, self.in_c)
+  return DownsampleOp(child_model, self.in_c, self.name)
 
 @extclass(Upsample)
 def ast_to_model(self):
   child_model = self.child.ast_to_model()
-  return UpsampleOp(child_model, self.in_c)
+  return UpsampleOp(child_model, self.in_c, self.name)
 
 @extclass(Conv1x1)
 def ast_to_model(self):
@@ -544,12 +573,12 @@ def ast_to_model(self):
 @extclass(Conv1D)
 def ast_to_model(self):
   child_model = self.child.ast_to_model()
-  return Conv1DOp(child_model, self.in_c, self.out_c)
+  return Conv1DOp(child_model, self.in_c, self.out_c, self.name)
 
 @extclass(Conv2D)
 def ast_to_model(self):
   child_model = self.child.ast_to_model()
-  return Conv2DOp(child_model, self.in_c, self.out_c)
+  return Conv2DOp(child_model, self.in_c, self.out_c, self.name)
 
 @extclass(SumR)
 def ast_to_model(self):
