@@ -341,10 +341,13 @@ class UpsampleOp(nn.Module):
     return (croppedGr + croppedR + croppedB + croppedGb)
     
 class Conv1x1Op(nn.Module):
-  def __init__(self, operand, C_in, C_out):
+  def __init__(self, operand, C_in, C_out, layername=None):
     super(Conv1x1Op, self).__init__()
     self._operands = nn.ModuleList([operand])
-    self.f = nn.Conv2d(C_in, C_out, (1, 1), bias=False, padding=0)
+    f = nn.Conv2d(C_in, C_out, (1, 1), bias=False, padding=0)
+    if layername is None:
+      layername = "f"
+    setattr(self, layername, f)
 
   def _initialize_parameters(self):
     nn.init.xavier_normal_(self.f.weight)
@@ -354,7 +357,7 @@ class Conv1x1Op(nn.Module):
     operand = self._operands[0].run(bayer)
     return self.forward(operand)
 
-  def forward(self, x):
+  def forward(self, x): 
     return self.f(x)
 
 # 1D diagonal convolution from top left corner to bottom right corner
@@ -536,7 +539,7 @@ def ast_to_model(self):
 @extclass(Conv1x1)
 def ast_to_model(self):
   child_model = self.child.ast_to_model()
-  return Conv1x1Op(child_model, self.in_c, self.out_c)
+  return Conv1x1Op(child_model, self.in_c, self.out_c, self.name)
 
 @extclass(Conv1D)
 def ast_to_model(self):
