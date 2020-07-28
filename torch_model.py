@@ -451,7 +451,12 @@ class Conv1DOp(nn.Module):
   def forward(self, x):
     v = getattr(self, self.param_name_v)
     h = getattr(self, self.param_name_h)
-    return torch.cat((v(x), h(x), self.diag1(x), self.diag2(x)), 1)
+    # SO hacky way to get features for k-core
+    if "KcoreFeature" in self.param_name_v:
+      out = torch.cat((v(x), h(x), self.diag1(x), self.diag2(x)), 1)
+      global kcore_features
+      kcore_features = out
+    return out 
 
 class Conv2DOp(nn.Module):
   def __init__(self, operand, C_in, C_out, param_name):

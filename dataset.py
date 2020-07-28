@@ -70,8 +70,9 @@ class Dataset(data.Dataset):
 
 
 class GreenDataset(data.Dataset):
-  def __init__(self, train_filenames):
+  def __init__(self, train_filenames, return_index=False):
     self.list_IDs = ids_from_file(train_filenames) # patch filenames
+    self.return_index = return_index
 
   def __len__(self):
     return len(self.list_IDs)
@@ -84,4 +85,14 @@ class GreenDataset(data.Dataset):
     green = np.expand_dims(img[1,...], axis=0)
     mosaic = bayer(img)
     mosaic = np.sum(mosaic, axis=0, keepdims=True)
+
+    if self.return_index:
+      return (index, mosaic, green)
+
     return (mosaic, green) 
+
+  def save_kcore_filenames(self, kcore_ids, kcore_filename):
+    with open(kcore_filename, "w") as f:
+      for kcore_id in kcore_ids:
+        f.write(self.list_IDs[kcore_id] + "\n")
+    

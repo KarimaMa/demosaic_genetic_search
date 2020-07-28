@@ -19,7 +19,7 @@ def multires_green_model():
   relu1 = Relu(stack)
   fc1 = Conv1x1(relu1, 16)
   relu2 = Relu(fc1)
-  fc2 = Conv1x1(relu2, 16, name="Final_1x1")
+  fc2 = Conv1x1(relu2, 16, name="KcoreFeature_1x1")
   softmax = Softmax(fc2)
 
   # filter model
