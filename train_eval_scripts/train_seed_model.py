@@ -150,6 +150,14 @@ if __name__ == "__main__":
   model_dir = model_manager.model_dir('seed')
   util.create_dir(model_dir)
 
+  log_format = '%(asctime)s %(levelname)s %(message)s'
+  logging.basicConfig(stream=sys.stdout, level=logging.INFO, \
+    format=log_format, datefmt='%m/%d %I:%M:%S %p')
+
+  logger = util.create_logger('training_logger', logging.INFO, log_format, \
+                                os.path.join(args.save, 'training_log'))
+  logger.info("args = %s", args)
+
   if args.multires_model:
     green = model_lib.multires_green_model()
   else:
