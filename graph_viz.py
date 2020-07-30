@@ -27,3 +27,19 @@ def vis_ast_helper(root, graph, node_id):
 		graph.edges([(str(root_id), str(child_id))])
 	return node_id
 
+if __name__ == "__main__":
+	from model_lib import multires_green_model
+	import meta_model
+	full_model = meta_model.MetaModel()
+	full_model.build_default_model() 
+	green = full_model.green
+
+	multires = multires_green_model()
+	graph = vis_ast(multires, 'multires_model')
+	multires.compute_size(set(), count_all_inputs=True)
+	print(multires.size)
+	graph.render()
+
+
+	graph = vis_ast(green, "basic_model")
+	graph.render()
