@@ -20,7 +20,7 @@ class Node:
     self.num_children = num_children
 
   def __hash__(self):
-    h = hash_combine(hash(self.name), self.out_c)
+    h = hash_combine(hash(self.__class__.__name__), self.out_c)
     if type(self.in_c) is tuple:
       h = hash_combine(h, self.in_c[0] * self.in_c[1])
     else: 
