@@ -5,6 +5,7 @@ train_portion=$3
 save_dir=$4
 use_multires=$5
 epochs=$6
+learning_rate=$7
 
 echo $use_multires
 
@@ -27,6 +28,7 @@ while [ $subset_id -lt $n_subsets ]; do
     cmd=$cmd" --train_portion=$3"
     cmd=$cmd" --training_subset=$2/subset_$subset_id.txt"
     cmd=$cmd" --validation_file=/home/karima/cnn-data/val_files.txt"
+    cmd=$cmd" --learning_rate=$learning_rate"
 
     echo "running on gpu $gpu_id subset $subset_id"
     echo $cmd
