@@ -70,9 +70,10 @@ class Dataset(data.Dataset):
 
 
 class GreenDataset(data.Dataset):
-  def __init__(self, train_filenames, return_index=False):
+  def __init__(self, train_filenames, return_index=False, use_cropping=False):
     self.list_IDs = ids_from_file(train_filenames) # patch filenames
     self.return_index = return_index
+    self.use_cropping = use_cropping
 
   def __len__(self):
     return len(self.list_IDs)
@@ -85,10 +86,12 @@ class GreenDataset(data.Dataset):
     green = np.expand_dims(img[1,...], axis=0)
     mosaic = bayer(img)
     mosaic = np.sum(mosaic, axis=0, keepdims=True)
-
+  
     if self.return_index:
       return (index, mosaic, green)
-
+    if self.use_cropping: # take center crop of image
+      mosaic = mosaic[...,32:94,32:94]
+      green = green[...,32:94,32:94]
     return (mosaic, green) 
 
   def save_kcore_filenames(self, kcore_ids, kcore_filename):

@@ -3,6 +3,7 @@ import torch
 import os
 from demosaic_ast import load_ast
 import shutil
+import torch_model
 
 # from a github gist by victorlei
 def extclass(cls):
@@ -74,16 +75,18 @@ def get_model_ast_file(model_dir):
 def get_model_info_file(model_dir):  
   return os.path.join(model_dir, 'model_info')
 
-def load_model_from_file(model_file, model_version, cpu=False):
+def load_model_from_file(model_file, model_version, device):
   with open(model_file, "r") as f:
     ast_file = f.readline().strip()
     pytorch_files = [l.strip() for l in f]
 
-  if cpu:
-    model = torch.load(pytorch_files[model_version], map_location=torch.device('cpu'))
-  else:
-    model = torch.load(pytorch_files[model_version])
   model_ast = load_ast(ast_file)
+  model = model_ast.ast_to_model()
+  model.load_state_dict(torch.load(pytorch_files[model_version]))
+  #model = torch.load(pytorch_files[model_version], map_location=torch.device('cpu'))
+  if device == "gpu":
+    model = model.cuda()
+
   return model, model_ast
 
 
@@ -100,10 +103,10 @@ class ModelManager():
     self.SEED_ID = 0
     self.model_id_generator = model_id_generator(self.SEED_ID)
 
-  def load_model(self, model_id, model_version):
+  def load_model(self, model_id, model_version, device):
     model_dir = os.path.join(self.base_dir, str(model_id))
     model_info_file = get_model_info_file(model_dir)
-    return load_model_from_file(model_info_file, model_version)
+    return load_model_from_file(model_info_file, model_version, device)
 
   def get_next_model_id(self):
     return next(self.model_id_generator)
@@ -118,7 +121,8 @@ class ModelManager():
     pytorch_files = [get_model_pytorch_file(model_dir, model_version) \
                     for model_version in range(len(models))]
     for i, model in enumerate(models):
-      torch.save(model, pytorch_files[i])
+      #torch.save(model, pytorch_files[i])
+      torch.save(model.state_dict(), pytorch_files[i])
 
     info_file = get_model_info_file(model_dir)
 

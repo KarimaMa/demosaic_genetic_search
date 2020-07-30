@@ -379,7 +379,7 @@ def structure_to_array(self):
   preorder = self.preorder()
   array = []
   for i, n in enumerate(preorder):
-    node_info = {"type": instance_to_classnamme(n), "in_c": n.in_c, "out_c": n.out_c}
+    node_info = {"type": instance_to_classnamme(n), "in_c": n.in_c, "out_c": n.out_c, "name": n.name}
     if n.num_children == 2:
       lchild_id = None
       rchild_id = None
@@ -422,21 +422,21 @@ def build_tree_from_data(node_id, preorder_nodes):
   node_info = preorder_nodes[node_id]
   node_type = node_info["type"]
   node_class = str_to_class(node_type)
+  node_name = node_info["name"]
   if "children" in node_info:
     children_ids = node_info["children"]
     if len(children_ids) == 2:
       lchild_node = build_tree_from_data(children_ids[0], preorder_nodes)
       rchild_node = build_tree_from_data(children_ids[1], preorder_nodes)
-      new_node = node_class(lchild_node, rchild_node)
+      new_node = node_class(lchild_node, rchild_node, name=node_name)
     else:
       child_node = build_tree_from_data(children_ids[0], preorder_nodes)
       if issubclass(node_class, UnopIJ):
-        new_node = node_class(child_node, node_info["out_c"])
+        new_node = node_class(child_node, node_info["out_c"], name=node_name)
       else:
-        new_node = node_class(child_node)
+        new_node = node_class(child_node, name=node_name)
   else: # is input node
-    name = node_info["name"]
-    new_node = node_class(node_info["in_c"], name=name)
+    new_node = node_class(node_info["in_c"], name=node_name)
 
   return new_node
 

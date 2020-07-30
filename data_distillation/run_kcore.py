@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.utils
 import torch.backends.cudnn as cudnn
-from torch.autograd import Variable
 import logging
 import argparse
 import glob
@@ -29,9 +28,11 @@ if __name__ == "__main__":
   parser.add_argument('--report_freq', type=float, default=1000, help='report frequency')
   parser.add_argument('--samples_per_iter', type=int, default=40000)
   parser.add_argument('--budget', type=int, help='size of kcore set')
+  parser.add_argument('--output_file', type=str, help='file to store kcore ids')
   args = parser.parse_args()
+
   util.create_dir(args.save, scripts_to_save=glob.glob('*.py'))
-  args.results_file = os.path.join(args.save, args.results_file)
+  args.output_file = os.path.join(args.save, args.output_file)
 
   log_format = '%(asctime)s %(levelname)s %(message)s'
   logging.basicConfig(stream=sys.stdout, level=logging.INFO, \
@@ -43,7 +44,8 @@ if __name__ == "__main__":
 
   random.seed(args.seed)
   np.random.seed(args.seed)
-  torch.cuda.set_device(args.gpu)
+  print(f"using gpu {args.gpu}")
+  device = torch.cuda.device(args.gpu)
   cudnn.benchmark = False
   torch.manual_seed(args.seed)
 
@@ -55,6 +57,8 @@ if __name__ == "__main__":
     sys.exit(1)
 
   model_manager = util.ModelManager(args.model_path)
-  model, ast = model_manager.load_model('seed', args.model_version)
-  kcore_set = kcore_greedy(model, args, experiment_logger)
+  model, ast = model_manager.load_model('seed', args.model_version, "gpu")
+  for n, p in model.named_parameters():
+    print(n)
 
+  kcore_greedy(model, args, experiment_logger)

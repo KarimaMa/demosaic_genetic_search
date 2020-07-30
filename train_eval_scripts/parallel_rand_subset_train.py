@@ -40,6 +40,7 @@ if __name__ == "__main__":
   parser.add_argument('--validation_file', type=str, help='file with list of validation image files')
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
   parser.add_argument('--multires_model', action='store_true')
+  parser.add_argument('--use_cropping', action='store_true')
 
   args = parser.parse_args()
   util.create_dir(args.save, scripts_to_save=glob.glob('*.py'))

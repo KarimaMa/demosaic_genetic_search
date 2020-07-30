@@ -19,8 +19,7 @@ from torch_model import ast_to_model
 from dataset import GreenDataset
 
 def train(args, models, model_id, model_dir):
-  print("training")
-  print(len(models))
+  print(f"training {len(models)} models")
   log_format = '%(asctime)s %(levelname)s %(message)s'
   train_loggers = [util.create_logger(f'{model_id}_v{i}_train_logger', logging.INFO, \
                                       log_format, os.path.join(model_dir, f'v{i}_train_log'))\
@@ -42,8 +41,8 @@ def train(args, models, model_id, model_dir):
       args.learning_rate,
       weight_decay=args.weight_decay) for m in models]
 
-  train_data = GreenDataset(args.training_file) 
-  validation_data = GreenDataset(args.validation_file)
+  train_data = GreenDataset(args.training_file, use_cropping=args.use_cropping) 
+  validation_data = GreenDataset(args.validation_file, use_cropping=args.use_cropping)
 
   num_train = len(train_data)
   train_indices = list(range(int(num_train*args.train_portion)))
@@ -98,8 +97,7 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
 
     if step % args.save_freq == 0:
       for i in range(len(models)):
-        torch.save(models[i], model_pytorch_files[i])
-
+        torch.save(models[i].state_dict(), model_pytorch_files[i])
   return [loss_tracker.avg for loss_tracker in loss_trackers]
 
 
@@ -142,10 +140,12 @@ if __name__ == "__main__":
   parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
+  parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
 
   args = parser.parse_args()
 
   args.model_path = os.path.join(args.save, args.model_path)
+  args.results_file = os.path.join(args.save, args.results_file)
   model_manager = util.ModelManager(args.model_path)
   model_dir = model_manager.model_dir('seed')
   util.create_dir(model_dir)
@@ -184,6 +184,8 @@ if __name__ == "__main__":
     
   for name, param in models[0].named_parameters():
     print(f"{name} {param.size()}")
+
+  model_manager.save_model(models, green, model_dir)
 
   validation_losses, training_losses = train(args, models, 'seed', model_dir) 
 

@@ -1,4 +1,5 @@
 """
+      ieturn out
 lowered representation of AST to pytorch model
 """
 
@@ -6,7 +7,10 @@ import torch
 import torch.nn as nn
 from demosaic_ast import *
 from config import IMG_H, IMG_W
-from util import extclass
+
+# from a github gist by victorlei
+def extclass(cls):
+  return lambda f: (setattr(cls,f.__name__,f) or f)
 
 cuda = True
 
@@ -72,7 +76,7 @@ class InputOp(nn.Module):
   def foward(self, bayer):
     return bayer
 
-  def run(self, bayer):
+  def run(self, bayer, kcore_features=None):
     return bayer
     #return self.forward(bayer)
 
@@ -87,9 +91,9 @@ class AddOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer):
-    loperand = self._operands[0].run(bayer)
-    roperand = self._operands[1].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    loperand = self._operands[0].run(bayer, kcore_features)
+    roperand = self._operands[1].run(bayer, kcore_features)
     return self.forward(loperand, roperand)
 
   def forward(self, x, y):
@@ -104,9 +108,9 @@ class SubOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer):
-    loperand = self._operands[0].run(bayer)
-    roperand = self._operands[1].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    loperand = self._operands[0].run(bayer, kcore_features)
+    roperand = self._operands[1].run(bayer, kcore_features)
     return self.forward(loperand, roperand)
 
   def forward(self, x, y):
@@ -121,9 +125,9 @@ class MulOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer):
-    loperand = self._operands[0].run(bayer)
-    roperand = self._operands[1].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    loperand = self._operands[0].run(bayer, kcore_features)
+    roperand = self._operands[1].run(bayer, kcore_features)
     return self.forward(loperand, roperand)
 
   def forward(self, x, y):
@@ -138,9 +142,9 @@ class LogSubOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer):
-    loperand = self._operands[0].run(bayer)
-    roperand = self._operands[1].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    loperand = self._operands[0].run(bayer, kcore_features)
+    roperand = self._operands[1].run(bayer, kcore_features)
     return self.forward(loperand, roperand)
 
   def forward(self, x, y):
@@ -155,9 +159,9 @@ class AddExpOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer):
-    loperand = self._operands[0].run(bayer)
-    roperand = self._operands[1].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    loperand = self._operands[0].run(bayer, kcore_features)
+    roperand = self._operands[1].run(bayer, kcore_features)
     return self.forward(loperand, roperand)
 
   def forward(self, x, y):
@@ -172,9 +176,9 @@ class StackOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer):
-    loperand = self._operands[0].run(bayer)
-    roperand = self._operands[1].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    loperand = self._operands[0].run(bayer, kcore_features)
+    roperand = self._operands[1].run(bayer, kcore_features)
     return self.forward(loperand, roperand)
 
   def forward(self, x, y):
@@ -189,9 +193,9 @@ class ChromaExtractorOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer):
-    loperand = self._operands[0].run(bayer)
-    roperand = self._operands[1].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    loperand = self._operands[0].run(bayer, kcore_features)
+    roperand = self._operands[1].run(bayer, kcore_features)
     return self.forward(loperand, roperand)
 
   def forward(self, x, y):
@@ -211,13 +215,16 @@ class GreenExtractorOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer):
-    loperand = self._operands[0].run(bayer)
-    roperand = self._operands[1].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    loperand = self._operands[0].run(bayer, kcore_features)
+    roperand = self._operands[1].run(bayer, kcore_features)
     return self.forward(loperand, roperand)
 
   def forward(self, x, bayer):
-    green = x * self.mask + bayer[:,0,...].unsqueeze(1)
+    if bayer.is_cuda and not self.mask.is_cuda:
+      self.mask = self.mask.cuda()
+    _, _, bayer_h, bayer_w = bayer.size()
+    green = x * self.mask[0:bayer_h, 0:bayer_w] + bayer[:,0,...].unsqueeze(1)
     return green
 
 class SoftmaxOp(nn.Module):
@@ -229,8 +236,8 @@ class SoftmaxOp(nn.Module):
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer):
-    operand = self._operands[0].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    operand = self._operands[0].run(bayer, kcore_features)
     return self.forward(operand)
 
   def forward(self, x):
@@ -245,8 +252,8 @@ class ReluOp(nn.Module):
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer):
-    operand = self._operands[0].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    operand = self._operands[0].run(bayer, kcore_features)
     return self.forward(operand)
 
   def forward(self, x):
@@ -260,8 +267,8 @@ class LogOp(nn.Module):
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer):
-    operand = self._operands[0].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    operand = self._operands[0].run(bayer, kcore_features)
     return self.forward(operand)
 
   def forward(self, x):
@@ -275,8 +282,8 @@ class ExpOp(nn.Module):
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer):
-    operand = self._operands[0].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    operand = self._operands[0].run(bayer, kcore_features)
     return self.forward(operand)
 
   def forward(self, x):
@@ -299,8 +306,8 @@ class DownsampleOp(nn.Module):
     pool.weight.requires_grad = False
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer):
-    operand = self._operands[0].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    operand = self._operands[0].run(bayer, kcore_features)
     return self.forward(operand)
 
   def forward(self, x):
@@ -330,8 +337,8 @@ class UpsampleOp(nn.Module):
     dense2fullres_bayer.weight.requires_grad = False
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer):
-    operand = self._operands[0].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    operand = self._operands[0].run(bayer, kcore_features)
     return self.forward(operand)
 
   def forward(self, x):
@@ -339,7 +346,7 @@ class UpsampleOp(nn.Module):
     dense2fullres_bayer = getattr(self, self.param_name_dense2fullres_bayer)
     # 1st channel centered at Gr, 2nd channel centered at R, 3rd channel at B, 4th channel at Gb
     dense = flat2dense(x)
-    
+  
     # spread Gr, R, B, and Gb centered weights
     fullres = dense2fullres_bayer(dense)
     split = torch.split(fullres, self.in_c, dim=1)
@@ -365,13 +372,16 @@ class Conv1x1Op(nn.Module):
     nn.init.xavier_normal_(f.weight)
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer):
-    operand = self._operands[0].run(bayer)
-    return self.forward(operand)
+  def run(self, bayer, kcore_features=None):
+    operand = self._operands[0].run(bayer, kcore_features)
+    return self.forward(operand, kcore_features)
 
-  def forward(self, x): 
+  def forward(self, x, kcore_features): 
     f = getattr(self, self.param_name)
-    return f(x)
+    out = f(x)
+    if not kcore_features is None and "KcoreFeature" in self.param_name:
+      kcore_features["feat"] = out.mean(-1).mean(-1).detach()
+    return out
 
 # 1D diagonal convolution from top left corner to bottom right corner
 class DiagLRConv(nn.Module):
@@ -400,7 +410,6 @@ class DiagRLConv(nn.Module):
     filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size, kernel_size))
     self.param_name = param_name
     setattr(self, param_name, filter_w)
-
     self.mask = torch.zeros(C_out, C_in, kernel_size, kernel_size)
     if cuda:
       self.mask = self.mask.cuda()
@@ -414,6 +423,8 @@ class DiagRLConv(nn.Module):
 
   def forward(self, x):
     filter_w = getattr(self, self.param_name)
+    if filter_w.is_cuda and not self.mask.is_cuda:
+      self.mask = self.mask.cuda()
     return nn.functional.conv2d(x, (filter_w * self.mask), padding=self.padding)
 
 class Conv1DOp(nn.Module):
@@ -444,19 +455,14 @@ class Conv1DOp(nn.Module):
     self.diag2._initialize_parameters()
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer):
-    operand = self._operands[0].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    operand = self._operands[0].run(bayer, kcore_features)
     return self.forward(operand)
 
   def forward(self, x):
     v = getattr(self, self.param_name_v)
     h = getattr(self, self.param_name_h)
-    # SO hacky way to get features for k-core
-    if "KcoreFeature" in self.param_name_v:
-      out = torch.cat((v(x), h(x), self.diag1(x), self.diag2(x)), 1)
-      global kcore_features
-      kcore_features = out
-    return out 
+    return torch.cat((v(x), h(x), self.diag1(x), self.diag2(x)), 1)
 
 class Conv2DOp(nn.Module):
   def __init__(self, operand, C_in, C_out, param_name):
@@ -471,8 +477,8 @@ class Conv2DOp(nn.Module):
     nn.init.xavier_normal_(f.weight)
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer):
-    operand = self._operands[0].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    operand = self._operands[0].run(bayer, kcore_features)
     return self.forward(operand)
 
   def forward(self, x):
@@ -487,8 +493,8 @@ class SumROp(nn.Module):
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer):
-    operand = self._operands[0].run(bayer)
+  def run(self, bayer, kcore_features=None):
+    operand = self._operands[0].run(bayer, kcore_features)
     return self.forward(operand)
 
   def forward(self, x):
