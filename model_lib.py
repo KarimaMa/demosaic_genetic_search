@@ -116,3 +116,28 @@ def build_full_model(green_model):
   
   return out, set((bayer.name, green_input.name))
 
+def mini_demosaicnet():
+  bayer = Input(1, "Bayer")
+  downsample = Downsample(bayer)
+  selection_f_lowres = Conv1D(downsample, 16)
+  relu1 = Relu(selection_f_lowres)
+  fc1 = Conv1x1(relu1, 16)
+  relu2 = Relu(fc1)
+  fc2 = Conv1x1(relu2, 16)
+  upsample = Upsample(fc2)
+
+  # fullres model
+  bayer = Input(1, "Bayer")
+  conv1 = Conv2D(bayer, 32, kwidth=3)
+  relu1 = Relu(conv1)
+  conv2 = Conv2D(relu1, 32, kwidth=3)
+  relu2 = Relu(conv2)
+  conv3 = Conv2D(relu2, 32, kwidth=3)
+  relu3 = Relu(conv3)
+  missing_green = Conv2D(relu3, 1, kwidth=3)
+  
+  green = GreenExtractor(missing_green, bayer)
+  green.assign_parents()
+  green.compute_input_output_channels()
+  return green
+

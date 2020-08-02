@@ -40,6 +40,7 @@ if __name__ == "__main__":
   parser.add_argument('--validation_file', type=str, help='file with list of validation image files')
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
   parser.add_argument('--multires_model', action='store_true')
+  parser.add_argument('--demosaicnet', action='store_true')
   parser.add_argument('--use_cropping', action='store_true')
 
   args = parser.parse_args()
@@ -60,7 +61,10 @@ if __name__ == "__main__":
   if args.multires_model:
     experiment_logger.info("TRAINING MULTIRES GREEN")
     green = model_lib.multires_green_model()
-  else:
+  elif args.demosaicnet:
+    experiment_logger.info("TRAINING DEMOSAICNET GREEN")
+    green = model_lib.mini_demosaicnet()
+  else:    
     experiment_logger.info("TRAINING BASIC GREEN")
     full_model = meta_model.MetaModel()
     full_model.build_default_model() 

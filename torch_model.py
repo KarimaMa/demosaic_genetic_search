@@ -465,11 +465,11 @@ class Conv1DOp(nn.Module):
     return torch.cat((v(x), h(x), self.diag1(x), self.diag2(x)), 1)
 
 class Conv2DOp(nn.Module):
-  def __init__(self, operand, C_in, C_out, param_name):
+  def __init__(self, operand, C_in, C_out, param_name, kwidth=5):
     super(Conv2DOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.param_name = param_name
-    f = nn.Conv2d(C_in, C_out, (5,5), bias=False, padding=2)
+    f = nn.Conv2d(C_in, C_out, (kwidth,kwidth), bias=False, padding=kwidth//2)
     setattr(self, self.param_name, f)
 
   def _initialize_parameters(self):
@@ -596,7 +596,7 @@ def ast_to_model(self):
 @extclass(Conv2D)
 def ast_to_model(self):
   child_model = self.child.ast_to_model()
-  return Conv2DOp(child_model, self.in_c, self.out_c, self.name)
+  return Conv2DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth)
 
 @extclass(SumR)
 def ast_to_model(self):

@@ -4,14 +4,17 @@ subset_dir=$2
 train_portion=$3
 save_dir=$4
 use_multires=$5
-epochs=$6
-learning_rate=$7
+use_demosaicnet=$6
+epochs=$7
+learning_rate=$8
+weight_decay=$9
 
-echo $use_multires
+echo "using multires $use_multires"
+echo "using demosaicnet $use_demosaicnet"
 
-start_gpu=1
+start_gpu=0
 end_gpu=3
-subset_id=0
+subset_id=4
 
 while [ $subset_id -lt $n_subsets ]; do
   for gpu_id in $(seq $start_gpu $end_gpu); do
@@ -19,14 +22,17 @@ while [ $subset_id -lt $n_subsets ]; do
     if [ $use_multires -eq 1 ]; then
       cmd=$cmd" --multires_model"
     fi
+    if [ $use_demosaicnet -eq 1 ]; then
+      cmd=$cmd" --demosaicnet"
+    fi
     cmd=$cmd" --gpu=$gpu_id" 
     cmd=$cmd" --epochs=$epochs"
     cmd=$cmd" --subset_id=$subset_id"
     cmd=$cmd" --report_freq=1000 --save_freq=2000"
-    cmd=$cmd" --weight_decay=1e-8"
-    cmd=$cmd" --save=$4"
-    cmd=$cmd" --train_portion=$3"
-    cmd=$cmd" --training_subset=$2/subset_$subset_id.txt"
+    cmd=$cmd" --weight_decay=$weight_decay"
+    cmd=$cmd" --save=$save_dir"
+    cmd=$cmd" --train_portion=$train_portion"
+    cmd=$cmd" --training_subset=$subset_dir/subset_$subset_id.txt"
     cmd=$cmd" --validation_file=/home/karima/cnn-data/val_files.txt"
     cmd=$cmd" --learning_rate=$learning_rate"
 

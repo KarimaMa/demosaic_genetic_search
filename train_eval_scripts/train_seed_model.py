@@ -91,9 +91,9 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
 
       loss_trackers[i].update(loss.item(), n)
 
-    if step % args.report_freq == 0:
+    if step % args.report_freq == 0 or step == len(train_queue)-1:
       for i in range(len(models)):
-        train_loggers[i].info('train %03d %e', step, loss_trackers[i].avg)
+        train_loggers[i].info('train %03d %e', step*args.batch_size, loss_trackers[i].avg)
 
     if step % args.save_freq == 0:
       for i in range(len(models)):
@@ -116,9 +116,9 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
       loss = criterion(pred, target)
 
       loss_trackers[i].update(loss.item(), n)
-    if step % args.report_freq == 0:
+    if step % args.report_freq == 0 or step == len(valid_queue)-1:
       for i in range(len(models)):
-        validation_loggers[i].info("validation %03d %e", step, loss_trackers[i].avg)
+        validation_loggers[i].info("validation %03d %e", step*args.batch_size, loss_trackers[i].avg)
 
   return [loss_tracker.avg for loss_tracker in loss_trackers]
 

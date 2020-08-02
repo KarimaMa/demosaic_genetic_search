@@ -224,12 +224,13 @@ class Conv1D(UnopIJ, Linear, Node):
     self.out_c = out_c
 
 class Conv2D(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int, name=None):
+  def __init__(self, child, out_c: int, name=None, kwidth=5):
     if name is None:
       name = "Conv2D"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = out_c
+    self.kwidth = kwidth
 
 class SumR(UnopI1, Special, Node):
   def __init__(self, child, name=None):
