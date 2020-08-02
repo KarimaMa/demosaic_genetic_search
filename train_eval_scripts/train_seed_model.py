@@ -141,6 +141,7 @@ if __name__ == "__main__":
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
+  parser.add_argument('--use_cropping', action='store_true', help='whether to use center crop of image')
 
   args = parser.parse_args()
 
