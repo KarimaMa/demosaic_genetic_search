@@ -134,6 +134,7 @@ if __name__ == "__main__":
   parser.add_argument('--epochs', type=int, default=10, help='num of training epochs')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
   parser.add_argument('--multires_model', action='store_true')
+  parser.add_argument('--demosaicnet', action='store_true')
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
   parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--seed', type=int, default=2, help='random seed')
@@ -161,6 +162,9 @@ if __name__ == "__main__":
 
   if args.multires_model:
     green = model_lib.multires_green_model()
+  elif args.demosaicnet:
+    experiment_logger.info("TRAINING DEMOSAICNET GREEN")
+    green = model_lib.mini_demosaicnet()
   else:
     full_model = meta_model.MetaModel()
     full_model.build_default_model() 
