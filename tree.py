@@ -149,8 +149,6 @@ class Node:
   returns whether or not two ASTs are the same
   """
   def is_same_as(self, other):
-    self.compute_input_output_channels()
-    other.compute_input_output_channels()
   
     if self.num_children != other.num_children or type(self) != type(other):
       return False
@@ -166,18 +164,15 @@ class Node:
       if self.out_c != other.out_c:
         return False      
       #if self.in_c[0] == other.in_c[1] and self.in_c[1] == other.in_c[0]:
-      same = self.rchild.is_same_as(other.lchild) and self.lchild.is_same_as(other.rchild)
+      flipped_same = self.rchild.is_same_as(other.lchild) and self.lchild.is_same_as(other.rchild)
       #if self.in_c[0] == other.in_c[0] and self.in_c[1] == other.in_c[1]:
-      flipped_same = self.lchild.is_same_as(other.lchild) and self.rchild.is_same_as(other.rchild) 
+      same = self.lchild.is_same_as(other.lchild) and self.rchild.is_same_as(other.rchild) 
       return same or flipped_same
 
   """
   returns whether or not two ASTs are the same - IGNORING channel count
   """
   def is_same_mod_channels(self, other):
-    self.compute_input_output_channels()
-    other.compute_input_output_channels()
-  
     if self.num_children != other.num_children or type(self) != type(other):
       return False
 
