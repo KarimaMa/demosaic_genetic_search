@@ -9,7 +9,7 @@ import os
 import random 
 import numpy as np
 import sys
-
+import math
 sys.path.append(sys.path[0].split("/")[0])
 
 import util
@@ -19,21 +19,22 @@ from torch_model import ast_to_model
 from dataset import GreenDataset
 
 
-def detect_divergence(losses, threshold):
-  return max(losses) - min(losses) > threshold
+def compute_psnr(loss):
+  return 10*math.log(math.pow(255,2) / math.pow(math.sqrt(loss)*255, 2),10)
+
+def detect_divergence(psnrs, threshold):
+  return (max(psnrs) - min(psnrs)) > threshold
 
 
 def find_lr(args, model_ast, model_dir):
 
-  LR = args.max_learning_rate
-  BEST_LOSS = float('inf')
 
   validation_loggers = [util.create_logger(f'v{i}_validation_logger', logging.INFO, \
                                           log_format, os.path.join(model_dir, f'v{i}_validation_log')) \
-                      for i in range(len(models))]
+                      for i in range(args.model_initializations)]
 
-  train_data = GreenDataset(args.training_file, use_cropping=args.use_cropping) 
-  validation_data = GreenDataset(args.validation_file, use_cropping=args.use_cropping)
+  train_data = GreenDataset(args.training_file, use_cropping=False) 
+  validation_data = GreenDataset(args.validation_file, use_cropping=False)
 
   num_train = len(train_data)
   train_indices = list(range(int(num_train*args.train_portion)))
@@ -52,11 +53,17 @@ def find_lr(args, model_ast, model_dir):
   
   criterion = nn.MSELoss()
 
+  LR = args.max_learning_rate
+  BEST_PSNR = -1.0*float('inf')
+  PREV_LR = None
+
   while LR > args.min_lr:
 
     models = [model_ast.ast_to_model().cuda() for i in range(args.model_initializations)]
     for m in models:
       m._initialize_parameters()
+
+    models = [m.cuda() for m in models]
 
     optimizers = [torch.optim.Adam(
       m.parameters(), LR,
@@ -66,25 +73,28 @@ def find_lr(args, model_ast, model_dir):
     util.create_dir(lr_log_dir)
 
     train_losses = train(args, models, train_queue, lr_log_dir, optimizers, criterion)
-    
+    train_psnrs = [compute_psnr(l) for l in train_losses]
+
     # test partially trained model on validation data
     valid_losses = infer(args, validation_queue, models, criterion)
 
     for i in range(len(models)):
       validation_loggers[i].info(f'validation LR {LR} loss {valid_losses[i]}')
 
-
-    LOSS = min(train_losses)
-    models_diverge = detect_divergence(train_losses, args.divergence_threshold)
+    PSNR = max(train_psnrs)
+    models_diverge = detect_divergence(train_psnrs, args.divergence_threshold)
 
     if models_diverge:
+      print(f"DIVERGE {max(train_psnrs) - min(train_psnrs)}")
+      PREV_LR = LR/2 # DIVERGENT LR MUST HALVE REGARDLESS OF SMALLER LR'S PSNR
       LR /= 2
-      BEST_LOSS = min(BEST_LOSS, LOSS)
-    elif LOSS < (BEST_LOSS - args.eps):
+    elif PSNR > (BEST_PSNR + args.eps):
+      PREV_LR = LR
       LR /= 2
-      BEST_LOSS = LOSS
     else:
-      return LR
+      return PREV_LR
+
+    BEST_PSNR = max(BEST_PSNR, PSNR)
 
   return args.min_lr
 
@@ -109,6 +119,7 @@ def train(args, models, train_queue, model_dir, optimizers, criterion):
     input = Variable(input, requires_grad=False).cuda()
     target = Variable(target, requires_grad=False).cuda()
 
+    losses = []
     for i, model in enumerate(models):
       optimizers[i].zero_grad()
       pred = model.run(input)
@@ -118,9 +129,9 @@ def train(args, models, train_queue, model_dir, optimizers, criterion):
       optimizers[i].step()
 
       loss_trackers[i].update(loss.item(), n)
-  
+      losses.append(loss.item())
       # log every batch loss
-      train_loggers[i].info('train %03d %e', step*args.batch_size, loss.item())
+      #train_loggers[i].info('train %03d %e', step*args.batch_size, loss.item())
 
     if step % args.save_freq == 0:
       for i in range(len(models)):
@@ -128,8 +139,8 @@ def train(args, models, train_queue, model_dir, optimizers, criterion):
 
     if step == args.decision_point:
       break
-
-  return [loss_tracker.avg for loss_tracker in loss_trackers]
+  return losses
+  #return [loss_tracker.avg for loss_tracker in loss_trackers]
 
 
 def infer(args, valid_queue, models, criterion):
@@ -216,9 +227,6 @@ if __name__ == "__main__":
   cudnn.enabled=True
   cudnn.deterministic=True
   torch.cuda.manual_seed(args.seed)
-
-  for name, param in models[0].named_parameters():
-    print(f"{name} {param.size()}")
 
   chosen_lr = find_lr(args, green, model_dir)
   logger.info(f"LR for subset {args.subset_id} {chosen_lr}")
