@@ -232,6 +232,6 @@ if __name__ == "__main__":
   logger.info(f"LR for subset {args.subset_id} {chosen_lr}")
 
   with open(args.results_file, "a+") as f:
-    f.write(f"LR for subset {args.subset_id} {chosen_lr}")
+    f.write(f"LR for subset {args.subset_id} {chosen_lr}\n")
 
 
