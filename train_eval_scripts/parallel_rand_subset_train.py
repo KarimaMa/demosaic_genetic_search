@@ -26,8 +26,9 @@ if __name__ == "__main__":
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
   parser.add_argument('--learning_rate', type=float, default=0.025, help='init learning rate')
   parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay')
-  parser.add_argument('--report_freq', type=float, default=200, help='report frequency')
-  parser.add_argument('--save_freq', type=float, default=500, help='save frequency')
+  parser.add_argument('--report_freq', type=int, default=200, help='report frequency')
+  parser.add_argument('--save_freq', type=int, default=500, help='save frequency')
+  parser.add_argument('--validation_freq', type=int, default=None, help='validation frequency')
   parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
   parser.add_argument('--epochs', type=int, default=5, help='num of training epochs')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
@@ -40,7 +41,10 @@ if __name__ == "__main__":
   parser.add_argument('--validation_file', type=str, help='file with list of validation image files')
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
   parser.add_argument('--multires_model', action='store_true')
+  parser.add_argument('--multires_model2d', action='store_true')
   parser.add_argument('--demosaicnet', action='store_true')
+  parser.add_argument('--ahd1d', action='store_true')
+  parser.add_argument('--ahd2d', action='store_true')
   parser.add_argument('--use_cropping', action='store_true')
 
   args = parser.parse_args()
@@ -61,9 +65,18 @@ if __name__ == "__main__":
   if args.multires_model:
     experiment_logger.info("TRAINING MULTIRES GREEN")
     green = model_lib.multires_green_model()
+  elif args.multires_model2d:
+    experiment_logger.info("TRAINING MULTIRES2D GREEN")
+    green = model_lib.multires2D_green_model()
   elif args.demosaicnet:
     experiment_logger.info("TRAINING DEMOSAICNET GREEN")
     green = model_lib.mini_demosaicnet()
+  elif args.ahd1d:
+    experiment_logger.info("TRAINING AHD1D GREEN")
+    green = model_lib.ahd1D_green_model()
+  elif args.ahd2d:
+    experiment_logger.info("TRAINING AHD2D GREEN")
+    green = model_lib.ahd2D_green_model()
   else:    
     experiment_logger.info("TRAINING BASIC GREEN")
     full_model = meta_model.MetaModel()
