@@ -142,6 +142,8 @@ if __name__ == "__main__":
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
   parser.add_argument('--multires_model', action='store_true')
   parser.add_argument('--demosaicnet', action='store_true')
+  parser.add_argument('--ahd', action='store_true')
+  parser.add_argument('--ahd2d', action='store_true')
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
   parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--seed', type=int, default=2, help='random seed')
@@ -150,7 +152,7 @@ if __name__ == "__main__":
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
   parser.add_argument('--use_cropping', action='store_true', help='whether to use center crop of image')
-  parser.add_argument('--validation_freq', type=int, help='validation frequency')
+  parser.add_argument('--validation_freq', type=int, default=None, help='validation frequency')
 
   args = parser.parse_args()
 
@@ -174,6 +176,12 @@ if __name__ == "__main__":
   elif args.demosaicnet:
     logger.info("TRAINING DEMOSAICNET GREEN")
     green = model_lib.mini_demosaicnet()
+  elif args.ahd:
+    logger.info(f"TRAINING AHD GREEN")
+    green = model_lib.ahd1D_green_model()
+  elif args.ahd2d:
+    logger.info(f"TRAINING AHD2D GREEN")
+    green = model_lib.ahd2D_green_model()
   else:
     logger.info("TRAINING BASIC GREEN")
     full_model = meta_model.MetaModel()
