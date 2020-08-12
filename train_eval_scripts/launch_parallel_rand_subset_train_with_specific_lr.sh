@@ -4,17 +4,23 @@ subset_dir=$2
 train_portion=$3
 save_dir=$4
 use_multires=$5
-use_demosaicnet=$6
-epochs=$7
-lr_file=$8
-weight_decay=$9
+use_multires2d=$6
+use_demosaicnet=$7
+use_ahd1d=$8
+use_ahd2d=$9
+epochs=${10}
+lr_file=${11}
+weight_decay=${12}
 
 echo "using multires $use_multires"
+echo "using multires2d $use_multires2d"
 echo "using demosaicnet $use_demosaicnet"
+echo "using ahd1d $use_ahd1d"
+echo "using ahd2d $use_ahd2d"
 
-start_gpu=0
+start_gpu=1
 end_gpu=3
-subset_id=8
+subset_id=0
 
 # read in the learning rates per subset
 lrs=()
@@ -29,8 +35,17 @@ while [ $subset_id -lt $n_subsets ]; do
     if [ $use_multires -eq 1 ]; then
       cmd=$cmd" --multires_model"
     fi
+    if [ $use_multires2d -eq 1 ]; then
+      cmd=$cmd" --multires_model2d"
+    fi
     if [ $use_demosaicnet -eq 1 ]; then
       cmd=$cmd" --demosaicnet"
+    fi
+    if [ $use_ahd1d -eq 1 ]; then
+      cmd=$cmd" --ahd1d"
+    fi
+    if [ $use_ahd2d -eq 1 ]; then
+      cmd=$cmd" --ahd2d"
     fi
     cmd=$cmd" --gpu=$gpu_id" 
     cmd=$cmd" --epochs=$epochs"
