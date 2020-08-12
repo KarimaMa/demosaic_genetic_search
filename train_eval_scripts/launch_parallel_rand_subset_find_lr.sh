@@ -5,18 +5,22 @@ train_portion=$3
 save_dir=$4
 use_multires=$5
 use_demosaicnet=$6
-max_learning_rate=$7
-weight_decay=$8
-divergence_threshold=$9
-min_lr=${10}
-eps=${11}
-decision_point=${12}
+use_ahd=$7
+use_ahd2d=$8
+max_learning_rate=$9
+weight_decay=${10}
+divergence_threshold=${11}
+min_lr=${12}
+eps=${13}
+decision_point=${14}
 
 echo "using multires $use_multires"
 echo "using demosaicnet $use_demosaicnet"
+echo "using ahd $use_ahd"
+echo "using ahd2d $use_ahd2d"
 
 start_gpu=0
-end_gpu=3
+end_gpu=0
 subset_id=0
 
 while [ $subset_id -lt $n_subsets ]; do
@@ -27,6 +31,12 @@ while [ $subset_id -lt $n_subsets ]; do
     fi
     if [ $use_demosaicnet -eq 1 ]; then
       cmd=$cmd" --demosaicnet"
+    fi
+    if [ $use_ahd -eq 1 ]; then
+      cmd=$cmd" --ahd"
+    fi
+    if [ $use_ahd2d -eq 1 ]; then
+      cmd=$cmd" --ahd2d"
     fi
     cmd=$cmd" --gpu=$gpu_id" 
     cmd=$cmd" --subset_id=$subset_id"
