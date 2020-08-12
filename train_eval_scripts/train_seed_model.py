@@ -62,7 +62,8 @@ def train(args, models, model_id, model_dir):
 
   for epoch in range(args.epochs):
     # training
-    train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files)
+    train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, \
+      model_pytorch_files, validation_queue, validation_loggers, epoch)
     # validation
     valid_losses = infer(args, validation_queue, models, criterion, validation_loggers)
     for i in range(len(models)):
@@ -71,7 +72,7 @@ def train(args, models, model_id, model_dir):
   return valid_losses, train_losses
 
 
-def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files):
+def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files, validation_queue, validation_loggers, epoch):
   loss_trackers = [util.AvgrageMeter() for m in models]
   for m in models:
     m.train()
@@ -91,13 +92,23 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
 
       loss_trackers[i].update(loss.item(), n)
 
+      if step % args.report_freq == 0 or step == len(train_queue)-1:
+        train_loggers[i].info('train %03d %e', epoch*len(train_queue)+step, loss.item())
+
+    """
     if step % args.report_freq == 0 or step == len(train_queue)-1:
       for i in range(len(models)):
-        train_loggers[i].info('train %03d %e', step*args.batch_size, loss_trackers[i].avg)
-
-    if step % args.save_freq == 0:
+        train_loggers[i].info('train %03d %e', epoch*len(train_queue)+step, loss_trackers[i].avg)
+    """
+    if step % args.save_freq == 0 or step == len(train_queue)-1:
       for i in range(len(models)):
         torch.save(models[i].state_dict(), model_pytorch_files[i])
+
+    if args.validation_freq and step % args.validation_freq == 0:
+      valid_losses = infer(args, validation_queue, models, criterion, validation_loggers)
+      for i in range(len(models)):
+        validation_loggers[i].info(f'validation {epoch*len(train_queue)+step} {valid_losses[i]}')
+
   return [loss_tracker.avg for loss_tracker in loss_trackers]
 
 
@@ -114,11 +125,7 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
     for i, model in enumerate(models):
       pred = model.run(input)
       loss = criterion(pred, target)
-
       loss_trackers[i].update(loss.item(), n)
-    if step % args.report_freq == 0 or step == len(valid_queue)-1:
-      for i in range(len(models)):
-        validation_loggers[i].info("validation %03d %e", step*args.batch_size, loss_trackers[i].avg)
 
   return [loss_tracker.avg for loss_tracker in loss_trackers]
 
@@ -143,6 +150,7 @@ if __name__ == "__main__":
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
   parser.add_argument('--use_cropping', action='store_true', help='whether to use center crop of image')
+  parser.add_argument('--validation_freq', type=int, help='validation frequency')
 
   args = parser.parse_args()
 
@@ -161,11 +169,13 @@ if __name__ == "__main__":
   logger.info("args = %s", args)
 
   if args.multires_model:
+    logger.info("TRAINING MULTIRES GREEN")
     green = model_lib.multires_green_model()
   elif args.demosaicnet:
-    experiment_logger.info("TRAINING DEMOSAICNET GREEN")
+    logger.info("TRAINING DEMOSAICNET GREEN")
     green = model_lib.mini_demosaicnet()
   else:
+    logger.info("TRAINING BASIC GREEN")
     full_model = meta_model.MetaModel()
     full_model.build_default_model() 
     green = full_model.green

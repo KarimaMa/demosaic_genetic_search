@@ -1,5 +1,67 @@
 from demosaic_ast import *
 
+
+def ahd2D_green_model():
+  bayer = Input(1, "Bayer");
+  raw_convex = Conv2D(bayer, 16)
+  convex = Softmax(raw_convex)
+  interps = Conv2D(bayer, 16)
+  mul = Mul(interps, convex)
+
+  missing_green = SumR(mul)
+  green = GreenExtractor(missing_green, bayer)
+  green.assign_parents()
+  green.compute_input_output_channels()
+  return green
+
+
+def ahd1D_green_model():
+  bayer = Input(1, "Bayer");
+  raw_convex = Conv1D(bayer, 16)
+  convex = Softmax(raw_convex)
+  interps = Conv1D(bayer, 16)
+  mul = Mul(interps, convex)
+
+  missing_green = SumR(mul)
+  green = GreenExtractor(missing_green, bayer)
+  green.assign_parents()
+  green.compute_input_output_channels()
+  return green
+
+
+def multires2D_green_model():
+  # detector model
+  # lowres model
+  bayer = Input(1, "Bayer")
+  downsample = Downsample(bayer)
+  selection_f_lowres = Conv2D(downsample, 16)
+  relu1 = Relu(selection_f_lowres)
+  fc1 = Conv1x1(relu1, 16)
+  relu2 = Relu(fc1)
+  fc2 = Conv1x1(relu2, 16)
+  upsample = Upsample(fc2)
+
+  # fullres model
+  bayer = Input(1, "Bayer")
+  selection_f_fullres = Conv2D(bayer, 16)
+  stack = Stack(upsample, selection_f_fullres)
+  relu1 = Relu(stack)
+  fc1 = Conv1x1(relu1, 16)
+  relu2 = Relu(fc1)
+  fc2 = Conv1x1(relu2, 16, name="KcoreFeature_1x1")
+  softmax = Softmax(fc2)
+
+  # filter model
+  interp_filters = Conv2D(bayer, 16)
+
+  mul = Mul(interp_filters, softmax)
+  missing_green = SumR(mul)
+  green = GreenExtractor(missing_green, bayer)
+  green.assign_parents()
+  green.compute_input_output_channels()
+  return green
+
+
 def multires_green_model():
   # detector model
   # lowres model

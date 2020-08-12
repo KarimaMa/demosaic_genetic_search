@@ -77,17 +77,19 @@ def find_lr(args, model_ast, model_dir):
 
     # test partially trained model on validation data
     valid_losses = infer(args, validation_queue, models, criterion)
+    valid_psnrs = [compute_psnr(l) for l in valid_losses]
 
     for i in range(len(models)):
-      validation_loggers[i].info(f'validation LR {LR} loss {valid_losses[i]}')
+      validation_loggers[i].info(f'{model_dir} v{i} validation LR {LR} loss {valid_losses[i]}')
 
-    PSNR = max(train_psnrs)
-    models_diverge = detect_divergence(train_psnrs, args.divergence_threshold)
+    PSNR = max(valid_psnrs)
+    print(f"LR {LR} train_psnrs {train_psnrs}  valid_psnrs {valid_psnrs}")
+    models_diverge = detect_divergence(valid_psnrs, args.divergence_threshold)
 
     if models_diverge:
-      print(f"DIVERGE {max(train_psnrs) - min(train_psnrs)}")
       PREV_LR = LR/2 # DIVERGENT LR MUST HALVE REGARDLESS OF SMALLER LR'S PSNR
       LR /= 2
+      print(f"{model_dir} DIVERGE {max(valid_psnrs) - min(valid_psnrs)}")
     elif PSNR > (BEST_PSNR + args.eps):
       PREV_LR = LR
       LR /= 2
@@ -139,8 +141,8 @@ def train(args, models, train_queue, model_dir, optimizers, criterion):
 
     if step == args.decision_point:
       break
-  return losses
-  #return [loss_tracker.avg for loss_tracker in loss_trackers]
+  #return losses
+  return [loss_tracker.avg for loss_tracker in loss_trackers]
 
 
 def infer(args, valid_queue, models, criterion):
