@@ -177,6 +177,7 @@ if __name__ == "__main__":
   parser.add_argument('--divergence_threshold', type=float, help='MSE difference threshold between model initializations to detect divergence')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
   parser.add_argument('--multires_model', action='store_true')
+  parser.add_argument('--multires_model2d', action='store_true')
   parser.add_argument('--demosaicnet', action='store_true')
   parser.add_argument('--ahd', action='store_true')
   parser.add_argument('--ahd2d', action='store_true')
@@ -209,6 +210,9 @@ if __name__ == "__main__":
   if args.multires_model:
     logger.info(f"FINDING LR FOR MULTIRES GREEN ON SUBSET {args.subset_id}")
     green = model_lib.multires_green_model()
+  elif args.multires_model2d:
+    logger.info(f"FINDING LR FOR MULTIRES GREEN 2D GREEN ON SUBSET {args.subset_id}")
+    green = model_lib.multires2D_green_model()
   elif args.demosaicnet:
     logger.info(f"FINDING LR FOR DEMOSAICNET GREEN ON SUBSET {args.subset_id}")
     green = model_lib.mini_demosaicnet()

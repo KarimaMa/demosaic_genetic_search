@@ -4,23 +4,25 @@ subset_dir=$2
 train_portion=$3
 save_dir=$4
 use_multires=$5
-use_demosaicnet=$6
-use_ahd=$7
-use_ahd2d=$8
-max_learning_rate=$9
-weight_decay=${10}
-divergence_threshold=${11}
-min_lr=${12}
-eps=${13}
-decision_point=${14}
+use_multires2d=$6
+use_demosaicnet=$7
+use_ahd=$8
+use_ahd2d=$9
+max_learning_rate=${10}
+weight_decay=${11}
+divergence_threshold=${12}
+min_lr=${13}
+eps=${14}
+decision_point=${15}
 
 echo "using multires $use_multires"
+echo "using multires2d $use_multires2d"
 echo "using demosaicnet $use_demosaicnet"
 echo "using ahd $use_ahd"
 echo "using ahd2d $use_ahd2d"
 
-start_gpu=0
-end_gpu=0
+start_gpu=1
+end_gpu=3
 subset_id=0
 
 while [ $subset_id -lt $n_subsets ]; do
@@ -28,6 +30,9 @@ while [ $subset_id -lt $n_subsets ]; do
     cmd="python3 data_distillation/find_model_lr_on_subset.py"
     if [ $use_multires -eq 1 ]; then
       cmd=$cmd" --multires_model"
+    fi
+    if [ $use_multires2d -eq 1 ]; then
+      cmd=$cmd" --multires_model2d"
     fi
     if [ $use_demosaicnet -eq 1 ]; then
       cmd=$cmd" --demosaicnet"
