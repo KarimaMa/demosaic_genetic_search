@@ -28,7 +28,6 @@ def detect_divergence(psnrs, threshold):
 
 def find_lr(args, model_ast, model_dir):
 
-
   validation_loggers = [util.create_logger(f'v{i}_validation_logger', logging.INFO, \
                                           log_format, os.path.join(model_dir, f'v{i}_validation_log')) \
                       for i in range(args.model_initializations)]
@@ -43,7 +42,7 @@ def find_lr(args, model_ast, model_dir):
 
   train_queue = torch.utils.data.DataLoader(
       train_data, batch_size=args.batch_size,
-      sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
+      sampler=torch.utils.data.sampler.SequentialSampler(train_data),
       pin_memory=True, num_workers=0)
 
   validation_queue = torch.utils.data.DataLoader(
@@ -133,7 +132,7 @@ def train(args, models, train_queue, model_dir, optimizers, criterion):
       loss_trackers[i].update(loss.item(), n)
       losses.append(loss.item())
       # log every batch loss
-      #train_loggers[i].info('train %03d %e', step*args.batch_size, loss.item())
+      train_loggers[i].info('train %03d %e', step*args.batch_size, loss.item())
 
     if step % args.save_freq == 0:
       for i in range(len(models)):
