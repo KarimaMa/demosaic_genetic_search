@@ -1,6 +1,10 @@
 import csv
 import argparse
 import os
+import sys
+sys.path.append(sys.path[0].split("/")[0])
+from util import compute_psnr
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--data_dir", type=str)
@@ -16,6 +20,10 @@ summary_train_writer = csv.writer(summary_train_f, delimiter=",")
 summary_validation_csv = os.path.join(args.data_dir, f"validation_losses.csv")
 summary_validation_f = open(summary_validation_csv, "w", newline="\n")
 summary_validation_writer = csv.writer(summary_validation_f, delimiter=",")
+
+summary_validation_psnr_csv = os.path.join(args.data_dir, f"validation_psnr.csv")
+summary_validation_psnr_f = open(summary_validation_psnr_csv, "w", newline="\n")
+summary_validation_psnr_writer = csv.writer(summary_validation_psnr_f, delimiter=",")
 
 summary_data = {}
 
@@ -45,7 +53,7 @@ for subset in range(args.subsets):
 				train_iter = int(l.split(' ')[4].strip())
 				loss = float(l.split(' ')[5].strip())
 
-				print(f"train iter {train_iter} loss {loss}")
+				#print(f"train iter {train_iter} loss {loss}")
 				
 				train_writer.writerow([train_iter, loss])  
 
@@ -99,22 +107,50 @@ for row in range(n_rows):
 n_rows = len(summary_data["subset_0"]["v_0"]["validation_data"]["epoch"])
 header = []
 for subset in range(args.subsets):
+	colnames = ["epoch"]
 	for version in range(args.model_versions):
 		#colnames = [f"s_{subset} v_{version} epoch", f"s_{subset} v_{version} loss"] 
-		colnames = [f"s_{subset} v_{version} loss"] 
-		header += colnames
+		colnames += [f"s_{subset} v_{version} loss"] 
+	colnames += [""]	
+	header += colnames
 
 summary_validation_writer.writerow(header)
 
 for row in range(n_rows):
 	row_data = []
 	for subset in range(args.subsets):
+		row_data += [f"{row}"]
 		for version in range(args.model_versions):
 			s = f"subset_{subset}"
 			v = f"v_{version}"
 			#row_data.append(summary_data[s][v]["validation_data"]["epoch"][row])
 			row_data.append(summary_data[s][v]["validation_data"]["loss"][row])
+		row_data += ['']
 	summary_validation_writer.writerow(row_data)
 
+# write psnrs
+header = []
+for subset in range(args.subsets):
+	colnames = ["epoch"]
+	for version in range(args.model_versions):
+		#colnames = [f"s_{subset} v_{version} epoch", f"s_{subset} v_{version} loss"] 
+		colnames += [f"s_{subset} v_{version} PSNR"] 
+	colnames += [""]	
+	header += colnames
 
+summary_validation_psnr_writer.writerow(header)
+
+for row in range(n_rows):
+	row_data = []
+	for subset in range(args.subsets):
+		row_data += [f"{row}"]
+		for version in range(args.model_versions):
+			s = f"subset_{subset}"
+			v = f"v_{version}"
+
+			loss = summary_data[s][v]["validation_data"]["loss"][row]
+			row_data += [compute_psnr(loss)]
+		row_data += ['']
+
+	summary_validation_psnr_writer.writerow(row_data)
 
