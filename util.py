@@ -4,10 +4,16 @@ import os
 from demosaic_ast import load_ast
 import shutil
 import torch_model
+import math
 
 # from a github gist by victorlei
 def extclass(cls):
   return lambda f: (setattr(cls,f.__name__,f) or f)
+
+
+def compute_psnr(loss):
+  return 10*math.log(math.pow(255,2) / math.pow(math.sqrt(loss)*255, 2),10)
+
 
 class AvgrageMeter(object):
 
