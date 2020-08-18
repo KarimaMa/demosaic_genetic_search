@@ -1,6 +1,56 @@
 from demosaic_ast import *
 
 
+def basic1D_green_model():
+  # detector model
+  bayer = Input(1, "Bayer")
+  d1filters_d = Conv1D(bayer, 16)
+  relu1 = Relu(d1filters_d)
+  fc1 = Conv1x1(relu1, 16)
+  relu2 = Relu(fc1)
+  fc2 = Conv1x1(relu2, 16)
+  softmax = Softmax(fc2)
+
+  # filter model
+  bayer = Input(1, "Bayer")
+  d1filters_f = Conv1D(bayer, 16)
+
+  mul = Mul(d1filters_f, softmax)
+  missing_green = SumR(mul)
+  bayer = Input(1, "Bayer")
+  full_green = GreenExtractor(missing_green, bayer)
+  full_green.is_root = True
+  full_green.assign_parents()
+  full_green.compute_input_output_channels()
+
+  return full_green
+
+
+def basic2D_green_model():
+  # detector model
+  bayer = Input(1, "Bayer")
+  d1filters_d = Conv2D(bayer, 16)
+  relu1 = Relu(d1filters_d)
+  fc1 = Conv1x1(relu1, 16)
+  relu2 = Relu(fc1)
+  fc2 = Conv1x1(relu2, 16)
+  softmax = Softmax(fc2)
+
+  # filter model
+  bayer = Input(1, "Bayer")
+  d1filters_f = Conv2D(bayer, 16)
+
+  mul = Mul(d1filters_f, softmax)
+  missing_green = SumR(mul)
+  bayer = Input(1, "Bayer")
+  full_green = GreenExtractor(missing_green, bayer)
+  full_green.is_root = True
+  full_green.assign_parents()
+  full_green.compute_input_output_channels()
+
+  return full_green
+
+
 def ahd2D_green_model():
   bayer = Input(1, "Bayer");
   raw_convex = Conv2D(bayer, 16)

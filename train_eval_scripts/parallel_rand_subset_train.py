@@ -42,6 +42,7 @@ if __name__ == "__main__":
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
   parser.add_argument('--multires_model', action='store_true')
   parser.add_argument('--multires_model2d', action='store_true')
+  parser.add_argument('--basic_model2d', action='store_true')
   parser.add_argument('--demosaicnet', action='store_true')
   parser.add_argument('--ahd1d', action='store_true')
   parser.add_argument('--ahd2d', action='store_true')
@@ -77,6 +78,9 @@ if __name__ == "__main__":
   elif args.ahd2d:
     experiment_logger.info("TRAINING AHD2D GREEN")
     green = model_lib.ahd2D_green_model()
+  elif args.basic_model2d:
+    experiment_logger.info("TRAINING BASIC2D GREEN")
+    green = model_lib.basic2D_green_model()
   else:    
     experiment_logger.info("TRAINING BASIC GREEN")
     full_model = meta_model.MetaModel()
