@@ -104,7 +104,7 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
       for i in range(len(models)):
         torch.save(models[i].state_dict(), model_pytorch_files[i])
 
-    if not args.validation_freq is None and step % args.validation_freq == 0:
+    if not args.validation_freq is None and step % args.validation_freq == 0 and epoch == 0:
       valid_losses = infer(args, validation_queue, models, criterion, validation_loggers)
       for i in range(len(models)):
         validation_loggers[i].info(f'validation {epoch*len(train_queue)+step} {valid_losses[i]}')
