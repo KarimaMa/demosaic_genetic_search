@@ -70,8 +70,11 @@ class Dataset(data.Dataset):
 
 
 class GreenDataset(data.Dataset):
-  def __init__(self, train_filenames, return_index=False, use_cropping=False):
-    self.list_IDs = ids_from_file(train_filenames) # patch filenames
+  def __init__(self, data_file=None, data_filenames=None, return_index=False, use_cropping=False):
+    if data_file:
+      self.list_IDs = ids_from_file(data_file) # patch filenames
+    else:
+      self.list_IDs = data_filenames
     self.return_index = return_index
     self.use_cropping = use_cropping
 
