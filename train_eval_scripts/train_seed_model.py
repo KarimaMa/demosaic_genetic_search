@@ -41,8 +41,8 @@ def train(args, models, model_id, model_dir):
       args.learning_rate,
       weight_decay=args.weight_decay) for m in models]
 
-  train_data = GreenDataset(args.training_file, use_cropping=args.use_cropping) 
-  validation_data = GreenDataset(args.validation_file, use_cropping=args.use_cropping)
+  train_data = GreenDataset(data_file=args.training_file, use_cropping=args.use_cropping) 
+  validation_data = GreenDataset(data_file=args.validation_file, use_cropping=args.use_cropping)
 
   num_train = len(train_data)
   train_indices = list(range(int(num_train*args.train_portion)))
