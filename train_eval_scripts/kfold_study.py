@@ -18,7 +18,7 @@ import meta_model
 import model_lib
 from torch_model import ast_to_model
 from dataset import GreenDataset, ids_from_file
-from train_seed_model import train_epoch
+from train_seed_model import train_epoch, infer
 
 
 def train(args, models, model_id, model_dir):
