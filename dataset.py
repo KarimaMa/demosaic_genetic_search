@@ -70,18 +70,44 @@ class Dataset(data.Dataset):
 
 
 class GreenDataset(data.Dataset):
-  def __init__(self, data_file=None, data_filenames=None, return_index=False, use_cropping=False):
+  def __init__(self, data_file=None, data_filenames=None, return_index=False, use_cropping=False, RAM=False):
     if data_file:
       self.list_IDs = ids_from_file(data_file) # patch filenames
     else:
       self.list_IDs = data_filenames
     self.return_index = return_index
     self.use_cropping = use_cropping
+    self.RAM = RAM
+    
+    if self.RAM:
+      self.inputs = []
+      self.labels = []
+      for index in range(len(self.list_IDs)):
+        if index % 1000 == 0:
+          print(f"loading {index}")
+        image_f = self.list_IDs[index]
+        img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+        img = np.transpose(img, [2, 0, 1])
+        green = np.expand_dims(img[1,...], axis=0)
+        mosaic = bayer(img)
+        mosaic = np.sum(mosaic, axis=0, keepdims=True)
+
+        if self.use_cropping: # take center crop of image
+          mosaic = mosaic[...,32:94,32:94]
+          green = green[...,32:94,32:94]
+
+        self.inputs.append(mosaic)
+        self.labels.append(green)
 
   def __len__(self):
     return len(self.list_IDs)
 
   def __getitem__(self, index):
+    if self.RAM:
+      if self.return_index:
+        return (index, self.inputs[index], self.labels[index])
+      else:
+        return (self.inputs[index], self.labels[index])
 
     image_f = self.list_IDs[index]
     img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
