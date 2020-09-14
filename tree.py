@@ -1,6 +1,7 @@
 """
 Functions for managing AST trees
 """
+import hashlib
 from abc import ABC, abstractmethod
 import numpy as np
 
@@ -20,9 +21,13 @@ class Node:
     self.num_children = num_children
 
   def __hash__(self):
-    h = hash_combine(hash(self.__class__.__name__), self.out_c)
+    name_hash = int(hashlib.sha1(self.__class__.__name__.encode('utf-8')).hexdigest(), 16)
+    name_hash_str = str(name_hash)
+    name_hash = int(name_hash_str[0:10])
+    h = hash_combine(name_hash, self.out_c)
     if type(self.in_c) is tuple:
-      h = hash_combine(h, self.in_c[0] * self.in_c[1])
+      h = hash_combine(h, self.in_c[0])
+      h = hash_combine(h, self.in_c[1])
     else: 
       h = hash_combine(h, self.in_c)
 
@@ -31,7 +36,6 @@ class Node:
       h = hash_combine(h, hash(self.rchild))
     elif self.num_children == 1:
       h = hash_combine(h, hash(self.child))
-
     return int(h)
 
     
@@ -190,6 +194,8 @@ class Node:
   def __eq__(self, other):
     return self.is_same_as(other)
 
+  def __ne__(self, other):
+    return not self.is_same_as(other)
 
 """
 detects if there is loop in tree

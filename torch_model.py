@@ -428,7 +428,7 @@ class DiagRLConv(nn.Module):
     return nn.functional.conv2d(x, (filter_w * self.mask), padding=self.padding)
 
 class Conv1DOp(nn.Module):
-  def __init__(self, operand, C_in, C_out, param_name):
+  def __init__(self, operand, C_in, C_out, param_name, kwidth):
     super(Conv1DOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     assert C_out % 4 == 0, "Output channels must be divisible by 4 to use separable conv"
@@ -437,10 +437,10 @@ class Conv1DOp(nn.Module):
     param_name_diag1 = f"{param_name}_diag1"
     param_name_diag2 = f"{param_name}_diag2"
 
-    v = nn.Conv2d(C_in, C_out//4, (5, 1), bias=False, padding=(2, 0))
-    h = nn.Conv2d(C_in, C_out//4, (1, 5), bias=False, padding=(0, 2))
-    self.diag1 = DiagLRConv(C_in, C_out//4, 5, 2, param_name_diag1)
-    self.diag2 = DiagRLConv(C_in, C_out//4, 5, 2, param_name_diag2)
+    v = nn.Conv2d(C_in, C_out//4, (kwidth, 1), bias=False, padding=(kwidth//2, 0))
+    h = nn.Conv2d(C_in, C_out//4, (1, kwidth), bias=False, padding=(0, kwidth//2))
+    self.diag1 = DiagLRConv(C_in, C_out//4, kwidth, kwidth//2, param_name_diag1)
+    self.diag2 = DiagRLConv(C_in, C_out//4, kwidth, kwidth//2, param_name_diag2)
 
     setattr(self, self.param_name_v, v)
     setattr(self, self.param_name_h, h)
@@ -465,7 +465,7 @@ class Conv1DOp(nn.Module):
     return torch.cat((v(x), h(x), self.diag1(x), self.diag2(x)), 1)
 
 class Conv2DOp(nn.Module):
-  def __init__(self, operand, C_in, C_out, param_name, kwidth=5):
+  def __init__(self, operand, C_in, C_out, param_name, kwidth):
     super(Conv2DOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.param_name = param_name
@@ -591,7 +591,7 @@ def ast_to_model(self):
 @extclass(Conv1D)
 def ast_to_model(self):
   child_model = self.child.ast_to_model()
-  return Conv1DOp(child_model, self.in_c, self.out_c, self.name)
+  return Conv1DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth)
 
 @extclass(Conv2D)
 def ast_to_model(self):

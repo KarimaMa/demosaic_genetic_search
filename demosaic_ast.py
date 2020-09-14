@@ -216,12 +216,13 @@ class Conv1x1(UnopIJ, Linear, Node):
     self.out_c = out_c
 
 class Conv1D(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int, name=None):
+  def __init__(self, child, out_c: int, name=None, kwidth=5):
     if name is None:
       name = "Conv1D"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = out_c
+    self.kwidth = kwidth
 
 class Conv2D(UnopIJ, Linear, Node):
   def __init__(self, child, out_c: int, name=None, kwidth=5):
@@ -403,6 +404,8 @@ def structure_to_array(self):
   
     if hasattr(n, 'name'):
       node_info["name"] = n.name.lstrip("Input(").rstrip(")")
+    if hasattr(n, 'kwidth'):
+      node_info["kwidth"] = n.kwidth
 
     array.append(node_info)
 
@@ -433,7 +436,10 @@ def build_tree_from_data(node_id, preorder_nodes):
     else:
       child_node = build_tree_from_data(children_ids[0], preorder_nodes)
       if issubclass(node_class, UnopIJ):
-        new_node = node_class(child_node, node_info["out_c"], name=node_name)
+        if "kwidth" in node_info:
+          new_node = node_class(child_node, node_info["kwidth"], name=node_name, kwidth=node_info["kwidth"])
+        else:
+          new_node = node_class(child_node, node_info["out_c"], name=node_name)
       else:
         new_node = node_class(child_node, name=node_name)
   else: # is input node

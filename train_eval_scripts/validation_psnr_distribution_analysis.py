@@ -9,6 +9,7 @@ import os
 import random 
 import numpy as np
 import sys
+import csv
 
 sys.path.append(sys.path[0].split("/")[0])
 
@@ -19,7 +20,7 @@ from torch_model import ast_to_model
 from dataset import GreenDataset
 
 def infer(args, valid_queue, model, criterion, validation_loggers):
-  loss_trackers = util.AvgrageMeter() 
+  loss_tracker = util.AvgrageMeter() 
   model.eval()
   psnrs = []
   for step, (input, target) in enumerate(valid_queue):
@@ -48,7 +49,7 @@ def evaluate_model(args, model):
       pin_memory=True, num_workers=0)
   
   validation_logger = util.create_logger(f'validation_logger', logging.INFO, \
-                                          log_format, os.path.join(model_dir, f'validation_log'))
+                                          log_format, os.path.join(args.save, f'validation_log'))
   psnrs, avg_loss = infer(args, validation_queue, model, criterion, validation_logger)
   return psnrs, avg_loss
 
@@ -64,7 +65,7 @@ if __name__ == "__main__":
   args = parser.parse_args()
 
   model_manager = util.ModelManager(args.model_path)
-  model, ast = model_manager.load_model('seed', args.model_version, "gpu")
+  model, ast = model_manager.load_model('', args.model_version, "gpu")
   util.create_dir(args.save)
   
   log_format = '%(asctime)s %(levelname)s %(message)s'
@@ -75,7 +76,7 @@ if __name__ == "__main__":
                                 os.path.join(args.save, 'experiment_log'))
   logger.info("args = %s", args)
 
-  psnrs, avg_loss = evalutate_model(args, model)
+  psnrs, avg_loss = evaluate_model(args, model)
   logger.info(f"avg validation loss: {avg_loss}")
 
   psnr_csv = os.path.join(args.save, "validation_psnrs.csv")
@@ -88,7 +89,7 @@ if __name__ == "__main__":
   psnr_writer.writerow(header)
 
   for row in range(n_rows):
-    psnr_writer.writerow(psnrs[row])
+    psnr_writer.writerow([psnrs[row]])
 
 
 

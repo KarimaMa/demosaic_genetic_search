@@ -207,6 +207,7 @@ if __name__ == "__main__":
   parser.add_argument('--ahd', action='store_true')
   parser.add_argument('--ahd2d', action='store_true')
   parser.add_argument('--basic_model2d', action='store_true')
+  parser.add_argument('--basic_model', action='store_true')
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
   parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--seed', type=int, default=2, help='random seed')
@@ -250,11 +251,9 @@ if __name__ == "__main__":
   elif args.basic_model2d:
     logger.info(f"TRAINING BASIC_MODEL2D GREEN")
     green = model_lib.basic2D_green_model()
-  else:
+  elif args.basic_model:
     logger.info("TRAINING BASIC GREEN")
-    full_model = meta_model.MetaModel()
-    full_model.build_default_model() 
-    green = full_model.green
+    green = model_lib.basic1D_green_model()
 
   if not torch.cuda.is_available():
     sys.exit(1)
