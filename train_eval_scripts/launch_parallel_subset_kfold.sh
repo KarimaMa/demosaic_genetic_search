@@ -24,7 +24,7 @@ echo "using basic2d $use_basic2d"
 
 start_gpu=0
 end_gpu=3
-subset_id=0
+subset_id=12
 
 while [ $subset_id -lt $n_subsets ]; do
   for gpu_id in $(seq $start_gpu $end_gpu); do

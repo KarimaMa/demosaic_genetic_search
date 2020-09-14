@@ -181,6 +181,7 @@ if __name__ == "__main__":
   parser.add_argument('--demosaicnet', action='store_true')
   parser.add_argument('--ahd', action='store_true')
   parser.add_argument('--ahd2d', action='store_true')
+  parser.add_argument('--basic_model2d', action='store_true')
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
   parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--seed', type=int, default=2, help='random seed')
@@ -222,6 +223,9 @@ if __name__ == "__main__":
   elif args.ahd2d:
     logger.info(f"FINDING LR FOR AHD2D GREEN ON SUBSET {args.subset_id}")
     green = model_lib.ahd2D_green_model()
+  elif args.basic_model2d:
+    logger.info(f"FINDING LR FOR BASIC2D GREEN ON SUBSET {args.subset_id}")
+    green = model_lib.basic2D_green_model()
   else:
     logger.info(f"FINDING LR FOR BASIC GREEN ON SUBSET {args.subset_id}")
     full_model = meta_model.MetaModel()
