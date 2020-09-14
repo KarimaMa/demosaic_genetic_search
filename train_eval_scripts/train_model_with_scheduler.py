@@ -16,31 +16,36 @@ import util
 import meta_model
 import model_lib
 from torch_model import ast_to_model
-from dataset import GreenDataset, ids_from_file
-from validation_variance_tracker import  VarianceTracker
-from validation_variance_tracker import LRTracker
+from dataset import GreenDataset
+from learning_rate_scheduler import Scheduler, LRScheduler
 
 def get_optimizers(args, models):
-  optimizers = [torch.optim.Adam(
-      m.parameters(),
-      lr=args.learning_rate,
-      weight_decay=args.weight_decay) for m in models]
+  if args.adam:
+    optimizers = [torch.optim.Adam(
+        m.parameters(),
+        lr=args.learning_rate,
+        weight_decay=args.weight_decay) for m in models]
+  elif args.sgd:
+    optimizers = [torch.optim.SGD(
+        m.parameters(),
+        args.learning_rate,
+        momentum=0.9,
+        weight_decay=args.weight_decay) for m in models]
+  else:
+    assert False, "no optimizer provided"
   return optimizers
 
-def create_loggers(model_id, model_dir, num_models, mode):
-  log_format = '%(asctime)s %(levelname)s %(message)s'
-  log_files = [os.path.join(model_dir, f'v{i}_{mode}_log') for i in range(num_models)]
-  for log_file in log_files:
-    if os.path.exists(log_file):
-      os.remove(log_file)
-  loggers = [util.create_logger(f'{model_id}_v{i}_{mode}_logger', logging.INFO, log_format, log_files[i]) for i in range(num_models)]
-  return loggers
 
-def train(args, models, model_id, model_dir, experiment_logger):
+def train(args, models, model_id, model_dir):
   print(f"training {len(models)} models")
+  log_format = '%(asctime)s %(levelname)s %(message)s'
+  train_loggers = [util.create_logger(f'{model_id}_v{i}_train_logger', logging.INFO, \
+                                      log_format, os.path.join(model_dir, f'v{i}_train_log'))\
+                  for i in range(len(models))]
 
-  train_loggers = create_loggers(model_id, model_dir, len(models), "train")
-  validation_loggers = create_loggers(model_id, model_dir, len(models), "validation")
+  validation_loggers = [util.create_logger(f'{model_id}_v{i}_validation_logger', logging.INFO, \
+                                          log_format, os.path.join(model_dir, f'v{i}_validation_log')) \
+                      for i in range(len(models))]
 
   model_pytorch_files = [util.get_model_pytorch_file(model_dir, model_version) \
                         for model_version in range(len(models))]
@@ -48,15 +53,18 @@ def train(args, models, model_id, model_dir, experiment_logger):
   models = [model.cuda() for model in models]
 
   criterion = nn.MSELoss()
-  optimizers = get_optimizers(args, models)
 
-  full_data_filenames = ids_from_file(args.training_file)
-  used_filenames = full_data_filenames[0:int(args.train_portion)]
-  train_data = GreenDataset(data_filenames=used_filenames, RAM=True) 
-  validation_data = GreenDataset(data_file=args.validation_file, RAM=True)
+  #optimizers = get_optimizers(args, models)
+
+  #lr_schedulers = [Scheduler(optimizer, 0.015, 0.005) for optimizer in optimizers]
+  lr_schedulers = [LRScheduler(args, model, 0.015, 0.005) for model in models]
+  optimizers = [s.optimizer for s in lr_schedulers]
+
+  train_data = GreenDataset(data_file=args.training_file, use_cropping=False) 
+  validation_data = GreenDataset(data_file=args.validation_file, use_cropping=False)
 
   num_train = len(train_data)
-  train_indices = list(range(num_train))
+  train_indices = list(range(int(num_train*args.train_portion)))
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
 
@@ -70,96 +78,29 @@ def train(args, models, model_id, model_dir, experiment_logger):
       sampler=torch.utils.data.sampler.SubsetRandomSampler(validation_indices),
       pin_memory=True, num_workers=0)
 
-  lr_tracker, optimizers, train_loggers, validation_loggers = lr_search(args, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers)
-  reuse_lr_search_epoch = lr_tracker.proposed_lrs[-1] == lr_tracker.proposed_lrs[-2]
-  for lr_search_iter, variance in enumerate(lr_tracker.seen_variances):
-    experiment_logger.info(f"PROPOSED LEARNING RATE {lr_tracker.proposed_lrs[lr_search_iter]} INDUCES VALIDATION VARIANCE {variance} AT A VALIDATION FRE0QUENCY OF {args.validation_freq}")
-  experiment_logger.info(f"USING LEARNING RATE {lr_tracker.proposed_lrs[-1]}")
 
-  if not reuse_lr_search_epoch:
-    # erase logs from previous epoch and reset models
-    train_loggers = create_loggers(model_id, model_dir, len(models), "train")
-    validation_loggers = create_loggers(model_id, model_dir, len(models), "validation")
-    cur_epoch = 0
-    for m in models:
-      m._initialize_parameters()
-    models = [model.cuda() for model in models]
-    optimizers = get_optimizers(args, models)
-  else: # we can use previous epoch's training 
-    cur_epoch = 1
-
-  experiment_logger.info(f"learning rate stored in args {args.learning_rate}")
-
-  for epoch in range(cur_epoch, args.epochs):
+  for epoch in range(args.epochs):
+    # training
     train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, \
-      model_pytorch_files, validation_queue, validation_loggers, epoch)
-    valid_losses = infer(args, validation_queue, models, criterion)
+      model_pytorch_files, validation_queue, validation_loggers, epoch, lr_schedulers)
+    # validation
+    valid_losses = infer(args, validation_queue, models, criterion, validation_loggers)
 
     for i in range(len(models)):
       validation_loggers[i].info('validation epoch %03d %e', epoch, valid_losses[i])
+      validation_loggers[i].info(f"learning rate {lr_schedulers[i].lr}")
 
   return valid_losses, train_losses
 
 
-def lr_search(args, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers):
-  lr_tracker = LRTracker(args.learning_rate, args.variance_max, args.variance_min)
-  for step in range(args.lr_search_steps):
-    optimizers = get_optimizers(args, models)
-    losses, validation_variance = get_validation_variance(args, models, criterion, optimizers, train_queue, train_loggers, validation_queue, validation_loggers)
-    new_lr = lr_tracker.update_lr(validation_variance)
-    args.learning_rate = new_lr
-    if lr_tracker.proposed_lrs[-1] == lr_tracker.proposed_lrs[-2]: 
-      break
-    # trying a new lr - erase logs from previous epoch and reset models
-    train_loggers = create_loggers(model_id, model_dir, len(models), "train")
-    validation_loggers = create_loggers(model_id, model_dir, len(models), "validation")
-    for m in models:
-      m._initialize_parameters()
-    models = [model.cuda() for model in models]
-        
-  return lr_tracker, optimizers, train_loggers, validation_loggers
-
-
-def get_validation_variance(args, models, criterion, optimizers, train_queue, train_loggers, validation_queue, validation_loggers):
-  variance_tracker = VarianceTracker(len(models))
+def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files, validation_queue, validation_loggers, epoch, lr_schedulers):
   loss_trackers = [util.AvgrageMeter() for m in models]
   for m in models:
     m.train()
 
   for step, (input, target) in enumerate(train_queue):
-    n = input.size(0)
-    input = Variable(input, requires_grad=False).cuda()
-    target = Variable(target, requires_grad=False).cuda()
+    optimizers = [s.optimizer for s in lr_schedulers]
 
-    for i, model in enumerate(models):
-      optimizers[i].zero_grad()
-      pred = model.run(input)
-      loss = criterion(pred, target)
-
-      loss.backward()
-      optimizers[i].step()
-      loss_trackers[i].update(loss.item(), n)
-
-      if step % args.report_freq == 0 or step == len(train_queue)-1:
-        train_loggers[i].info('train %03d %e', step, loss.item())
-
-    if step % args.validation_freq == 0 and step > 400:
-      valid_losses = infer(args, validation_queue, models, criterion)
-      valid_psnrs = [util.compute_psnr(l) for l in valid_losses]
-      variance_tracker.update(valid_psnrs)
-      
-      for i in range(len(models)):
-        validation_loggers[i].info(f'validation {step} {valid_losses[i]}')
-      
-  return [loss_tracker.avg for loss_tracker in loss_trackers], variance_tracker.validation_variance()
-
-
-def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files, validation_queue, validation_loggers, epoch):
-  loss_trackers = [util.AvgrageMeter() for m in models]
-  for m in models:
-    m.train()
-
-  for step, (input, target) in enumerate(train_queue):
     n = input.size(0)
     input = Variable(input, requires_grad=False).cuda()
     target = Variable(target, requires_grad=False).cuda()
@@ -181,10 +122,22 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
       for i in range(len(models)):
         torch.save(models[i].state_dict(), model_pytorch_files[i])
 
+    if step % args.validation_freq == 0 and (step > 400 or epoch > 0) and epoch < 3:
+      valid_losses = infer(args, validation_queue, models, criterion, validation_loggers)
+      valid_psnrs = [util.compute_psnr(l) for l in valid_losses]
+      if not args.flat_lr:
+        for init_id, scheduler in enumerate(lr_schedulers):
+          scheduler.update_validation_tracker(valid_psnrs[init_id])
+          validation_loggers[init_id].info(f"scheduler {init_id} step {scheduler.ticks}...")
+          scheduler.step(validation_loggers[init_id])
+
+        for i in range(len(models)):
+          validation_loggers[i].info(f'validation {epoch*len(train_queue)+step} {valid_losses[i]}')
+
   return [loss_tracker.avg for loss_tracker in loss_trackers]
 
 
-def infer(args, valid_queue, models, criterion):
+def infer(args, valid_queue, models, criterion, validation_loggers):
   loss_trackers = [util.AvgrageMeter() for m in models]
   for m in models:
     m.eval()
@@ -201,14 +154,13 @@ def infer(args, valid_queue, models, criterion):
 
   return [loss_tracker.avg for loss_tracker in loss_trackers]
 
-
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
+  parser.add_argument('--adam', action='store_true', help='use adam')
+  parser.add_argument('--sgd', action='store_true', help='use sgd')
+  parser.add_argument('--flat_lr', action='store_true', help='do not change initial learning rate')
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
-  parser.add_argument('--learning_rate', type=float, default=0.025, help='initial learning rate')
-  parser.add_argument('--lr_search_steps', type=int, help='how many line search iters for finding learning rate')
-  parser.add_argument('--variance_min', type=float, help='minimum validation psnr variance')
-  parser.add_argument('--variance_max', type=float, help='maximum validation psnr variance')
+  parser.add_argument('--learning_rate', type=float, default=0.025, help='init learning rate')
   parser.add_argument('--weight_decay', type=float, default=1e-8, help='weight decay')
   parser.add_argument('--report_freq', type=float, default=200, help='report frequency')
   parser.add_argument('--save_freq', type=float, default=2000, help='save frequency')
@@ -224,7 +176,7 @@ if __name__ == "__main__":
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
   parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--seed', type=int, default=2, help='random seed')
-  parser.add_argument('--train_portion', type=int, default=1e5, help='portion of training data to use')
+  parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
@@ -286,8 +238,10 @@ if __name__ == "__main__":
   models = [green.ast_to_model().cuda() for i in range(args.model_initializations)]
   for m in models:
     m._initialize_parameters()
+    
+  model_manager.save_model(models, green, model_dir)
 
-  validation_losses, training_losses = train(args, models, 'seed', model_dir, logger) 
+  validation_losses, training_losses = train(args, models, 'seed', model_dir) 
 
   model_manager.save_model(models, green, model_dir)
 
