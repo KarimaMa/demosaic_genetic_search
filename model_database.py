@@ -9,17 +9,18 @@ class ModelDatabase():
 	index i stores model id i's data
 	The data is : (
 							0	model_id
-							1	model structural hash, 
-							2	model occurence count, 
-							3	best model version ID
-							4	model losses for each version, 
-							5	model compute cost, 
-							6	model parent id,
-							7	killed_children, // how many times this model could not be mutated to a new model
-							8	failed_mutations, // how many mutations failed to get to this model
-							9	prune_rejections, // how many mutations were pruned to get to this model
-							10 structural_rejections, // how many mutations were rejected structurally to get to this model
-							11 seen_rejections) // how many mutations were rejected as repeats to get to this model
+							1   model hash
+							2	model structural hash, 
+							3	model occurence count, 
+							4	best model version ID
+							5	model losses for each version, 
+							6	model compute cost, 
+							7	model parent id,
+							8	killed_children, // how many times this model could not be mutated to a new model
+							9	failed_mutations, // how many mutations failed to get to this model
+							10	prune_rejections, // how many mutations were pruned to get to this model
+							11 structural_rejections, // how many mutations were rejected structurally to get to this model
+							12 seen_rejections) // how many mutations were rejected as repeats to get to this model
 	"""
 	def __init__(self, database_dir, database_file=None):
 		self.database = {}

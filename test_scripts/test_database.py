@@ -49,10 +49,9 @@ class Searcher():
     
   # searches over program mutations within tiers of computational cost
   def search(self, compute_cost_tiers, tier_size):
-    # initialize cost tiers
     cost_tiers = CostTiers(compute_cost_tiers)
 
-    seed_model, seed_ast = util.load_model_from_file(self.args.seed_model_file, 0, cpu=True)
+    seed_model, seed_ast = util.load_model_from_file(self.args.seed_model_file, 0, cpu)
     seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)
     util.create_dir(seed_model_dir)
     seed_ast.compute_input_output_channels()
@@ -60,32 +59,35 @@ class Searcher():
 
     seed_ast.compute_input_output_channels()
     print(seed_ast.dump())
-    # give random costs to initial tree
+    # give madeup accuracy cost to initial tree - just testing that system works
     compute_cost = self.evaluator.compute_cost(seed_ast)
-    model_accuracy = self.args.seed_model_accuracy
+    model_accuracy = 0.0008
 
     cost_tiers.add(self.model_manager.SEED_ID, compute_cost, model_accuracy)
     
     self.model_database.add(self.model_manager.SEED_ID,\
-                        [self.model_manager.SEED_ID, 
-                        structural_hash(seed_ast), 
-                        1, 
-                        0, 
-                        [model_accuracy, -1, -1], 
-                        compute_cost, 
-                        -1,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0])
+            {'model_id': self.model_manager.SEED_ID,
+             'hash': hash(seed_ast),
+             'structural_hash': structural_hash(seed_ast),
+             'occurrences': 1,
+             'best_model_version': 0,
+             'model_losses': [model_accuracy],
+             'model_compute_cost': compute_cost,
+             'parent_id': -1,
+             'killed_children': 0,
+             'failed_mutations': 0,
+             'prune_rejections': 0,
+             'structural_rejections': 0,
+             'seen_rejections': 0})
 
     # CHANGE TO NOT BE FIXED - SHOULD BE INFERED FROM TASK
     model_inputs = set(("Input(Bayer)",))
     t0 = time.time()
+
     for generation in range(self.args.generations):
       new_cost_tiers = copy.deepcopy(cost_tiers) 
       avg_iter_time = 0 
+
       for tier in cost_tiers.tiers:
         for model_id, costs in tier.items():
           itert0 = time.time()
@@ -93,8 +95,8 @@ class Searcher():
           model, model_ast = self.model_manager.load_model(model_id, best_model_version)
           
           if has_loop(model_ast):
-            print("tree has loop!!!")
-            print(model_ast.dump())
+            self.debug_logger.info("Tree has loop!!")
+            self.debug_logger.info(model_ast.dump())
             exit()
 
           new_model_id = self.model_manager.get_next_model_id()
@@ -111,7 +113,7 @@ class Searcher():
           new_model_dir = self.model_manager.model_dir(new_model_id)
           util.create_dir(new_model_dir)
 
-          perf_costs = [random.uniform(0.0009, 0.0018) for i in range(args.model_initializations)]
+          perf_costs = [random.uniform(0.00045, 0.0015) for i in range(args.model_initializations)]
           compute_cost = self.evaluator.compute_cost(new_model_ast)
 
           min_perf_cost = min(perf_costs)
@@ -121,18 +123,19 @@ class Searcher():
           new_cost_tiers.add(new_model_id, compute_cost, min_perf_cost)
 
           self.model_database.add(new_model_id,\
-                        [new_model_id, 
-                        shash,
-                        1, # model occurrences 
-                        best_new_model_version,
-                        perf_costs,
-                        compute_cost,
-                        model_id,
-                        0, # killed mutations from this model 
-                        mutation_stats.failures, 
-                        mutation_stats.prune_rejections, 
-                        mutation_stats.structural_rejections,
-                        mutation_stats.seen_rejections])
+            {'model_id': new_model_id,
+             'hash': hash(new_model_ast),
+             'structural_hash': shash,
+             'occurrences': 1,
+             'best_model_version': best_new_model_version,
+             'model_losses': perf_costs,
+             'model_compute_cost': compute_cost,
+             'parent_id': model_id,
+             'killed_children': 0,
+             'failed_mutations': mutation_stats.failures,
+             'prune_rejections': mutation_stats.prune_rejections,
+             'structural_rejections': mutation_stats.structural_rejections,
+             'seen_rejections': mutation_stats.seen_rejections})
 
           itert1 = time.time()
           avg_iter_time += (itert1 - itert0) / sum([len(tier.items()) for tier in cost_tiers.tiers])
@@ -175,7 +178,6 @@ def parse_cost_tiers(s):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
-  parser.add_argument('--seed_model_accuracy', type=float, default=0.0013, help='accuracy of seed model')
   parser.add_argument('--default_channels', type=int, default=16, help='num of output channels for conv layers')
   parser.add_argument('--max_nodes', type=int, default=30, help='max number of nodes in a tree')
   parser.add_argument('--min_subtree_size', type=int, default=2, help='minimum size of subtree in insertion')
@@ -191,7 +193,8 @@ if __name__ == "__main__":
   parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
   parser.add_argument('--tier_size', type=int, default=10, help='how many models to keep per tier')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
-  parser.add_argument('--mutation_failure_threshold', type=int, default=1000, help='max number of tries to mutate a tree')
+  parser.add_argument('--mutation_failure_threshold', type=int, default=500, help='max number of tries to mutate a tree')
+  
   args = parser.parse_args()
   random.seed(args.seed)
   np.random.seed(args.seed)
