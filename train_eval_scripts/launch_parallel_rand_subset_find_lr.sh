@@ -8,20 +8,22 @@ use_multires2d=$6
 use_demosaicnet=$7
 use_ahd=$8
 use_ahd2d=$9
-max_learning_rate=${10}
-weight_decay=${11}
-divergence_threshold=${12}
-min_lr=${13}
-eps=${14}
-decision_point=${15}
+use_basic2d=${10}
+max_learning_rate=${11}
+weight_decay=${12}
+divergence_threshold=${13}
+min_lr=${14}
+eps=${15}
+decision_point=${16}
 
 echo "using multires $use_multires"
 echo "using multires2d $use_multires2d"
 echo "using demosaicnet $use_demosaicnet"
 echo "using ahd $use_ahd"
 echo "using ahd2d $use_ahd2d"
+echo "using basic2d $use_basic2d"
 
-start_gpu=1
+start_gpu=0
 end_gpu=3
 subset_id=0
 
@@ -42,6 +44,9 @@ while [ $subset_id -lt $n_subsets ]; do
     fi
     if [ $use_ahd2d -eq 1 ]; then
       cmd=$cmd" --ahd2d"
+    fi
+    if [ $use_basic2d -eq 1 ]; then
+      cmd=$cmd" --basic_model2d"
     fi
     cmd=$cmd" --gpu=$gpu_id" 
     cmd=$cmd" --subset_id=$subset_id"
