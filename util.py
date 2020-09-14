@@ -5,10 +5,20 @@ from demosaic_ast import load_ast
 import shutil
 import torch_model
 import math
+import csv
+
 
 # from a github gist by victorlei
 def extclass(cls):
   return lambda f: (setattr(cls,f.__name__,f) or f)
+
+
+def get_csv_writer(filename):
+  if os.path.exists(filename):
+    os.remove(filename)
+  csv_f = open(filename, 'w', newline='\n')
+  writer = csv.writer(csv_f, delimiter=',')
+  return writer
 
 
 def compute_psnr(loss):
