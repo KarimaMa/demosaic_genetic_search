@@ -98,7 +98,7 @@ def multires2D_green_model():
   relu1 = Relu(stack)
   fc1 = Conv1x1(relu1, 16)
   relu2 = Relu(fc1)
-  fc2 = Conv1x1(relu2, 16, name="KcoreFeature_1x1")
+  fc2 = Conv1x1(relu2, 16)
   softmax = Softmax(fc2)
 
   # filter model
@@ -109,6 +109,9 @@ def multires2D_green_model():
   green = GreenExtractor(missing_green, bayer)
   green.assign_parents()
   green.compute_input_output_channels()
+
+  downsample.partner_set = set( [(upsample, id(upsample))] )
+  upsample.partner_set = set( [(downsample, id(downsample))] )
   return green
 
 
@@ -131,7 +134,7 @@ def multires_green_model():
   relu1 = Relu(stack)
   fc1 = Conv1x1(relu1, 16)
   relu2 = Relu(fc1)
-  fc2 = Conv1x1(relu2, 16, name="KcoreFeature_1x1")
+  fc2 = Conv1x1(relu2, 16)
   softmax = Softmax(fc2)
 
   # filter model
@@ -142,6 +145,10 @@ def multires_green_model():
   green = GreenExtractor(missing_green, bayer)
   green.assign_parents()
   green.compute_input_output_channels()
+
+  downsample.partner_set = set( [ (upsample, id(upsample)) ] )
+  upsample.partner_set = set( [ (downsample, id(downsample)) ] )
+
   return green
 
 def multires_green_model2():

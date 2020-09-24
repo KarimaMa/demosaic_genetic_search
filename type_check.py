@@ -1,6 +1,117 @@
 from demosaic_ast import *
+from enum import Enum 
+import logging
+
+logger = logging.getLogger("DebugLogger")
+
+class Resolution(Enum):
+  FULL = 1
+  DOWNSAMPLED = 2
+  INVALID = 3
+
+"""
+attempts to shrink down channel counts of nodes 
+as much as possible
+"""
+def shrink_channels(node, target_c, out_c=None):
+  if isinstance(node, BinopIJK):
+    if out_c is None:
+      left_in_c = shrink_channels(node.lchild, target_c)
+      right_in_c = shrink_channels(node.rchild, target_c)
+      node.in_c = (left_in_c, right_in_c)
+      node.out_c = left_in_c + right_in_c
+    else:
+      left_in_c = out_c // 2
+      right_in_c = out_c - left_in_c
+      shrink_channels(node.lchild, target_c, out_c=left_in_c)
+      shrink_channels(node.rchild, target_c, out_c=right_in_c)
+      node.in_c = (left_in_c, right_in_c)
+      node.out_c = out_c
+    return node.out_c
+  elif isinstance(node, BinopIII):
+    if out_c is None:
+      left_in_c = shrink_channels(node.lchild, target_c) 
+      right_in_c = shrink_channels(node.rchild, target_c)
+      assert left_in_c == right_in_c or (left_in_c == 1) or (right_in_c == 1), \
+        f"Shrinking channels cannot make BinopIII left {left_in_c} match right {right_in_c} channels"
+      node.out_c = left_in_c
+      node.in_c = (left_in_c, right_in_c)
+    else:
+      shrink_channels(node.lchild, target_c, out_c=out_c)
+      shrink_channels(node.rchild, target_c, out_c=out_c)
+      node.in_c = (out_c, out_c)
+      node.out_c = out_c
+    return node.out_c
+  elif isinstance(node, BinopIcJcKc): # input and output channels are immutable
+    if not out_c is None:
+      assert out_c == node.Kc(), f"output channels of {node.__class__.__name__} cannot be set to {out_c}"
+    shrink_channels(node.lchild, target_c, out_c=node.Ic())
+    shrink_channels(node.rchild, target_c, out_c=node.Jc())
+    return node.out_c
+  elif isinstance(node, UnopIJ):
+    if out_c is None:
+      node.out_c = min(node.out_c, target_c)
+      node.in_c = shrink_channels(node.child, target_c)
+    else:
+      node.out_c = out_c
+      node.in_c = shrink_channels(node.child, target_c)
+    return node.out_c
+  elif isinstance(node, UnopII):
+    if out_c is None:
+      node.in_c = shrink_channels(node.child, target_c)
+      node.out_c = node.in_c
+    else:
+      shrink_channels(node.child, target_c, out_c=out_c)
+      node.out_c = out_c
+      node.in_c = out_c
+    return node.out_c
+  elif isinstance(node, UnopI1):
+    if out_c is None:
+      node.in_c = shrink_channels(node.child, target_c)
+      node.out_c = 1
+    else:
+      assert out_c == 1, f"output channels of UnopI1 cannot be set to {out_c}"
+      node.in_c = shrink_channels(node.child, target_c)
+    return node.out_c
+  elif isinstance(node, Const):
+    if not out_c is None:
+      assert node.out_c == out_c, f"Cannot set output channels of {node.name} to {out_c}"
+    return node.out_c 
+  else:
+    assert False, "Unknown node type"
 
 
+"""
+returns the spatial resolution of a subtree
+"""
+def spatial_resolution(subtree):
+  res = None # resolution obeys children unless this node is an up or downsample
+  if isinstance(subtree, Upsample):
+    res = Resolution.FULL
+  elif isinstance(subtree, Downsample):
+    res = Resolution.DOWNSAMPLED
+
+  if subtree.num_children == 2:
+    lres = spatial_resolution(subtree.lchild)
+    rres = spatial_resolution(subtree.rchild)
+    if lres != rres :
+      return Resolution.INVALID
+    child_res = lres
+  elif subtree.num_children == 1:
+    child_res = spatial_resolution(subtree.child)
+  else:
+    return Resolution.FULL # Input nodes have full resolution
+
+  if child_res == Resolution.INVALID:
+    return Resolution.INVALID
+
+  if res is None: # resolution obeys children 
+    return child_res
+  else:
+    if res == child_res: # this node up or downsamples, child much have opposite resolution
+      return Resolution.INVALID
+    return res
+    
 """
 checks that channels counts of AST agree across nodes
 and returns output channels of the root node
@@ -10,7 +121,7 @@ def check_channel_count(node):
     lchild_c = check_channel_count(node.lchild)
     rchild_c = check_channel_count(node.rchild)
     assert(lchild_c == rchild_c or rchild_c == 1 or lchild_c == 1) # allow broadcasting
-    return lchild_c
+    return max(rchild_c, lchild_c)
   elif isinstance(node, BinopIJK):
     lchild_c = check_channel_count(node.lchild)
     rchild_c = check_channel_count(node.rchild)
@@ -69,44 +180,66 @@ def find_type(root, T, level, ignore_root=False):
 attempts to fix output channels of given ast to match out_c
 by finding topmost UnopIJ nodes and changing their output channels to out_c
 """
-def fix_channel_count_downwards(root, out_c):
-  if isinstance(root, BinopIII):
-    lfixed = fix_channel_count_downwards(root.lchild, out_c)
-    if not lfixed:
-      lfixed = fix_channel_count_downwards(root.lchild, 1)
-    if lfixed:
-      rfixed = fix_channel_count_downwards(root.rchild, out_c)
-      if not rfixed:
-        rfixed = fix_channel_count_downwards(root.rchild, 1)
-      return rfixed
-    else:
-      return False
-  elif isinstance(root, BinopIJK):
-    lchild_out_c = out_c // 2
-    if out_c % 2 == 1:
-      rchild_out_c = lchild_out_c + 1
-    else:
-      rchild_out_c = lchild_out_c
-    if lchild_out_c == 0:
-      return False
-    # naively divide out_c evenly across inputs
-    lfixed = fix_channel_count_downwards(root.lchild, out_c//2)
-    if lfixed:
-      rfixed = fix_channel_count_downwards(root.rchild, out_c//2)
-      return rfixed
-    else:
-      return False
-  elif isinstance(root, UnopIJ):
-    root.out_c = out_c
-    return True
-  elif isinstance(root, BinopIcJcKc) or isinstance(root, UnopI1) or isinstance(root, Const):
-    if root.out_c != out_c:
-      return False
-    else:
-      return True
-  else: # is type UnopII
-    return fix_channel_count_downwards(root.child, out_c)
+def fix_channel_count_downwards(root, out_c, fixed_shared_children=None):
+  if fixed_shared_children is None:
+    fixed_shared_children = {}
 
+  if id(root) in fixed_shared_children: # can't change channels - check it matches required out_c
+    fixed_out_c = fixed_shared_children[id(root)].out_c
+
+    if fixed_out_c != out_c:
+      return False
+    return True
+  else: # node is either not shared child or is being seen for the first time
+    if isinstance(root, BinopIII):
+      lfixed = fix_channel_count_downwards(root.lchild, out_c, fixed_shared_children)
+      if not lfixed:
+        lfixed = fix_channel_count_downwards(root.lchild, 1, fixed_shared_children)
+      if lfixed:
+        rfixed = fix_channel_count_downwards(root.rchild, out_c, fixed_shared_children)
+        if not rfixed:
+          rfixed = fix_channel_count_downwards(root.rchild, 1, fixed_shared_children)
+        
+        if rfixed and type(root.parent) is tuple:
+          fixed_shared_children[id(root)] = root
+        return rfixed
+      else:
+        return False
+    elif isinstance(root, BinopIJK):
+      lchild_out_c = out_c // 2
+      if out_c % 2 == 1:
+        rchild_out_c = lchild_out_c + 1
+      else:
+        rchild_out_c = lchild_out_c
+      if lchild_out_c == 0:
+        return False
+      # naively divide out_c evenly across inputs
+      lfixed = fix_channel_count_downwards(root.lchild, lchild_out_c, fixed_shared_children)
+      if lfixed:
+        rfixed = fix_channel_count_downwards(root.rchild, rchild_out_c, fixed_shared_children)
+        if rfixed and type(root.parent) is tuple:
+          fixed_shared_children[id(root)] = root
+        return rfixed
+      else:
+        return False
+    elif isinstance(root, UnopIJ):
+      root.out_c = out_c
+      if type(root.parent) is tuple:
+        fixed_shared_children[id(root)] = root
+      fixed = fix_channel_count_downwards(root.child, root.in_c, fixed_shared_children)
+      return fixed 
+    elif isinstance(root, BinopIcJcKc) or isinstance(root, UnopI1) or isinstance(root, Const):
+      if root.out_c != out_c:
+        return False
+      else:
+        if type(root.parent) is tuple:
+          fixed_shared_children[id(root)] = root
+        return True
+    else: # is type UnopII
+      fixed = fix_channel_count_downwards(root.child, out_c, fixed_shared_children)
+      if fixed and type(root.parent) is tuple:
+        fixed_shared_children[id(root)] = root
+      return fixed
 
 """
 attempts to fix input channels of parent tree to match output channels of subtree
@@ -143,6 +276,11 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c):
       return parent.in_c[0] == in_c
     else:
       return parent.in_c[1] == in_c
+  elif isinstance(parent, tuple):
+    fixed = True
+    for p in parent:
+      fixed = fixed and fix_channel_count_upwards(p, in_c)
+    return fixed
   else:
     return fix_channel_count_upwards(parent, in_c)
   
@@ -168,8 +306,6 @@ def check_linear_types(root):
       check_linear_types(root.lchild)
       check_linear_types(root.rchild)
     elif root.num_children == 1:
-      if not (isinstance(root.child, NonLinear) or isinstance(root.child, Special)):
-        print("root children should be NonLinear or Special: {}".format(root.dump()))
       assert(isinstance(root.child, NonLinear) or isinstance(root.child, Special))
       check_linear_types(root.child)
   if isinstance(root, NonLinear):
@@ -178,10 +314,7 @@ def check_linear_types(root):
               or isinstance(root.rchild, Linear) or isinstance(root.rchild, Special))
       check_linear_types(root.lchild)
       check_linear_types(root.rchild)
-    elif root.num_children == 1:
-      if not (isinstance(root.child, Linear) or isinstance(root.child, Special)):
-        print("root children should be Linear or Special: {}".format(root.dump()))
-      
+    elif root.num_children == 1:     
       assert(isinstance(root.child, Linear) or isinstance(root.child, Special))
       check_linear_types(root.child)
   else:

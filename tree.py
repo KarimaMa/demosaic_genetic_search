@@ -11,7 +11,14 @@ def hash_combine(h, otherh):
   otherh = np.uint64(otherh)
   h ^= ( otherh + np.uint64(0x9e3779b9) + (h << np.uint64(6)) + (h >> np.uint64(2)) )
   return h
-  
+
+def myhash(value):
+  if not type(value) is str:
+    value = str(value).encode('utf-8')
+  value = value.encode('utf-8')
+  return int(hashlib.sha256(value).hexdigest()[:16], 16)-2**63
+
+ 
 class Node:
   def __init__(self, name, num_children, parent=None):
     assert type(self) is not Node, "Do not try to instantiate abstract expressions"
@@ -21,9 +28,8 @@ class Node:
     self.num_children = num_children
 
   def __hash__(self):
-    name_hash = int(hashlib.sha1(self.__class__.__name__.encode('utf-8')).hexdigest(), 16)
-    name_hash_str = str(name_hash)
-    name_hash = int(name_hash_str[0:10])
+    name_hash = myhash(self.__class__.__name__)
+
     h = hash_combine(name_hash, self.out_c)
     if type(self.in_c) is tuple:
       h = hash_combine(h, self.in_c[0])
@@ -95,6 +101,12 @@ class Node:
       self.child.preorder(nodes)
     return nodes
 
+  def get_preorder_id(self, node):
+    preorder_nodes = self.preorder()
+    for i,n in enumerate(preorder_nodes):
+      if node is n:
+        return i
+        
   def get_inputs(self, nodes=None):
     if nodes is None:
       nodes = set()
@@ -142,11 +154,7 @@ class Node:
       self.lchild.assign_parents()
       self.rchild.assign_parents()
     elif self.num_children == 1:
-      if self.child.parent:
-        # child has multiple parents:
-        self.child.parent = (self.child.parent, self)
-      else:
-        self.child.parent = self
+      self.child.parent = self
       self.child.assign_parents()
 
   """
@@ -190,6 +198,22 @@ class Node:
       return (self.lchild.is_same_mod_channels(other.lchild) and self.rchild.is_same_mod_channels(other.rchild))\
           or (self.rchild.is_same_mod_channels(other.lchild) and self.lchild.is_same_mod_channels(other.rchild))
 
+  """
+  returns a list of the input and output channels of a tree in preorder
+  """
+  def get_input_output_channels(self):
+    in_out_channels = []
+    for n in self.preorder():
+      in_out_channels.append((n.in_c, n.out_c))
+    return in_out_channels
+
+  """
+  resets the input and output channels of a tree given a list of input output channels in preorder
+  """
+  def set_input_output_channels(self, in_out_channels):
+    for i,n in enumerate(self.preorder()):
+      n.in_c = in_out_channels[i][0]
+      n.out_c = in_out_channels[i][1]
 
   def __eq__(self, other):
     return self.is_same_as(other)

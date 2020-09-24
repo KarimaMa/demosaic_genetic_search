@@ -502,103 +502,117 @@ class SumROp(nn.Module):
 
 
 @extclass(Input)
-def ast_to_model(self):
+def ast_to_model(self, shared_children={}):
   return InputOp()
 
 @extclass(Add)
-def ast_to_model(self):
-  lmodel = self.lchild.ast_to_model()
-  rmodel = self.rchild.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
   return AddOp(lmodel, rmodel)
 
 @extclass(Sub)
-def ast_to_model(self):
-  lmodel = self.lchild.ast_to_model()
-  rmodel = self.rchild.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
   return SubOp(lmodel, rmodel)
 
 @extclass(Mul)
-def ast_to_model(self):
-  lmodel = self.lchild.ast_to_model()
-  rmodel = self.rchild.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
   return MulOp(lmodel, rmodel)
 
 @extclass(LogSub)
-def ast_to_model(self):
-  lmodel = self.lchild.ast_to_model()
-  rmodel = self.rchild.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  lmodel = self.lchild.ast_to_model(shared_children)
+  if not type(self.rchild.parent) is tuple:
+    print(f"right child of logsub parents {self.rchild.parent}")
+    print(self.rchild.parent.dump())
+    print(self.rchild.dump())
+  assert (type(self.rchild.parent) is tuple), "Right child of LogSub should have two parents"
+  if id(self.rchild) in shared_children:
+    rmodel = shared_children[id(self.rchild)]
+  else:
+    rmodel = self.rchild.ast_to_model(shared_children)
+    shared_children[id(self.rchild)] = rmodel
   return LogSubOp(lmodel, rmodel)
 
 @extclass(AddExp)
-def ast_to_model(self):
-  lmodel = self.lchild.ast_to_model()
-  rmodel = self.rchild.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  lmodel = self.lchild.ast_to_model(shared_children)
+  assert (type(self.rchild.parent) is tuple), "Right child of AddExp should have two parents"
+  if id(self.rchild) in shared_children:
+    rmodel = shared_children[id(self.rchild)]
+  else:
+    rmodel = self.rchild.ast_to_model(shared_children)
+    shared_children[id(self.rchild)] = rmodel
   return AddExpOp(lmodel, rmodel)
 
 @extclass(Stack)
-def ast_to_model(self):
-  lmodel = self.lchild.ast_to_model()
-  rmodel = self.rchild.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
   return StackOp(lmodel, rmodel)
 
 @extclass(ChromaExtractor)
-def ast_to_model(self):
-  lmodel = self.lchild.ast_to_model()
-  rmodel = self.rchild.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
   return ChromaExtractorOp(lmodel, rmodel)
 
 @extclass(GreenExtractor)
-def ast_to_model(self):
-  lmodel = self.lchild.ast_to_model()
-  rmodel = self.rchild.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
   return GreenExtractorOp(lmodel, rmodel)
 
 @extclass(Softmax)
-def ast_to_model(self):
-  child_model = self.child.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  child_model = self.child.ast_to_model(shared_children)
   return SoftmaxOp(child_model)
 
 @extclass(Relu)
-def ast_to_model(self):
-  child_model = self.child.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  child_model = self.child.ast_to_model(shared_children)
   return ReluOp(child_model)
 
 @extclass(Log)
-def ast_to_model(self):
-  child_model = self.child.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  child_model = self.child.ast_to_model(shared_children)
   return LogOp(child_model)
 
 @extclass(Exp)
-def ast_to_model(self):
-  child_model = self.child.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  child_model = self.child.ast_to_model(shared_children)
   return ExpOp(child_model)
 
 @extclass(Downsample)
-def ast_to_model(self):
-  child_model = self.child.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  child_model = self.child.ast_to_model(shared_children)
   return DownsampleOp(child_model, self.in_c, self.name)
 
 @extclass(Upsample)
-def ast_to_model(self):
-  child_model = self.child.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  child_model = self.child.ast_to_model(shared_children)
   return UpsampleOp(child_model, self.in_c, self.name)
 
 @extclass(Conv1x1)
-def ast_to_model(self):
-  child_model = self.child.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  child_model = self.child.ast_to_model(shared_children)
   return Conv1x1Op(child_model, self.in_c, self.out_c, self.name)
 
 @extclass(Conv1D)
-def ast_to_model(self):
-  child_model = self.child.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  child_model = self.child.ast_to_model(shared_children)
   return Conv1DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth)
 
 @extclass(Conv2D)
-def ast_to_model(self):
-  child_model = self.child.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  child_model = self.child.ast_to_model(shared_children)
   return Conv2DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth)
 
 @extclass(SumR)
-def ast_to_model(self):
-  child_model = self.child.ast_to_model()
+def ast_to_model(self, shared_children={}):
+  child_model = self.child.ast_to_model(shared_children)
   return SumROp(child_model)

@@ -6,6 +6,9 @@ import shutil
 import torch_model
 import math
 import csv
+import logging
+
+logger = logging.getLogger("DebugLogger")
 
 
 # from a github gist by victorlei
@@ -20,9 +23,24 @@ def get_csv_writer(filename):
   writer = csv.writer(csv_f, delimiter=',')
   return writer
 
-
 def compute_psnr(loss):
   return 10*math.log(math.pow(255,2) / math.pow(math.sqrt(loss)*255, 2),10)
+
+class PerfStatTracker():
+  def __init__(self):
+    self.function_time_sums = {}
+    self.function_call_counts = {}
+    self.function_time_avgs = {}
+
+  def update(self, function, time):
+    if not function in self.function_time_sums:
+      self.function_time_sums[function] = 0
+      self.function_call_counts[function] = 0
+      self.function_time_avgs[function] = 0
+
+    self.function_time_sums[function] += time
+    self.function_call_counts[function] += 1
+    self.function_time_avgs[function] = self.function_time_sums[function]/self.function_call_counts[function]
 
 
 class AvgrageMeter(object):
@@ -97,9 +115,24 @@ def load_model_from_file(model_file, model_version, device):
     pytorch_files = [l.strip() for l in f]
 
   model_ast = load_ast(ast_file)
+  logger.debug("\nloading model from files...")
+  logger.debug(model_ast.dump())
+
   model = model_ast.ast_to_model()
+  logger.debug("\nthe model parameters\n")
+  for n,p in model.named_parameters():
+    logger.debug(n)
+
+  logger.debug("\nthe model state dict parameters\n")
+  for k in model.state_dict():
+    logger.debug(k)
+
+  state_dict = torch.load(pytorch_files[model_version])
+  logger.debug("\nparameters in loaded state dict\n")
+  for k in state_dict:
+    logger.debug(f"{k}")
   model.load_state_dict(torch.load(pytorch_files[model_version]))
-  #model = torch.load(pytorch_files[model_version], map_location=torch.device('cpu'))
+
   if device == "gpu":
     model = model.cuda()
 
@@ -119,7 +152,7 @@ class ModelManager():
     self.SEED_ID = 0
     self.model_id_generator = model_id_generator(self.SEED_ID)
 
-  def load_model(self, model_id, model_version, device):
+  def load_model(self, model_id, model_version, device="gpu"):
     model_dir = os.path.join(self.base_dir, str(model_id))
     model_info_file = get_model_info_file(model_dir)
     return load_model_from_file(model_info_file, model_version, device)
@@ -137,7 +170,6 @@ class ModelManager():
     pytorch_files = [get_model_pytorch_file(model_dir, model_version) \
                     for model_version in range(len(models))]
     for i, model in enumerate(models):
-      #torch.save(model, pytorch_files[i])
       torch.save(model.state_dict(), pytorch_files[i])
 
     info_file = get_model_info_file(model_dir)

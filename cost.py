@@ -28,7 +28,7 @@ class CostTiers():
 	def __init__(self, compute_cost_ranges):
 		self.tiers = [{} for r in compute_cost_ranges]
 		self.compute_cost_ranges = compute_cost_ranges
-
+		self.max_cost = compute_cost_ranges[-1][1]
 	"""
 	model_file is file with model topology and model weights
 	"""
@@ -44,12 +44,14 @@ class CostTiers():
 	"""
 	def keep_topk(self, k):
 		for tid, tier in enumerate(self.tiers):
+			if len(tier) == 0:
+				continue
 			sorted_models = sorted(tier.items(), key= lambda item: item[1][1])
 			new_tier = {}
+
 			for i in range(min(k, len(sorted_models))):
 				new_tier[sorted_models[i][0]] = sorted_models[i][1]
 			self.tiers[tid] = new_tier
-
 
 
 class ModelEvaluator():
