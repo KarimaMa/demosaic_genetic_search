@@ -9,7 +9,6 @@ import os
 import random 
 import numpy as np
 import sys
-import asyncio
 
 
 sys.path.append(sys.path[0].split("/")[0])
@@ -20,7 +19,7 @@ import util
 import meta_model
 import model_lib
 from torch_model import ast_to_model
-from dataset import GreenDataset, ids_from_file
+from dataset import GreenSharedDataset, ids_from_file
 from validation_variance_tracker import  VarianceTracker, LRTracker
 
 def get_optimizers(args, models):
@@ -39,8 +38,48 @@ def create_loggers(model_dir, model_id, num_models, mode):
   loggers = [util.create_logger(f'model_{model_id}_v{i}_{mode}_logger', logging.INFO, log_format, log_files[i]) for i in range(num_models)]
   return loggers
 
+
+def create_validation_dataset(args, inputs, inputs_shape, labels, labels_shape):
+  inputs = np.frombuffer(inputs, dtype=float)
+  labels = np.frombuffer(labels, dtype=float)
+
+  inputs = inputs.reshape(inputs_shape)
+  labels = labels.reshape(labels_shape)
+
+  validation_data = GreenSharedDataset(data_file=args.validation_file, inputs=inputs, labels=labels)
+  num_validation = len(validation_data)
+  validation_indices = list(range(num_validation))
+
+  validation_queue = torch.utils.data.DataLoader(
+      validation_data, batch_size=args.batch_size,
+      sampler=torch.utils.data.sampler.SubsetRandomSampler(validation_indices),
+      pin_memory=True, num_workers=0)
+  return validation_queue
+
+
+def create_train_dataset(args, inputs, inputs_shape, labels, labels_shape):
+  full_data_filenames = ids_from_file(args.training_file)
+  used_filenames = full_data_filenames[0:int(args.train_portion)]
+  inputs = np.frombuffer(inputs, dtype=float)
+  labels = np.frombuffer(labels, dtype=float)
+  
+  inputs = inputs.reshape(inputs_shape)
+  labels = labels.reshape(labels_shape)
+
+  train_data = GreenSharedDataset(data_filenames=used_filenames, inputs=inputs, labels=labels) 
+
+  num_train = len(train_data)
+  train_indices = list(range(num_train))
+  
+  train_queue = torch.utils.data.DataLoader(
+      train_data, batch_size=args.batch_size,
+      sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
+      pin_memory=True, num_workers=0)
+  return train_queue
+
+
 def train_model(args, gpu_id, train_queue, valid_queue, model_id, models, model_dir, experiment_logger):
-  print(f"training {len(models)} models")
+  print(f"training {len(models)} models on GPU {gpu_id}")
 
   train_loggers = create_loggers(model_dir, model_id, len(models), "train")
   validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
@@ -53,7 +92,7 @@ def train_model(args, gpu_id, train_queue, valid_queue, model_id, models, model_
   criterion = nn.MSELoss()
   optimizers = get_optimizers(args, models)
 
-  lr_tracker, optimizers, train_loggers, validation_loggers = lr_search(args, gpu_id, models, model_dir, criterion, train_queue, train_loggers, valid_queue, validation_loggers)
+  lr_tracker, optimizers, train_loggers, validation_loggers = lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, valid_queue, validation_loggers)
   reuse_lr_search_epoch = lr_tracker.proposed_lrs[-1] == lr_tracker.proposed_lrs[-2]
   for lr_search_iter, variance in enumerate(lr_tracker.seen_variances):
     experiment_logger.info(f"PROPOSED LEARNING RATE {lr_tracker.proposed_lrs[lr_search_iter]} INDUCES VALIDATION VARIANCE {variance} AT A VALIDATION FRE0QUENCY OF {args.validation_freq}")
@@ -61,8 +100,8 @@ def train_model(args, gpu_id, train_queue, valid_queue, model_id, models, model_
 
   if not reuse_lr_search_epoch:
     # erase logs from previous epoch and reset models
-    train_loggers = create_loggers(model_dir, len(models), "train")
-    validation_loggers = create_loggers(model_dir, len(models), "validation")
+    train_loggers = create_loggers(model_dir, model_id, len(models), "train")
+    validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
     cur_epoch = 0
     for m in models:
       m._initialize_parameters()
@@ -87,7 +126,7 @@ def train_model(args, gpu_id, train_queue, valid_queue, model_id, models, model_
   return validation_psnrs, train_psnrs
 
 
-def lr_search(args, gpu_id, models, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers):
+def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers):
   lr_tracker = LRTracker(args.learning_rate, args.variance_max, args.variance_min)
   for step in range(args.lr_search_steps):
     optimizers = get_optimizers(args, models)
@@ -97,8 +136,8 @@ def lr_search(args, gpu_id, models, model_dir, criterion, train_queue, train_log
     if lr_tracker.proposed_lrs[-1] == lr_tracker.proposed_lrs[-2]: 
       break
     # trying a new lr - erase logs from previous epoch and reset models
-    train_loggers = create_loggers(model_dir, len(models), "train")
-    validation_loggers = create_loggers(model_dir, len(models), "validation")
+    train_loggers = create_loggers(model_dir, model_id, len(models), "train")
+    validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
     for m in models:
       m._initialize_parameters()
     models = [model.to(device=f"cuda:{gpu_id}") for model in models]
@@ -189,105 +228,4 @@ def infer(args, gpu_id, valid_queue, models, criterion):
         loss_trackers[i].update(loss.item(), n)
 
   return [loss_tracker.avg for loss_tracker in loss_trackers]
-
-
-if __name__ == "__main__":
-  parser = argparse.ArgumentParser("Demosaic")
-  parser.add_argument('--batch_size', type=int, default=64, help='batch size')
-  parser.add_argument('--learning_rate', type=float, default=0.025, help='initial learning rate')
-  parser.add_argument('--lr_search_steps', type=int, help='how many line search iters for finding learning rate')
-  parser.add_argument('--variance_min', type=float, help='minimum validation psnr variance')
-  parser.add_argument('--variance_max', type=float, help='maximum validation psnr variance')
-  parser.add_argument('--weight_decay', type=float, default=1e-8, help='weight decay')
-  parser.add_argument('--report_freq', type=float, default=200, help='report frequency')
-  parser.add_argument('--save_freq', type=float, default=2000, help='save frequency')
-  parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
-  parser.add_argument('--epochs', type=int, default=10, help='num of training epochs')
-  parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
-  parser.add_argument('--multires_model', action='store_true')
-  parser.add_argument('--multires_model2d', action='store_true')
-  parser.add_argument('--demosaicnet', action='store_true')
-  parser.add_argument('--ahd', action='store_true')
-  parser.add_argument('--ahd2d', action='store_true')
-  parser.add_argument('--basic_model2d', action='store_true')
-  parser.add_argument('--basic_model', action='store_true')
-  parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
-  parser.add_argument('--save', type=str, help='experiment name')
-  parser.add_argument('--seed', type=int, default=2, help='random seed')
-  parser.add_argument('--train_portion', type=int, default=1e5, help='portion of training data to use')
-  parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
-  parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
-  parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
-  parser.add_argument('--validation_freq', type=int, default=None, help='validation frequency')
-
-  args = parser.parse_args()
-
-  args.model_path = os.path.join(args.save, args.model_path)
-  args.results_file = os.path.join(args.save, args.results_file)
-  model_manager = util.ModelManager(args.model_path)
-  model_dir = model_manager.model_dir('seed')
-  util.create_dir(model_dir)
-
-  log_format = '%(asctime)s %(levelname)s %(message)s'
-  logging.basicConfig(stream=sys.stdout, level=logging.INFO, \
-    format=log_format, datefmt='%m/%d %I:%M:%S %p')
-
-  logger = util.create_logger('training_logger', logging.INFO, log_format, \
-                                os.path.join(args.save, 'training_log'))
-  logger.info("args = %s", args)
-
-  if args.multires_model:
-    logger.info("TRAINING MULTIRES GREEN")
-    green = model_lib.multires_green_model()
-  elif args.multires_model2d:
-    logger.info("TRAINING MULTIRES2D GREEN")
-    green = model_lib.multires2D_green_model()
-  elif args.demosaicnet:
-    logger.info("TRAINING DEMOSAICNET GREEN")
-    green = model_lib.mini_demosaicnet()
-  elif args.ahd:
-    logger.info(f"TRAINING AHD GREEN")
-    green = model_lib.ahd1D_green_model()
-  elif args.ahd2d:
-    logger.info(f"TRAINING AHD2D GREEN")
-    green = model_lib.ahd2D_green_model()
-  elif args.basic_model2d:
-    logger.info(f"TRAINING BASIC_MODEL2D GREEN")
-    green = model_lib.basic2D_green_model()
-  elif args.basic_model:
-    logger.info("TRAINING BASIC GREEN")
-    green = model_lib.basic1D_green_model()
-
-  if not torch.cuda.is_available():
-    sys.exit(1)
-
-  random.seed(args.seed)
-  np.random.seed(args.seed)
-  torch.cuda.set_device(args.gpu)
-  cudnn.benchmark = False
-  torch.manual_seed(args.seed)
-
-  cudnn.enabled=True
-  cudnn.deterministic=True
-  torch.cuda.manual_seed(args.seed)
-
-  models = [green.ast_to_model().cuda() for i in range(args.model_initializations)]
-  for m in models:
-    m._initialize_parameters()
-
-  validation_losses, training_losses = train_model(args, gpu_id, models, model_dir, logger) 
-
-  model_manager.save_model(models, green, model_dir)
-
-  with open(args.results_file, "a+") as f:
-    training_losses = [str(tl) for tl in training_losses]
-    training_losses_str = ",".join(training_losses)
-
-    validation_losses = [str(vl) for vl in validation_losses]
-    validation_losses_str = ",".join(validation_losses)
-
-    data_string = f"training losses: {training_losses_str} validation losses: {validation_losses_str}\n"
-
-    f.write(data_string)
-
 
