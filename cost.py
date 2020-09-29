@@ -71,7 +71,7 @@ class CostTiers():
 		for tid, tier in enumerate(self.tiers):
 			if len(tier) == 0:
 				continue
-			sorted_models = sorted(tier.items(), key= lambda item: item[1][1])
+			sorted_models = sorted(tier.items(), key= lambda item: item[1][1], reverse=True)
 			new_tier = {}
 
 			for i in range(min(k, len(sorted_models))):
