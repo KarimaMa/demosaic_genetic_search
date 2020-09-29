@@ -508,6 +508,8 @@ class Searcher():
               continue
             # if model weights and ast were successfully saved, add model to cost tiers
             min_perf_cost = min(mutation_batch_info.validation_psnrs[new_model_id])
+            if math.isnan(min_perf_cost):
+              continue # don't add model to tier 
             new_cost_tiers.add(new_model_id, new_model_entry['compute_cost'], min_perf_cost)
 
           self.model_database.save()
