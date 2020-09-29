@@ -109,7 +109,7 @@ def get_model_ast_file(model_dir):
 def get_model_info_file(model_dir):  
   return os.path.join(model_dir, 'model_info')
 
-def load_model_from_file(model_file, model_version, device):
+def load_model_from_file(model_file, model_version, gpu_id=None):
   with open(model_file, "r") as f:
     ast_file = f.readline().strip()
     pytorch_files = [l.strip() for l in f]
@@ -118,7 +118,7 @@ def load_model_from_file(model_file, model_version, device):
   logger.debug("\nloading model from files...")
   logger.debug(model_ast.dump())
 
-  model = model_ast.ast_to_model()
+  model = model_ast.ast_to_model(gpu_id)
   logger.debug("\nthe model parameters\n")
   for n,p in model.named_parameters():
     logger.debug(n)
@@ -133,8 +133,8 @@ def load_model_from_file(model_file, model_version, device):
     logger.debug(f"{k}")
   model.load_state_dict(torch.load(pytorch_files[model_version]))
 
-  if device == "gpu":
-    model = model.cuda()
+  if gpu_id:
+    model = model.to(device=f"cuda:{gpu_id}")
 
   return model, model_ast
 
@@ -152,7 +152,7 @@ class ModelManager():
     self.SEED_ID = 0
     self.model_id_generator = model_id_generator(self.SEED_ID)
 
-  def load_model(self, model_id, model_version, device="gpu"):
+  def load_model(self, model_id, model_version, device=None):
     model_dir = os.path.join(self.base_dir, str(model_id))
     model_info_file = get_model_info_file(model_dir)
     return load_model_from_file(model_info_file, model_version, device)
