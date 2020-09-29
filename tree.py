@@ -1,9 +1,10 @@
 """
 Functions for managing AST trees
 """
-import hashlib
 from abc import ABC, abstractmethod
+import hashlib
 import numpy as np
+
 
 def hash_combine(h, otherh):
   # from boost
@@ -18,7 +19,7 @@ def myhash(value):
   value = value.encode('utf-8')
   return int(hashlib.sha256(value).hexdigest()[:16], 16)-2**63
 
- 
+
 class Node:
   def __init__(self, name, num_children, parent=None):
     assert type(self) is not Node, "Do not try to instantiate abstract expressions"
@@ -26,7 +27,7 @@ class Node:
     self.parent = parent
     self.name = name
     self.num_children = num_children
-
+    
   def __hash__(self):
     name_hash = myhash(self.__class__.__name__)
 
@@ -43,6 +44,20 @@ class Node:
     elif self.num_children == 1:
       h = hash_combine(h, hash(self.child))
     return int(h)
+
+  def id_string(self):
+    id_str = f"{self.__class__.__name__}-"
+    id_str += f"{self.out_c}-"
+    if type(self.in_c) is tuple:
+      id_str += f"{self.in_c[0]},{self.in_c[1]}-"
+    else:
+      id_str += f"{self.in_c}-"
+    if self.num_children == 2:
+      id_str += f"{self.lchild.id_string()}-"
+      id_str += f"{self.rchild.id_string()}-"
+    elif self.num_children == 1:
+      id_str += f"{self.child.id_string()}-"
+    return id_str
 
     
   @abstractmethod
