@@ -40,8 +40,14 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import ctypes
 
+
+
+TrainData = None
+ValData = None
+
+
 def create_validation_dataset(args):
-  validation_data = GreenDataset(data_file=args.validation_file, RAM=True)
+  validation_data = GreenDataset(data_file=args.validation_file, RAM=False)
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
 
@@ -55,7 +61,7 @@ def create_validation_dataset(args):
 def create_train_dataset(args):
   full_data_filenames = ids_from_file(args.training_file)
   used_filenames = full_data_filenames[0:int(args.train_portion)]
-  train_data = GreenDataset(data_filenames=used_filenames, RAM=True) 
+  train_data = GreenDataset(data_filenames=used_filenames, RAM=False) 
 
   num_train = len(train_data)
   train_indices = list(range(num_train))
@@ -131,6 +137,7 @@ def init_process(rank, size, fn, train_args, gpu_id, train_data, valid_data, mod
   os.environ['MASTER_PORT'] = '29500'
 
   dist.init_process_group(backend, rank=rank, world_size=size)
+
   fn(rank, train_args, gpu_id, train_data, valid_data, model_id, models, model_dir, \
     train_psnrs, valid_psnrs, log_format, debug_logger)
 
