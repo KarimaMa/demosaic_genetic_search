@@ -83,7 +83,7 @@ class GreenDataset(data.Dataset):
       self.inputs = []
       self.labels = []
       for index in range(len(self.list_IDs)):
-        if index % 1000 == 0:
+        if index % 10000 == 0:
           print(f"loading {index}")
         image_f = self.list_IDs[index]
         img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
