@@ -1,7 +1,7 @@
 """
 Computes per pixel cost of a program tree
 """
-
+import random
 import util
 import operator
 import logging
@@ -22,6 +22,31 @@ RELU_COST = 1
 DOWNSAMPLE_FACTOR_SQ = 9
 DIRECTIONS = 4
 KERNEL_W = 5
+
+
+"""
+probabilistically picks models to reproduce according to their PSNR
+"""
+class Sampler():
+	def __init__(self, cost_tier):
+		self.cost_tier = cost_tier
+		self.model_pdf = {}
+		self.min = 50
+		self.max = 0
+		self.base = min([perf for _, (_, perf) in self.cost_tier.items()])
+		self.perf_sum = self.base
+
+		for model_id, (compute_cost, model_perf) in self.cost_tier.items():
+			self.max = max(self.max, model_perf)
+			self.min = min(self.min, model_perf)
+			self.model_pdf[model_id] = (self.perf_sum, self.perf_sum + (model_perf-self.base))
+			self.perf_sum += (model_perf - self.base)
+
+	def sample(self):
+		value = random.uniform(self.base, self.perf_sum)
+		for model_id, (perf_min, perf_max) in self.model_pdf.items():
+			if value <= perf_max and value >= perf_min:
+				return model_id
 
 
 class CostTiers():
