@@ -25,8 +25,7 @@ import sys
 sys.path.append(sys.path[0].split("/")[0])
 from tree import has_loop
 from cost import ModelEvaluator, CostTiers, Sampler
-#from demosaic_ast import structural_hash, Downsample
-from demosaic_ast import *
+from demosaic_ast import structural_hash, Downsample
 from mutate import Mutator, has_downsample, MutationType
 import util
 from database import Database 
@@ -326,8 +325,9 @@ class Searcher():
     print(f"number of new model_ids {len(mutation_batch_info.model_ids)}")
 
     processes = []
-    valid_psnrs = mp.Array(ctypes.c_double, size*self.args.model_initializations)
-    train_psnrs = mp.Array(ctypes.c_double, size*self.args.model_initializations)
+    valid_psnrs = mp.Array(ctypes.c_double, [-1]*(size*self.args.model_initializations))
+    train_psnrs = mp.Array(ctypes.c_double, [-1]*(size*self.args.model_initializations))
+    print(valid_psnrs)
 
     rankd2modelId = {}
     for rank in range(size):
@@ -346,8 +346,28 @@ class Searcher():
       p.start()
       processes.append(p)
 
-    for p in processes:
-      p.join()
+    timeout = self.args.train_timeout
+    start = time.time()
+    while time.time() - start <= timeout:
+      if any(p.is_alive() for p in processes):
+        time.sleep(10)  # Just to avoid hogging the CPU
+      else:
+        print('All training processes finished on time!')
+        for p in processes:
+          p.join() # make sure things are stopped properly
+          print('stopping process {}'.format(p.name))
+        break
+    else:
+      # We only enter this if we didn't 'break' above during the while loop!
+      print("timed out, killing all processes")
+      for p in processes:
+        if not p.is_alive():
+          print(f'process {p.name} is finished')
+        else:
+          print(f'process {p.name} killed due to timeout')
+          p.terminate()
+        print(f' -> stopping (joining) process {p.name}')
+        p.join()
 
     for rank in range(size):
       model_id = rankd2modelId[rank]
