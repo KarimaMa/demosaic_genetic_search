@@ -39,7 +39,7 @@ from dataset import GreenDataset, ids_from_file
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import ctypes
-
+import datetime
 
 
 TrainData = None
@@ -355,6 +355,7 @@ class Searcher():
 
     timeout = self.args.train_timeout
     start = time.time()
+    print(f"launching training batch at {datetime.datetime.now()}")
     while time.time() - start <= timeout:
       if any(p.is_alive() for p in processes):
         time.sleep(10)  # Just to avoid hogging the CPU
@@ -366,12 +367,12 @@ class Searcher():
         break
     else:
       # We only enter this if we didn't 'break' above during the while loop!
-      print("timed out, killing all processes")
+      print("timed out, killing all processes still alive")
       for p in processes:
         if not p.is_alive():
           print(f'process {p.name} is finished')
         else:
-          print(f'process {p.name} killed due to timeout')
+          print(f'process {p.name} killed due to timeout at {datetime.datetime.now()}')
           p.terminate()
         print(f' -> stopping (joining) process {p.name}')
         p.join()
@@ -594,7 +595,7 @@ if __name__ == "__main__":
   parser.add_argument('--load_timeout', type=int, default=10)
   parser.add_argument('--mutate_timeout', type=int, default=30)
   parser.add_argument('--lowering_timeout', type=int, default=10)
-  parser.add_argument('--train_timeout', type=int, default=1800)
+  parser.add_argument('--train_timeout', type=int, default=2400)
   parser.add_argument('--save_timeout', type=int, default=10)
 
   # training parameters
