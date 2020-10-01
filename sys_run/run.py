@@ -74,8 +74,8 @@ def create_train_dataset(args):
 
 
 def build_model_database(args):
-  fields = ["model_id", "id_str", "hash", "structural_hash", "occurrences", "best_init"]
-  field_types = [int, int, int, int, int]
+  fields = ["model_id", "id_str", "hash", "structural_hash", "generation", "occurrences", "best_init"]
+  field_types = [int, int, int, int, int, int, int]
   for model_init in range(args.model_initializations):
     fields += [f"psnr_{model_init}"]
     field_types += [float]
@@ -93,11 +93,12 @@ def build_failure_database(args):
   failure_database.cntr = 0
   return failure_database
 
-def model_database_entry(model_id, id_str, model_ast, shash, compute_cost, parent_id, mutation_stats):
+def model_database_entry(model_id, id_str, model_ast, shash, generation, compute_cost, parent_id, mutation_stats):
   data = {'model_id': model_id,
          'id_str' : id_str,
          'hash': hash(model_ast),
          'structural_hash': shash,
+         'generation': generation,
          'occurrences': 1,
          'compute_cost': compute_cost,
          'parent_id': parent_id,
@@ -131,7 +132,7 @@ def run_train(rank, train_args, gpu_id, train_data, valid_data, model_id, \
 
  
 def init_process(rank, size, fn, train_args, gpu_id, train_data, valid_data, model_id, models, model_dir,\
-                train_psnrs, valid_psnrs, log_format, debug_logger, backend='gloo'):
+                train_psnrs, valid_psnrs, log_format, debug_logger, backend='nccl'):
   """ Initialize the distributed environment. """
   os.environ['MASTER_ADDR'] = '127.0.0.1'
   os.environ['MASTER_PORT'] = '29500'
@@ -195,12 +196,14 @@ class Searcher():
                                   os.path.join(args.save, 'search_log'))
     self.debug_logger = util.create_logger('debug_logger', logging.DEBUG, self.log_format, \
                                   os.path.join(args.save, 'debug_log'))
+    self.mysql_logger = util.create_logger('mysql_logger', logging.INFO, self.log_format, \
+                                  os.path.join(args.save, 'myql_log'))
     self.monitor_logger = util.create_logger('monitor_logger', logging.INFO, self.log_format, \
                                   os.path.join(args.save, 'monitor_logger'))
     self.search_logger.info("args = %s", args)
 
     self.args = args  
-    self.mutator = Mutator(args, debug_logger)
+    self.mutator = Mutator(args, debug_logger, mysql_logger)
     self.evaluator = ModelEvaluator(args)
     self.model_manager = util.ModelManager(args.model_path)
 
@@ -348,7 +351,7 @@ class Searcher():
       models = mutation_batch_info.pytorch_models[model_id]
 
       p = mp.Process(target=init_process, args=(rank, size, run_train, self.args, gpu_id, train_data, \
-            valid_data, model_id, models, model_dir, train_psnrs, valid_psnrs, log_format, self.debug_logger))
+            valid_data, model_id, models, model_dir, train_psnrs, valid_psnrs, self.log_format, self.debug_logger))
 
       p.start()
       processes.append(p)
@@ -430,6 +433,7 @@ class Searcher():
              'hash': hash(seed_ast),
              'structural_hash': structural_hash(seed_ast),
              'occurrences': 1,
+             'generation': -1,
              'best_init': 0,
              'psnr_0': model_accuracy,
              'psnr_1': -1,
@@ -491,22 +495,11 @@ class Searcher():
               continue
 
             new_model_dir = self.model_manager.model_dir(new_model_id)
-            new_model_entry = model_database_entry(new_model_id, new_model_ast.id_string(), new_model_ast, shash, compute_cost, model_id, mutation_stats)
+            new_model_entry = model_database_entry(new_model_id, new_model_ast.id_string(), new_model_ast, shash, generation, compute_cost, model_id, mutation_stats)
             mutation_batch_info.add_model(new_model_id, gpu_id, new_models, new_model_dir, new_model_ast, new_model_entry)
           
           # wait for all training tasks to finish
-          #done, notdone = asyncio.run(self.await_training(mutation_batch_info))
           self.launch_train_processes(mutation_batch_info)
-
-          # finished_ids = []
-          # for task in done:
-          #   new_model_id, validation_psnr, train_psnr = task.result()
-          #   mutation_batch_info.update_model_perf(new_model_id, validation_psnr, train_psnr)
-          #   finished_ids.append(new_model_id)
-
-          # for new_model_id in training_tasks:
-          #   if not new_model_id in finished_ids:
-          #     self.monitor_logger.info(f"---\nfailed to train model {new_model_id}\n---")
 
           # update model database with models that finished training 
           for new_model_id in mutation_batch_info.model_ids: #finished_ids:
@@ -518,7 +511,9 @@ class Searcher():
             min_perf_cost = min(mutation_batch_info.validation_psnrs[new_model_id])
             if math.isnan(min_perf_cost):
               continue # don't add model to tier 
-            new_cost_tiers.add(new_model_id, new_model_entry['compute_cost'], min_perf_cost)
+
+            compute_cost = mutation_batch_info.database_entries[new_model_id]
+            new_cost_tiers.add(new_model_id, compute_cost, min_perf_cost)
 
           self.model_database.save()
 
@@ -614,6 +609,8 @@ if __name__ == "__main__":
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
+
+  parser.add_argument('--mysql_auth', type=str)
 
   args = parser.parse_args()
 

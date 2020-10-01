@@ -50,10 +50,11 @@ class Sampler():
 
 
 class CostTiers():
-	def __init__(self, compute_cost_ranges):
+	def __init__(self, compute_cost_ranges, logger):
 		self.tiers = [{} for r in compute_cost_ranges]
 		self.compute_cost_ranges = compute_cost_ranges
 		self.max_cost = compute_cost_ranges[-1][1]
+		self.logger = logger
 	"""
 	model_file is file with model topology and model weights
 	"""
@@ -61,6 +62,8 @@ class CostTiers():
 		for i, cost_range in enumerate(self.compute_cost_ranges):
 			if compute_cost < cost_range[1]:
 				self.tiers[i][model_id] = (compute_cost, model_accuracy)
+				self.logger.info(f"adding model {model_id} with compute cost " +
+								f"{compute_cost} and psnr {model_accuracy} to tier {i}")
 				return
 		assert False, f"model cost {compute_cost} exceeds max tier cost range"
 
