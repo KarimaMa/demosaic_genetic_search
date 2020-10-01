@@ -161,6 +161,38 @@ def mysql_insert(password, model_id, machine, exp_dir, tree_hash, id_str):
   record.save()
 
 
+def mysql_delete(password):
+  db_host = 'mysql.csail.mit.edu'
+  db_name = 'ModelSearch'
+  db_user = 'karima'
+  db_password = password
+  db_charset = 'utf8mb4'
+    
+  db_conn = {
+      'host': db_host,
+      'user': db_user,
+      'passwd': db_password,
+  }
+
+  db = MySQLDatabase(db_name, **db_conn)
+
+  class BaseModel(Model):
+    class Meta:
+      database = db
+
+  class SeenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+
+  found = SeenTrees.select().where(SeenTrees.model_id != 0)
+  for f in found:
+    f.delete_instance()
+
+
 if __name__ == "__main__":
   # print("inserting seed tree")
   # create_table("trisan4th")

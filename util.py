@@ -147,11 +147,12 @@ def model_id_generator(base_val):
 
 
 class ModelManager():
-  def __init__(self, model_path):
+  def __init__(self, model_path, start_id):
     self.base_dir = model_path
+    self.start_id = start_id
+    self.model_id_generator = model_id_generator(self.start_id)
     self.SEED_ID = 0
-    self.model_id_generator = model_id_generator(self.SEED_ID)
-
+    
   def load_model(self, model_id, model_version, device=None):
     model_dir = os.path.join(self.base_dir, str(model_id))
     model_info_file = get_model_info_file(model_dir)

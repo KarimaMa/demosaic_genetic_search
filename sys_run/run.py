@@ -205,7 +205,7 @@ class Searcher():
     self.args = args  
     self.mutator = Mutator(args, self.debug_logger, self.mysql_logger)
     self.evaluator = ModelEvaluator(args)
-    self.model_manager = util.ModelManager(args.model_path)
+    self.model_manager = util.ModelManager(args.model_path, args.starting_model_id)
 
     self.model_database = build_model_database(self.args)
     self.failure_database = build_failure_database(self.args)
@@ -408,12 +408,9 @@ class Searcher():
 
   # searches over program mutations within tiers of computational cost
   def search(self, compute_cost_tiers, tier_size):
-    # HACK FOR NOW  
-    gpu_id = 3
-
     cost_tiers = CostTiers(compute_cost_tiers, self.search_logger)
 
-    seed_model, seed_ast = util.load_model_from_file(self.args.seed_model_file, self.args.seed_model_version, gpu_id)
+    seed_model, seed_ast = util.load_model_from_file(self.args.seed_model_file, self.args.seed_model_version, 0)
     seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)
     util.create_dir(seed_model_dir)
     seed_ast.compute_input_output_channels()
@@ -566,6 +563,7 @@ if __name__ == "__main__":
   parser.add_argument('--max_subtree_size', type=int, default=11, help='maximum size of subtree in insertion')
   parser.add_argument('--structural_sim_reject', type=float, default=0.66, help='rejection probability threshold for structurally similar trees')
 
+  parser.add_argument('--starting_model_id', type=int)
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
   parser.add_argument('--model_database_dir', type=str, default='model_database', help='path to save model statistics')
   parser.add_argument('--failure_database_dir', type=str, default='failure_database', help='path to save mutation failure statistics')
