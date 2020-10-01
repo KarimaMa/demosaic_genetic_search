@@ -51,6 +51,7 @@ def create_table(password):
   for t in query:
     print(t.model_id, t.add_date, t.tree_hash, t.tree_id_str, t.machine, t.experiment_dir)
 
+
 def select(password):
   db_host = 'mysql.csail.mit.edu'
   db_name = 'ModelSearch'
@@ -78,7 +79,7 @@ def select(password):
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
 
-  query = SeenTrees.select().where(SeenTrees.tree_hash == "000000000000338642508656442816", SeenTrees.tree_id_str == "GreenExtractor-1-1,1-SumR-1-16-Mul-16-16,16-Conv1D-16-1-Input-1-1---Softmax-16-16-Conv1x1-16-16-Relu-16-16-Conv1x1-16-16-Relu-16-16-Conv1D-16-1-Input-1-1----------Input-1-1--")
+  query = SeenTrees.select()
   print(len(query))
   for t in query:
     print(t.model_id, t.add_date, t.tree_hash, t.tree_id_str, t.machine, t.experiment_dir)
@@ -125,6 +126,39 @@ def find(password, tree_hash, tree_id_string, logger):
     logger.info("---------")
     return True
   return False
+
+
+def mysql_insert(password, model_id, machine, exp_dir, tree_hash, id_str):
+  db_host = 'mysql.csail.mit.edu'
+  db_name = 'ModelSearch'
+  db_user = 'karima'
+  db_password = password
+  db_charset = 'utf8mb4'
+    
+  db_conn = {
+      'host': db_host,
+      'user': db_user,
+      'passwd': db_password,
+  }
+
+  db = MySQLDatabase(db_name, **db_conn)
+
+  class BaseModel(Model):
+    class Meta:
+      database = db
+
+  class SeenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+
+  tree_hash = str(tree_hash).zfill(30)
+  record = SeenTrees.create(model_id=model_id, tree_hash=tree_hash, machine=machine, \
+                                  experiment_dir=exp_dir, tree_id_str=id_str)
+  record.save()
 
 
 if __name__ == "__main__":
