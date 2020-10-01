@@ -512,7 +512,7 @@ class Searcher():
             if math.isnan(min_perf_cost):
               continue # don't add model to tier 
 
-            compute_cost = mutation_batch_info.database_entries[new_model_id]
+            compute_cost = mutation_batch_info.database_entries[new_model_id]["compute_cost"]
             new_cost_tiers.add(new_model_id, compute_cost, min_perf_cost)
 
           self.model_database.save()
