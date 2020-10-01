@@ -23,10 +23,8 @@ from tree import *
 from restrictions import *
 from util import extclass
 from enum import Enum
+from mysql_db import find
 
-LOG_FILENAME='log.txt'
-logger = logging.getLogger("DebugLogger")
-logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG)
 
 CHANNELS = set((1,4,8,12))
 CHANNELS = set((8,))
@@ -50,11 +48,12 @@ unless tree size exceeds MAX_NODES. If tree size exceeds MAX_NODES
 only performs deletion mutation
 """
 class Mutator():
-  def __init__(self, args, debug_logger):
+  def __init__(self, args, debug_logger, mysql_logger):
     
     self.args = args
     self.debug_logger = debug_logger
-
+    self.mysql_logger = mysql_logger
+    
     self.seen_models = {}
     self.seen_structures = set()
 
@@ -160,7 +159,10 @@ class Mutator():
           continue
 
         # reject trees we've seen already 
-        if not new_tree in self.seen_models:
+        # consult shared db for seen models
+        seen_on_other_machines = find(self.args.mysql_auth, hash(new_tree), \
+                                      new_tree.id_string(), self.mysql_logger)
+        if (not new_tree in self.seen_models) and (not seen_on_other_machines):
           # reject with some chance trees with previously seen structure
           h = structural_hash(new_tree)
           if h in self.seen_structures:
@@ -173,7 +175,7 @@ class Mutator():
             stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections)
             return new_tree, h, stats
 
-        else: # we've seen and evaluated this exact tree before
+        if new_tree in self.seen_models: # we've seen and evaluated this exact tree before
           self.seen_models[new_tree]["model_ids"].append(int(model_id))
           seen_rejections += 1
           continue
