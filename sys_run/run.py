@@ -190,7 +190,7 @@ class Searcher():
     # build loggers
     self.log_format = '%(asctime)s %(levelname)s %(message)s'
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, \
-      format=log_format, datefmt='%m/%d %I:%M:%S %p')
+      format=self.log_format, datefmt='%m/%d %I:%M:%S %p')
 
     self.search_logger = util.create_logger('search_logger', logging.INFO, self.log_format, \
                                   os.path.join(args.save, 'search_log'))
@@ -203,7 +203,7 @@ class Searcher():
     self.search_logger.info("args = %s", args)
 
     self.args = args  
-    self.mutator = Mutator(args, debug_logger, mysql_logger)
+    self.mutator = Mutator(args, self.debug_logger, self.mysql_logger)
     self.evaluator = ModelEvaluator(args)
     self.model_manager = util.ModelManager(args.model_path)
 
@@ -411,7 +411,7 @@ class Searcher():
     # HACK FOR NOW  
     gpu_id = 3
 
-    cost_tiers = CostTiers(compute_cost_tiers)
+    cost_tiers = CostTiers(compute_cost_tiers, self.search_logger)
 
     seed_model, seed_ast = util.load_model_from_file(self.args.seed_model_file, self.args.seed_model_version, gpu_id)
     seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)
@@ -450,7 +450,7 @@ class Searcher():
 
     for generation in range(self.args.generations):
       generational_tier_sizes = [len(tier.items()) for tier in cost_tiers.tiers]
-      self.search_logger.info("---------------")
+      self.search_logger.info(f"--- STARTING GENERATION {generation} ---")
       printstr = "tier sizes: "
       for t in generational_tier_sizes:
         printstr += f"{t} "
@@ -635,17 +635,6 @@ if __name__ == "__main__":
   util.create_dir(args.model_database_dir)
   args.failure_database_dir = os.path.join(args.save, args.failure_database_dir)
   util.create_dir(args.failure_database_dir)
-
-  log_format = '%(asctime)s %(levelname)s %(message)s'
-  logging.basicConfig(stream=sys.stdout, level=logging.INFO, \
-    format=log_format, datefmt='%m/%d %I:%M:%S %p')
-
-  search_logger = util.create_logger('search_logger', logging.INFO, log_format, \
-                                os.path.join(args.save, 'search_log'))
-  debug_logger = util.create_logger('debug_logger', logging.DEBUG, log_format, \
-                                os.path.join(args.save, 'debug_log'))
-
-  search_logger.info("args = %s", args)
 
   searcher = Searcher(args)
   searcher.search(args.cost_tiers, args.tier_size)
