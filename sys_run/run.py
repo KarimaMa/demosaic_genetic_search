@@ -512,7 +512,7 @@ class Searcher():
             if math.isnan(min_perf_cost):
               continue # don't add model to tier 
 
-            compute_cost = mutation_batch_info.database_entries[new_model_id]["compute_cost"]
+            compute_cost = mutation_batch_info.database_entries[new_model_id]
             new_cost_tiers.add(new_model_id, compute_cost, min_perf_cost)
 
           self.model_database.save()
@@ -611,7 +611,7 @@ if __name__ == "__main__":
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
 
   parser.add_argument('--mysql_auth', type=str)
-
+  parser.add_argument("--machine", type=str)
   args = parser.parse_args()
 
   if not torch.cuda.is_available():

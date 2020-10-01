@@ -23,7 +23,7 @@ from tree import *
 from restrictions import *
 from util import extclass
 from enum import Enum
-from mysql_db import find
+from mysql_db import find, mysql_insert
 
 
 CHANNELS = set((1,4,8,12))
@@ -171,6 +171,7 @@ class Mutator():
               continue
           else: # successfully mutated tree!
             self.seen_structures.add(h)
+            mysql_insert(self.args.mysql_auth, model_id, self.args.machine, self.args.save, hash(new_tree), new_tree.id_string())
             self.seen_models[new_tree] = {"model_ids":[int(model_id)], "hash": hash(new_tree), "ast_str": new_tree.dump()}
             stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections)
             return new_tree, h, stats
