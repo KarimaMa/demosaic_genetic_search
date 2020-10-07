@@ -591,7 +591,7 @@ class Searcher():
           compute_cost = task_info.database_entry["compute_cost"]
           new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
           mysql_db.mysql_insert(self.args.mysql_auth, task_info.model_id, self.args.machine, \
-                                self.args.save, hash(new_model_ast), new_model_ast.id_string(), model_psnrs)
+                                self.args.save, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
 
         self.model_database.save()
 
