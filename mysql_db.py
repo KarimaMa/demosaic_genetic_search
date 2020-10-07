@@ -173,7 +173,7 @@ def find(password, tree_hash, tree_id_string, logger):
   return None
 
 
-def mysql_insert(password, model_id, machine, exp_dir, tree_hash, id_str, psnrs):
+def mysql_insert(password, model_id, machine, exp_dir, tree_hash, id_str, psnrs, logger):
   db_host = 'mysql.csail.mit.edu'
   db_name = 'ModelSearch'
   db_user = 'karima'
@@ -204,10 +204,16 @@ def mysql_insert(password, model_id, machine, exp_dir, tree_hash, id_str, psnrs)
     psnr_2 = FloatField()
 
   tree_hash = str(tree_hash).zfill(30)
-  record = SeenTrees.create(model_id=model_id, tree_hash=tree_hash, machine=machine, \
-                                  experiment_dir=exp_dir, tree_id_str=id_str, \
-                                  psnr_0=psnrs[0], psnr_1=psnrs[1], psnr_2=psnrs[2])
-  record.save()
+
+  already_in_db = find(password, tree_hash, id_str, logger)
+  if already_in_db is None:
+    record = SeenTrees.create(model_id=model_id, tree_hash=tree_hash, machine=machine, \
+                                    experiment_dir=exp_dir, tree_id_str=id_str, \
+                                    psnr_0=psnrs[0], psnr_1=psnrs[1], psnr_2=psnrs[2])
+    record.save()
+
+  else:
+    logger.info(f"other machine also generated tree with model {model_id}'s hash {tree_hash}")
 
 
 def mysql_delete(password):
@@ -254,7 +260,7 @@ if __name__ == "__main__":
   import logging
   log_format = '%(asctime)s %(levelname)s %(message)s'
   logger = util.create_logger(f'mysql_logger', logging.INFO, log_format, f'mysql_log')
-  mysql_delete("trisan4th")
+  #mysql_delete("trisan4th")
   print("checking insertion worked...")
   select("trisan4th")
   idstr = "GreenExtractor-1-1,1-SumR-1-16-Mul-16-16,16-Conv1D-16-1-Input-1-1---Softmax-16-16-Conv1x1-16-16-Relu-16-16-Conv1x1-16-16-Relu-16-16-Conv1D-16-1-Input-1-1----------Input-1-1--"
