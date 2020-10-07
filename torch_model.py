@@ -757,7 +757,7 @@ def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
   child_model = self.child.ast_to_model(shared_children)
-  return UpsampleOp(child_model, self.in_c, self.name)
+  return FastUpsampleOp(child_model, self.in_c, self.name)
 
 @extclass(FastUpsample)
 def ast_to_model(self, shared_children=None):
