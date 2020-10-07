@@ -376,7 +376,7 @@ class DownsampleOp(nn.Module):
 
 
 class FastUpsampleOp(nn.Module):
-  def __init__(self, operand, C_in, param_name, gpu_id):
+  def __init__(self, operand, C_in, param_name):
     super(FastUpsampleOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.in_c = C_in
