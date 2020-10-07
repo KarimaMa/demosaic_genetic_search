@@ -9,11 +9,11 @@ import os
 import random 
 import numpy as np
 import sys
+from dataset import GreenDataset, ids_from_file, FastDataLoader
 
 
 sys.path.append(sys.path[0].split("/")[0])
 sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
-print(sys.path)
 
 import util
 import meta_model
@@ -39,47 +39,79 @@ def create_loggers(model_dir, model_id, num_models, mode):
   return loggers
 
 
-def create_validation_dataset(args, inputs, inputs_shape, labels, labels_shape):
-  inputs = np.frombuffer(inputs, dtype=float)
-  labels = np.frombuffer(labels, dtype=float)
+# def create_validation_dataset(args, inputs, inputs_shape, labels, labels_shape):
+#   inputs = np.frombuffer(inputs, dtype=float)
+#   labels = np.frombuffer(labels, dtype=float)
 
-  inputs = inputs.reshape(inputs_shape)
-  labels = labels.reshape(labels_shape)
+#   inputs = inputs.reshape(inputs_shape)
+#   labels = labels.reshape(labels_shape)
 
-  validation_data = GreenSharedDataset(data_file=args.validation_file, inputs=inputs, labels=labels)
+#   validation_data = GreenSharedDataset(data_file=args.validation_file, inputs=inputs, labels=labels)
+#   num_validation = len(validation_data)
+#   validation_indices = list(range(num_validation))
+
+#   validation_queue = torch.utils.data.DataLoader(
+#       validation_data, batch_size=args.batch_size,
+#       sampler=torch.utils.data.sampler.SubsetRandomSampler(validation_indices),
+#       pin_memory=True, num_workers=0)
+#   return validation_queue
+
+
+# def create_train_dataset(args, inputs, inputs_shape, labels, labels_shape):
+#   full_data_filenames = ids_from_file(args.training_file)
+#   used_filenames = full_data_filenames[0:int(args.train_portion)]
+#   inputs = np.frombuffer(inputs, dtype=float)
+#   labels = np.frombuffer(labels, dtype=float)
+  
+#   inputs = inputs.reshape(inputs_shape)
+#   labels = labels.reshape(labels_shape)
+
+#   train_data = GreenSharedDataset(data_filenames=used_filenames, inputs=inputs, labels=labels) 
+
+#   num_train = len(train_data)
+#   train_indices = list(range(num_train))
+  
+#   train_queue = torch.utils.data.DataLoader(
+#       train_data, batch_size=args.batch_size,
+#       sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
+#       pin_memory=True, num_workers=0)
+#   return train_queue
+
+
+def create_validation_dataset(args):
+  validation_data = GreenDataset(data_file=args.validation_file, RAM=False)
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
 
-  validation_queue = torch.utils.data.DataLoader(
+  validation_queue = FastDataLoader(
       validation_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(validation_indices),
-      pin_memory=True, num_workers=0)
+      pin_memory=True, num_workers=8)
   return validation_queue
 
 
-def create_train_dataset(args, inputs, inputs_shape, labels, labels_shape):
+def create_train_dataset(args):
   full_data_filenames = ids_from_file(args.training_file)
   used_filenames = full_data_filenames[0:int(args.train_portion)]
-  inputs = np.frombuffer(inputs, dtype=float)
-  labels = np.frombuffer(labels, dtype=float)
-  
-  inputs = inputs.reshape(inputs_shape)
-  labels = labels.reshape(labels_shape)
-
-  train_data = GreenSharedDataset(data_filenames=used_filenames, inputs=inputs, labels=labels) 
+  train_data = GreenDataset(data_filenames=used_filenames, RAM=False) 
 
   num_train = len(train_data)
   train_indices = list(range(num_train))
   
-  train_queue = torch.utils.data.DataLoader(
+  train_queue = FastDataLoader(
       train_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
-      pin_memory=True, num_workers=0)
+      pin_memory=True, num_workers=8)
   return train_queue
 
 
-def train_model(args, gpu_id, train_queue, valid_queue, model_id, models, model_dir, experiment_logger):
+def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   print(f"training {len(models)} models on GPU {gpu_id}")
+
+  train_queue = create_train_dataset(args)
+  valid_queue = create_validation_dataset(args)
+
+  print(f"FINISHED creating datasets")
 
   train_loggers = create_loggers(model_dir, model_id, len(models), "train")
   validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
@@ -88,7 +120,9 @@ def train_model(args, gpu_id, train_queue, valid_queue, model_id, models, model_
                         for model_version in range(len(models))]
 
   models = [model.to(device=f"cuda:{gpu_id}") for model in models]
-
+  for m in models:
+    m.to_gpu(gpu_id)
+    
   criterion = nn.MSELoss()
   optimizers = get_optimizers(args, models)
 

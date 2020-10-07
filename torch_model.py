@@ -12,7 +12,7 @@ from config import IMG_H, IMG_W
 def extclass(cls):
   return lambda f: (setattr(cls,f.__name__,f) or f)
 
-cuda = True
+
 
 """
 Converts flat activation map to 4 channel-wise groups
@@ -78,8 +78,9 @@ class InputOp(nn.Module):
 
   def run(self, bayer, kcore_features=None):
     return bayer
-    #return self.forward(bayer)
 
+  def to_gpu(self, gpu_id):
+    pass
 
 
 class AddOp(nn.Module):
@@ -99,6 +100,11 @@ class AddOp(nn.Module):
   def forward(self, x, y):
     return x + y
 
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+
+
 class SubOp(nn.Module):
   def __init__(self, loperand, roperand):
     super(SubOp, self).__init__()
@@ -115,6 +121,11 @@ class SubOp(nn.Module):
 
   def forward(self, x, y):
     return x - y
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+    
 
 class MulOp(nn.Module):
   def __init__(self, loperand, roperand):
@@ -133,6 +144,11 @@ class MulOp(nn.Module):
   def forward(self, x, y):
     return x * y
 
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+
+
 class LogSubOp(nn.Module):
   def __init__(self, loperand, roperand):
     super(LogSubOp, self).__init__()
@@ -149,6 +165,11 @@ class LogSubOp(nn.Module):
 
   def forward(self, x, y):
     return torch.log(x) - torch.log(y)
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+
 
 class AddExpOp(nn.Module):
   def __init__(self, loperand, roperand):
@@ -167,6 +188,11 @@ class AddExpOp(nn.Module):
   def forward(self, x, y):
     return torch.exp(x) + torch.exp(y)
 
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+
+
 class StackOp(nn.Module):
   def __init__(self, loperand, roperand):
     super(StackOp, self).__init__()
@@ -183,6 +209,11 @@ class StackOp(nn.Module):
 
   def forward(self, x, y):
     return torch.cat((x, y), 1)
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+
 
 class ChromaExtractorOp(nn.Module):
   def __init__(self, loperand, roperand, gpu_id):
@@ -201,6 +232,11 @@ class ChromaExtractorOp(nn.Module):
   def forward(self, x, y):
     pass
 
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+
+
 class GreenExtractorOp(nn.Module):
   def __init__(self, loperand, roperand, gpu_id=None):
     super(GreenExtractorOp, self).__init__()
@@ -208,9 +244,6 @@ class GreenExtractorOp(nn.Module):
     self.mask = torch.zeros((IMG_H, IMG_W))
     self.mask[0::2,1::2] = 1
     self.mask[1::2,0::2] = 1
-    if not gpu_id is None:
-      self.gpu_id = gpu_id
-      self.mask = self.mask.to(device=f"cuda:{gpu_id}")
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -222,11 +255,17 @@ class GreenExtractorOp(nn.Module):
     return self.forward(loperand, roperand)
 
   def forward(self, x, bayer):
-    if bayer.is_cuda and not self.mask.is_cuda:
-      self.mask = self.mask.to(device=f"cuda:{self.gpu_id}")
+    # if bayer.is_cuda and not self.mask.is_cuda:
+    #   self.mask = self.mask.to(device=f"cuda:{self.gpu_id}")
     _, _, bayer_h, bayer_w = bayer.size()
     green = x * self.mask[0:bayer_h, 0:bayer_w] + bayer[:,0,...].unsqueeze(1)
     return green
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+    self.mask = self.mask.to(device=f"cuda:{gpu_id}")
+
 
 class SoftmaxOp(nn.Module):
   def __init__(self, operand):
@@ -244,6 +283,10 @@ class SoftmaxOp(nn.Module):
   def forward(self, x):
     return self.f(x)
 
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
 class ReluOp(nn.Module):
   def __init__(self, operand):
     super(ReluOp, self).__init__()
@@ -260,6 +303,10 @@ class ReluOp(nn.Module):
   def forward(self, x):
     return self.f(x)
 
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
 class LogOp(nn.Module):
   def __init__(self, operand):
     super(LogOp, self).__init__()
@@ -275,6 +322,10 @@ class LogOp(nn.Module):
   def forward(self, x):
     return torch.log(x)
 
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
 class ExpOp(nn.Module):
   def __init__(self, operand):
     super(ExpOp, self).__init__()
@@ -289,6 +340,10 @@ class ExpOp(nn.Module):
 
   def forward(self, x):
     return torch.exp(x)
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
 
 class DownsampleOp(nn.Module):
   def __init__(self, operand, C_in, param_name):
@@ -313,7 +368,59 @@ class DownsampleOp(nn.Module):
 
   def forward(self, x):
     pool = getattr(self, self.param_name)
-    return pool(x)
+    out = pool(x)
+    return out
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
+class FastUpsampleOp(nn.Module):
+  def __init__(self, operand, C_in, param_name, gpu_id):
+    super(FastUpsampleOp, self).__init__()
+    self._operands = nn.ModuleList([operand])
+    self.in_c = C_in
+    self.gpu_id = None
+    self.nn_broadcaster = nn.Upsample(scale_factor=3, mode='nearest')
+ 
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+
+  def run(self, bayer, kcore_features=None):
+    operand = self._operands[0].run(bayer, kcore_features)
+    return self.forward(operand)
+
+  def forward(self, x):
+    # upsample each channel separately 
+    up_shape = list(x.shape)
+    up_shape[2] = (up_shape[2]//2) * 3
+    up_shape[3] = (up_shape[3]//2) * 3
+
+    blu = self.nn_broadcaster(x[:,:,0::2,1::2])
+    red = self.nn_broadcaster(x[:,:,1::2,0::2])
+    grR = self.nn_broadcaster(x[:,:,1::2,1::2])
+    grB = self.nn_broadcaster(x[:,:,0::2,0::2])
+
+    # crop each channel appropriately  
+    out_shape = list(x.shape)
+    out_shape[2] = (out_shape[2] * 3) - 4
+    out_shape[3] = (out_shape[3] * 3) - 4
+    out = torch.Tensor(torch.Size(out_shape))
+
+    if not self.gpu_id is None:
+      out = out.to(device=f"cuda:{self.gpu_id}")
+
+    out[:,:,0::2,0::2] = grR[:,:,0:-2, 0:-2]
+    out[:,:,0::2,1::2] = red[:,:,0:-2, 2: ]
+    out[:,:,1::2,0::2] = blu[:,:,2: ,  0:-2]
+    out[:,:,1::2,1::2] = grB[:,:,2: ,  2:  ]
+
+    return out 
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self.gpu_id = gpu_id
+
     
 class UpsampleOp(nn.Module):
   def __init__(self, operand, C_in, param_name):
@@ -360,6 +467,10 @@ class UpsampleOp(nn.Module):
 
     return (croppedGr + croppedR + croppedB + croppedGb)
     
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
 class Conv1x1Op(nn.Module):
   def __init__(self, operand, C_in, C_out, param_name):
     super(Conv1x1Op, self).__init__()
@@ -384,6 +495,10 @@ class Conv1x1Op(nn.Module):
       kcore_features["feat"] = out.mean(-1).mean(-1).detach()
     return out
 
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
 # 1D diagonal convolution from top left corner to bottom right corner
 class DiagLRConv(nn.Module):
   def __init__(self, C_in, C_out, kernel_size, padding, param_name):
@@ -402,9 +517,13 @@ class DiagLRConv(nn.Module):
     filter_w = getattr(self, self.param_name)
     return nn.functional.conv2d(x, torch.diag_embed(filter_w), padding=padding)
 
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
 # 1D diagonal convolution from top right corner to bottom left corner
 class DiagRLConv(nn.Module):
-  def __init__(self, C_in, C_out, kernel_size, padding, param_name, gpu_id):
+  def __init__(self, C_in, C_out, kernel_size, padding, param_name):
     super(DiagRLConv, self).__init__()
     self.padding = padding
     # self.mask = torch.zeros(C_out, C_in, kernel_size, kernel_size).cuda()
@@ -412,10 +531,7 @@ class DiagRLConv(nn.Module):
     self.param_name = param_name
     setattr(self, param_name, filter_w)
     self.mask = torch.zeros(C_out, C_in, kernel_size, kernel_size)
-    if not gpu_id is None:
-      self.gpu_id = gpu_id
-      self.mask = self.mask.to(device=f"cuda:{gpu_id}")
-
+   
     for i in range(kernel_size):
       self.mask[..., i, kernel_size-i-1] = 1.0
 
@@ -425,12 +541,16 @@ class DiagRLConv(nn.Module):
 
   def forward(self, x):
     filter_w = getattr(self, self.param_name)
-    if filter_w.is_cuda and not self.mask.is_cuda:
-      self.mask = self.mask.to(device=f"cuda:{self.gpu_id}")
+    # if filter_w.is_cuda and not self.mask.is_cuda:
+    #   self.mask = self.mask.to(device=f"cuda:{self.gpu_id}")
     return nn.functional.conv2d(x, (filter_w * self.mask), padding=self.padding)
 
+  def to_gpu(self, gpu_id):
+    self.mask = self.mask.to(device=f"cuda:{gpu_id}")
+
+
 class Conv1DOp(nn.Module):
-  def __init__(self, operand, C_in, C_out, param_name, kwidth, gpu_id):
+  def __init__(self, operand, C_in, C_out, param_name, kwidth):
     super(Conv1DOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     assert C_out % 4 == 0, "Output channels must be divisible by 4 to use separable conv"
@@ -442,7 +562,7 @@ class Conv1DOp(nn.Module):
     v = nn.Conv2d(C_in, C_out//4, (kwidth, 1), bias=False, padding=(kwidth//2, 0))
     h = nn.Conv2d(C_in, C_out//4, (1, kwidth), bias=False, padding=(0, kwidth//2))
     self.diag1 = DiagLRConv(C_in, C_out//4, kwidth, kwidth//2, param_name_diag1)
-    self.diag2 = DiagRLConv(C_in, C_out//4, kwidth, kwidth//2, param_name_diag2, gpu_id)
+    self.diag2 = DiagRLConv(C_in, C_out//4, kwidth, kwidth//2, param_name_diag2)
 
     setattr(self, self.param_name_v, v)
     setattr(self, self.param_name_h, h)
@@ -466,6 +586,11 @@ class Conv1DOp(nn.Module):
     h = getattr(self, self.param_name_h)
     return torch.cat((v(x), h(x), self.diag1(x), self.diag2(x)), 1)
 
+  def to_gpu(self, gpu_id):
+    self.diag2.to_gpu(gpu_id)
+    self._operands[0].to_gpu(gpu_id)
+
+
 class Conv2DOp(nn.Module):
   def __init__(self, operand, C_in, C_out, param_name, kwidth):
     super(Conv2DOp, self).__init__()
@@ -487,6 +612,10 @@ class Conv2DOp(nn.Module):
     f = getattr(self, self.param_name)
     return f(x)
 
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
 class SumROp(nn.Module):
   def __init__(self, operand):
     super(SumROp, self).__init__()
@@ -502,40 +631,43 @@ class SumROp(nn.Module):
   def forward(self, x):
     return torch.sum(x, dim=1).unsqueeze(1)  
 
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
 
 @extclass(Input)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   return InputOp()
 
 @extclass(Add)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  lmodel = self.lchild.ast_to_model(gpu_id, shared_children)
-  rmodel = self.rchild.ast_to_model(gpu_id, shared_children)
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
   return AddOp(lmodel, rmodel)
 
 @extclass(Sub)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  lmodel = self.lchild.ast_to_model(gpu_id, shared_children)
-  rmodel = self.rchild.ast_to_model(gpu_id, shared_children)
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
   return SubOp(lmodel, rmodel)
 
 @extclass(Mul)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  lmodel = self.lchild.ast_to_model(gpu_id, shared_children)
-  rmodel = self.rchild.ast_to_model(gpu_id, shared_children)
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
   return MulOp(lmodel, rmodel)
 
 @extclass(LogSub)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  lmodel = self.lchild.ast_to_model(gpu_id, shared_children)
+  lmodel = self.lchild.ast_to_model(shared_children)
   if not type(self.rchild.parent) is tuple:
     print(f"right child of logsub parents {self.rchild.parent}")
     print(self.rchild.parent.dump())
@@ -544,113 +676,120 @@ def ast_to_model(self, gpu_id, shared_children=None):
   if id(self.rchild) in shared_children:
     rmodel = shared_children[id(self.rchild)]
   else:
-    rmodel = self.rchild.ast_to_model(gpu_id, shared_children)
+    rmodel = self.rchild.ast_to_model(shared_children)
     shared_children[id(self.rchild)] = rmodel
   return LogSubOp(lmodel, rmodel)
 
 @extclass(AddExp)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  lmodel = self.lchild.ast_to_model(gpu_id, shared_children)
+  lmodel = self.lchild.ast_to_model(shared_children)
   assert (type(self.rchild.parent) is tuple), "Right child of AddExp should have two parents"
   if id(self.rchild) in shared_children:
     rmodel = shared_children[id(self.rchild)]
   else:
-    rmodel = self.rchild.ast_to_model(gpu_id, shared_children)
+    rmodel = self.rchild.ast_to_model(shared_children)
     shared_children[id(self.rchild)] = rmodel
   return AddExpOp(lmodel, rmodel)
 
 @extclass(Stack)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  lmodel = self.lchild.ast_to_model(gpu_id, shared_children)
-  rmodel = self.rchild.ast_to_model(gpu_id, shared_children)
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
   return StackOp(lmodel, rmodel)
 
 @extclass(ChromaExtractor)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  lmodel = self.lchild.ast_to_model(gpu_id, shared_children)
-  rmodel = self.rchild.ast_to_model(gpu_id, shared_children)
-  return ChromaExtractorOp(lmodel, rmodel. gpu_id)
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
+  return ChromaExtractorOp(lmodel, rmodel)
 
 @extclass(GreenExtractor)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  lmodel = self.lchild.ast_to_model(gpu_id, shared_children)
-  rmodel = self.rchild.ast_to_model(gpu_id, shared_children)
-  return GreenExtractorOp(lmodel, rmodel, gpu_id)
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
+  return GreenExtractorOp(lmodel, rmodel)
 
 @extclass(Softmax)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  child_model = self.child.ast_to_model(gpu_id, shared_children)
+  child_model = self.child.ast_to_model(shared_children)
   return SoftmaxOp(child_model)
 
 @extclass(Relu)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  child_model = self.child.ast_to_model(gpu_id, shared_children)
+  child_model = self.child.ast_to_model(shared_children)
   return ReluOp(child_model)
 
 @extclass(Log)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  child_model = self.child.ast_to_model(gpu_id, shared_children)
+  child_model = self.child.ast_to_model(shared_children)
   return LogOp(child_model)
 
 @extclass(Exp)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  child_model = self.child.ast_to_model(gpu_id, shared_children)
+  child_model = self.child.ast_to_model(shared_children)
   return ExpOp(child_model)
 
 @extclass(Downsample)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  child_model = self.child.ast_to_model(gpu_id, shared_children)
+  child_model = self.child.ast_to_model(shared_children)
   return DownsampleOp(child_model, self.in_c, self.name)
 
 @extclass(Upsample)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  child_model = self.child.ast_to_model(gpu_id, shared_children)
+  child_model = self.child.ast_to_model(shared_children)
   return UpsampleOp(child_model, self.in_c, self.name)
 
-@extclass(Conv1x1)
-def ast_to_model(self, gpu_id, shared_children=None):
+@extclass(FastUpsample)
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  child_model = self.child.ast_to_model(gpu_id, shared_children)
+  child_model = self.child.ast_to_model(shared_children)
+  return FastUpsampleOp(child_model, self.in_c, self.name)
+
+@extclass(Conv1x1)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  child_model = self.child.ast_to_model(shared_children)
   return Conv1x1Op(child_model, self.in_c, self.out_c, self.name)
 
 @extclass(Conv1D)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  child_model = self.child.ast_to_model(gpu_id, shared_children)
-  return Conv1DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth, gpu_id)
+  child_model = self.child.ast_to_model(shared_children)
+  return Conv1DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth)
 
 @extclass(Conv2D)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  child_model = self.child.ast_to_model(gpu_id, shared_children)
+  child_model = self.child.ast_to_model(shared_children)
   return Conv2DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth)
 
 @extclass(SumR)
-def ast_to_model(self, gpu_id, shared_children=None):
+def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  child_model = self.child.ast_to_model(gpu_id, shared_children)
+  child_model = self.child.ast_to_model(shared_children)
   return SumROp(child_model)

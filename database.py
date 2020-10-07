@@ -22,28 +22,28 @@ class Database():
 			database_path = os.path.join(database_dir, database_file)
 			self.load(database_path)
 
+	def add(self, key, data):
+		self.table[key] = data
 
-	def add(self, model_id, data):
-		self.table[model_id] = data
+	def increment(self, key, fieldname):
+		self.table[key][fieldname] += 1 
 
-	def increment(self, model_id, fieldname):
-		self.table[model_id][fieldname] += 1 
+	def get(self, key, fieldname):
+		return self.table[key][fieldname]
 
-	def get(self, model_id, fieldname):
-		return self.table[model_id][fieldname]
-
-	def update(self, model_id, fieldname, value):
-		if model_id in self.table: 
-			self.table[model_id][fieldname] = value
+	def update(self, key, fieldname, value):
+		if key in self.table: 
+			self.table[key][fieldname] = value
 
 	def save(self):
 		database_f = open(self.database_path, "w", newline='\n')
 		database_writer = csv.writer(database_f, delimiter=',')
 
-		header = self.fields
+		header = ["key"] + self.fields
 		database_writer.writerow(header)
-		for model_id, data in self.table.items():
-			row_data = [data[field_name] for field_name in self.fields]
+		for key, data in self.table.items():
+			row_data = [key]
+			row_data += [data[field_name] for field_name in self.fields]
 			database_writer.writerow(row_data)
 
 	def load(self, database_path):
@@ -52,9 +52,10 @@ class Database():
 				string_data = l.strip().split(",")
 				if i == 0:
 					continue
+				key = int(string_data[0])
+				string_data = string_data[1:]
 				data = dict([(self.fields[i], self.field_types[i](string_data[i])) for i in range(len(self.fields))])
-				model_id = data["model_id"]
-				self.table[model_id] = data
+				self.table[key] = data
 
 
 

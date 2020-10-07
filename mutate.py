@@ -60,6 +60,9 @@ class Mutator():
     self.current_mutation_info = {}
     self.failed_mutation_info = []
 
+  def add_seen_model(self, tree, model_id):
+    self.seen_models[tree] = {"model_ids":[int(model_id)], "hash": hash(tree), "ast_str": tree.dump()}
+
   def give_up(self, structural_rejections, prune_rejections, seen_rejections, failures):
     total_tries = structural_rejections + prune_rejections + seen_rejections + failures 
     if total_tries > self.args.mutation_failure_threshold:
@@ -159,10 +162,7 @@ class Mutator():
           continue
 
         # reject trees we've seen already 
-        # consult shared db for seen models
-        seen_on_other_machines = find(self.args.mysql_auth, hash(new_tree), \
-                                      new_tree.id_string(), self.mysql_logger)
-        if (not new_tree in self.seen_models) and (not seen_on_other_machines):
+        if (not new_tree in self.seen_models):
           # reject with some chance trees with previously seen structure
           h = structural_hash(new_tree)
           if h in self.seen_structures:
@@ -171,7 +171,6 @@ class Mutator():
               continue
           else: # successfully mutated tree!
             self.seen_structures.add(h)
-            mysql_insert(self.args.mysql_auth, model_id, self.args.machine, self.args.save, hash(new_tree), new_tree.id_string())
             self.seen_models[new_tree] = {"model_ids":[int(model_id)], "hash": hash(new_tree), "ast_str": new_tree.dump()}
             stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections)
             return new_tree, h, stats

@@ -5,6 +5,39 @@ import datetime
 
 
 
+def drop_tables(password):
+  db_host = 'mysql.csail.mit.edu'
+  db_name = 'ModelSearch'
+  db_user = 'karima'
+  db_password = password
+  db_charset = 'utf8mb4'
+    
+  db_conn = {
+      'host': db_host,
+      'user': db_user,
+      'passwd': db_password,
+  }
+
+  db = MySQLDatabase(db_name, **db_conn)
+
+  class BaseModel(Model):
+    class Meta:
+      database = db
+
+  class SeenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+
+  db.drop_tables((SeenTrees,))
+  print("tables in drop")
+  tables = db.get_tables()
+  print(tables)
+
+
 def create_table(password):
   db_host = 'mysql.csail.mit.edu'
   db_name = 'ModelSearch'
@@ -24,7 +57,6 @@ def create_table(password):
     class Meta:
       database = db
 
-
   class SeenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -32,6 +64,9 @@ def create_table(password):
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
 
   db.create_tables([SeenTrees])
 
@@ -45,7 +80,7 @@ def create_table(password):
   key = 0
   tree_hash = str(hash(basic1d)).zfill(30)
   basic1d_record = SeenTrees.create(model_id=key, tree_hash=tree_hash, machine="tefnut", \
-                                  experiment_dir="seed", tree_id_str=basic1d.id_string())
+                                  experiment_dir="seed", tree_id_str=basic1d.id_string(), psnr_0=31.38, psnr_1=-1, psnr_2=-1)
   basic1d_record.save()
   query = SeenTrees.select()
   for t in query:
@@ -78,14 +113,18 @@ def select(password):
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
 
   query = SeenTrees.select()
   print(len(query))
   for t in query:
-    print(t.model_id, t.add_date, t.tree_hash, t.tree_id_str, t.machine, t.experiment_dir)
+    print(t.model_id, t.tree_hash, t.machine, t.experiment_dir, t.psnr_0, t.psnr_1, t.psnr_2)
 
 
 def find(password, tree_hash, tree_id_string, logger):
+
   db_host = 'mysql.csail.mit.edu'
   db_name = 'ModelSearch'
   db_user = 'karima'
@@ -111,7 +150,11 @@ def find(password, tree_hash, tree_id_string, logger):
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
 
+  tree_hash = str(tree_hash).zfill(30)
   query = SeenTrees.select().where(SeenTrees.tree_hash == tree_hash, \
                                    SeenTrees.tree_id_str == tree_id_string)
   if len(query) != 0:
@@ -121,14 +164,16 @@ def find(password, tree_hash, tree_id_string, logger):
       
     logger.info("Already seen tree:")
     for t in query:
-      logger.info(f"ModelId: {t.model_id} Machine: {t.machine} Dir: {t.experiment_dir} \
-                    hash: {t.tree_hash} id_str: {t.tree_id_str} date: {t.add_date}")
-    logger.info("---------")
-    return True
-  return False
+      psnrs = [t.psnr_0, t.psnr_1, t.psnr_2]
+      logger.info(f"ModelId: {t.model_id} Machine: {t.machine} Dir: {t.experiment_dir} " +
+                  f"hash: {t.tree_hash} id_str: {t.tree_id_str} date: {t.add_date}")
+      logger.info("---------")
+      return psnrs
+  logger.info(f"hash {tree_hash} not in database")
+  return None
 
 
-def mysql_insert(password, model_id, machine, exp_dir, tree_hash, id_str):
+def mysql_insert(password, model_id, machine, exp_dir, tree_hash, id_str, psnrs):
   db_host = 'mysql.csail.mit.edu'
   db_name = 'ModelSearch'
   db_user = 'karima'
@@ -154,10 +199,14 @@ def mysql_insert(password, model_id, machine, exp_dir, tree_hash, id_str):
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
 
   tree_hash = str(tree_hash).zfill(30)
   record = SeenTrees.create(model_id=model_id, tree_hash=tree_hash, machine=machine, \
-                                  experiment_dir=exp_dir, tree_id_str=id_str)
+                                  experiment_dir=exp_dir, tree_id_str=id_str, \
+                                  psnr_0=psnrs[0], psnr_1=psnrs[1], psnr_2=psnrs[2])
   record.save()
 
 
@@ -187,6 +236,9 @@ def mysql_delete(password):
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
 
   found = SeenTrees.select().where(SeenTrees.model_id != 0)
   for f in found:
@@ -195,12 +247,15 @@ def mysql_delete(password):
 
 if __name__ == "__main__":
   # print("inserting seed tree")
+  # drop_tables("trisan4th")
   # create_table("trisan4th")
+
   import util 
   import logging
   log_format = '%(asctime)s %(levelname)s %(message)s'
   logger = util.create_logger(f'mysql_logger', logging.INFO, log_format, f'mysql_log')
+  mysql_delete("trisan4th")
   print("checking insertion worked...")
   select("trisan4th")
   idstr = "GreenExtractor-1-1,1-SumR-1-16-Mul-16-16,16-Conv1D-16-1-Input-1-1---Softmax-16-16-Conv1x1-16-16-Relu-16-16-Conv1x1-16-16-Relu-16-16-Conv1D-16-1-Input-1-1----------Input-1-1--"
-  find("trisan4th", "000000000000338642508656442816", idstr, logger)
+  #find("trisan4th", "000000000000338642508656442816", idstr, logger)

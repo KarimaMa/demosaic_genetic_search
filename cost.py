@@ -13,6 +13,7 @@ from torch.autograd import Variable
 
 from demosaic_ast import *
 from dataset import GreenDataset
+from database import Database
 
 ADD_COST = 1
 MUL_COST = 1
@@ -50,18 +51,62 @@ class Sampler():
 
 
 class CostTiers():
-	def __init__(self, compute_cost_ranges, logger):
+	def __init__(self, database_dir, compute_cost_ranges, logger):
+		self.database_dir = database_dir
 		self.tiers = [{} for r in compute_cost_ranges]
 		self.compute_cost_ranges = compute_cost_ranges
 		self.max_cost = compute_cost_ranges[-1][1]
 		self.logger = logger
+		self.build_cost_tier_database()
+
+	def build_cost_tier_database(self):
+		fields = ["model_id", "generation", "tier", "compute_cost", "psnr"]
+		field_types = [int, int, int, float, float]
+
+		tier_database = Database("TierDatabase", fields, field_types, self.database_dir)
+		self.tier_database = tier_database
+		self.tier_database.cntr = 0
+
+	def update_database(self, generation):
+		for tid, tier in enumerate(self.tiers):
+			for model_id in tier:
+				compute_cost, psnr = tier[model_id]
+				data = {"model_id" : model_id, 
+					"generation" : generation, 
+					"tier" : tid, 
+					"compute_cost" : compute_cost, 
+					"psnr" : psnr}
+				self.tier_database.add(self.tier_database.cntr, data)
+				self.tier_database.cntr += 1
+
+	"""
+	loads everything from stored snapshot up to (not including) the end generation
+	"""
+	def load_from_database(self, database_file, end_generation):
+		self.logger.info(f"--- Reloading cost tiers from {database_file} up to generation {end_generation} ---")
+		self.build_cost_tier_database()
+		self.tier_database.load(database_file)
+		# remove any entries with generation >= end_generation
+		to_delete = [key for (key, data) in self.tier_database.table.items() if data["generation"] >= end_generation]
+		for key in to_delete:
+			del self.tier_database.table[key]
+
+		self.tier_database.cntr = len(self.tier_database.table)
+
+		for key, data in self.tier_database.table.items():
+			self.tiers[data["tier"]][data["model_id"]] = (data["compute_cost"], data["psnr"])
+
+		for tid, tier in enumerate(self.tiers):
+			for model_id in tier:
+				self.logger.info(f"tier {tid} : model {model_id} compute cost {tier[model_id][0]}, psnr {tier[model_id][1]}")
+
 	"""
 	model_file is file with model topology and model weights
 	"""
 	def add(self, model_id, compute_cost, model_accuracy):
 		for i, cost_range in enumerate(self.compute_cost_ranges):
 			if compute_cost < cost_range[1]:
-				self.tiers[i][model_id] = (compute_cost, model_accuracy)
+				self.tiers[i][model_id] = (compute_cost, model_accuracy)				
 				self.logger.info(f"adding model {model_id} with compute cost " +
 								f"{compute_cost} and psnr {model_accuracy} to tier {i}")
 				return
@@ -80,6 +125,8 @@ class CostTiers():
 			for i in range(min(k, len(sorted_models))):
 				new_tier[sorted_models[i][0]] = sorted_models[i][1]
 			self.tiers[tid] = new_tier
+
+
 
 
 class ModelEvaluator():

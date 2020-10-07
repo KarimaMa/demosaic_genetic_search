@@ -138,6 +138,15 @@ def load_model_from_file(model_file, model_version, gpu_id=None):
 
   return model, model_ast
 
+def load_ast_from_file(model_file):
+  with open(model_file, "r") as f:
+    ast_file = f.readline().strip()
+
+  model_ast = load_ast(ast_file)
+  logger.debug("\nloading model from files...")
+  logger.debug(model_ast.dump())
+
+  return model_ast
 
 def model_id_generator(base_val):
   index = base_val+1
@@ -158,11 +167,35 @@ class ModelManager():
     model_info_file = get_model_info_file(model_dir)
     return load_model_from_file(model_info_file, model_version, device)
 
+  def load_model_ast(self, model_id):
+    model_dir = os.path.join(self.base_dir, str(model_id))
+    model_info_file = get_model_info_file(model_dir)
+    model_ast = load_ast_from_file(model_info_file)
+    return model_ast 
+
   def get_next_model_id(self):
     return next(self.model_id_generator)
 
   def model_dir(self, model_id):
     return os.path.join(self.base_dir, f'{model_id}')
+
+  def save_model_ast(self, model_ast, model_dir):
+    ast_file = get_model_ast_file(model_dir)
+    model_ast.save_ast(ast_file)
+
+  def save_model_info_file(self, model_dir, model_versions):
+    ast_file = get_model_ast_file(model_dir)
+
+    pytorch_files = [get_model_pytorch_file(model_dir, model_version) \
+                    for model_version in range(model_versions)]
+  
+    info_file = get_model_info_file(model_dir)
+
+    with open(info_file, "w+") as f:
+      f.write(ast_file + "\n")
+      for pf in pytorch_files:
+        f.write(pf + "\n")
+
 
   def save_model(self, models, model_ast, model_dir):
     ast_file = get_model_ast_file(model_dir)

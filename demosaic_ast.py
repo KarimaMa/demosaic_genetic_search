@@ -3,20 +3,17 @@ TODO:
   ADD GREEN AND CHROMA EXTRACTORS
 """
 from abc import ABC, abstractmethod
-from tree import Node, hash_combine, has_loop
+from tree import Node, has_loop, hash_combine
 import copy
 import sys
 import pickle
-# import logging
-
-# logger = logging.getLogger("DebugLogger")
-
 
 
 # from a github gist by victorlei
 def extclass(cls):
   return lambda f: (setattr(cls,f.__name__,f) or f)
 """ ----------------------------------------------"""
+
 
 class Binop(ABC):
   def __init__(self):
@@ -96,6 +93,8 @@ class Add(BinopIII, Special, Node):
     Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
+    self.out_c = None
+    self.in_c = None
 
 class Sub(BinopIII, Special, Node):
   def __init__(self, lchild, rchild, name=None):
@@ -104,6 +103,8 @@ class Sub(BinopIII, Special, Node):
     Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
+    self.out_c = None
+    self.in_c = None
 
 class Mul(BinopIII, Special, Node):
   def __init__(self, lchild, rchild, name=None):
@@ -112,6 +113,8 @@ class Mul(BinopIII, Special, Node):
     Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
+    self.out_c = None
+    self.in_c = None
 
 class LogSub(BinopIII, Special, Node):
   def __init__(self, lchild, rchild, name=None):
@@ -120,6 +123,8 @@ class LogSub(BinopIII, Special, Node):
     Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
+    self.out_c = None
+    self.in_c = None
 
 class AddExp(BinopIII, Special, Node):
   def __init__(self, lchild, rchild, name=None):
@@ -128,6 +133,8 @@ class AddExp(BinopIII, Special, Node):
     Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
+    self.out_c = None
+    self.in_c = None
 
 class Stack(BinopIJK, Special, Node):
   def __init__(self, lchild, rchild, name=None):
@@ -136,7 +143,9 @@ class Stack(BinopIJK, Special, Node):
     Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
-
+    self.out_c = None
+    self.in_c = None
+    
 class ChromaExtractor(BinopIcJcKc, Special, Node):
   def __init__(self, lchild, rchild, name=None):
     if name is None:
@@ -175,6 +184,8 @@ class Softmax(UnopII, NonLinear, Node):
       name = "Softmax"
     Node.__init__(self, name, 1)
     self.child = child
+    self.out_c = None
+    self.in_c = None
 
 class Relu(UnopII, NonLinear, Node):
   def __init__(self, child, name=None):
@@ -182,6 +193,8 @@ class Relu(UnopII, NonLinear, Node):
       name = "Relu"
     Node.__init__(self, name, 1)
     self.child = child
+    self.out_c = None
+    self.in_c = None
 
 class Log(UnopII, NonLinear, Node):
   def __init__(self, child, name=None):
@@ -189,6 +202,8 @@ class Log(UnopII, NonLinear, Node):
       name = "Log"
     Node.__init__(self, name, 1)
     self.child = child
+    self.out_c = None
+    self.in_c = None
 
 class Exp(UnopII, NonLinear, Node):
   def __init__(self, child, name=None):
@@ -196,6 +211,8 @@ class Exp(UnopII, NonLinear, Node):
       name = "Exp"
     Node.__init__(self, name, 1)
     self.child = child
+    self.out_c = None
+    self.in_c = None
 
 class Downsample(UnopII, Special, Node):
   def __init__(self, child, name=None):
@@ -203,6 +220,8 @@ class Downsample(UnopII, Special, Node):
       name = "Downsample"
     Node.__init__(self, name, 1)
     self.child = child
+    self.out_c = None
+    self.in_c = None
 
 class Upsample(UnopII, Special, Node):
   def __init__(self, child, name=None):
@@ -210,6 +229,18 @@ class Upsample(UnopII, Special, Node):
       name = "Upsample"
     Node.__init__(self, name, 1)
     self.child = child
+    self.out_c = None
+    self.in_c = None
+
+class FastUpsample(UnopII, Special, Node):
+  def __init__(self, child, name=None):
+    print("USING FAST UPSAMPLE")
+    if name is None:
+      name = "FastUpsample"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.out_c = None
+    self.in_c = None
 
 class Conv1x1(UnopIJ, Linear, Node):
   def __init__(self, child, out_c: int, name=None):
@@ -218,6 +249,7 @@ class Conv1x1(UnopIJ, Linear, Node):
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = out_c
+    self.in_c = None
 
 class Conv1D(UnopIJ, Linear, Node):
   def __init__(self, child, out_c: int, name=None, kwidth=5):
@@ -227,6 +259,7 @@ class Conv1D(UnopIJ, Linear, Node):
     self.child = child
     self.out_c = out_c
     self.kwidth = kwidth
+    self.in_c = None
 
 class Conv2D(UnopIJ, Linear, Node):
   def __init__(self, child, out_c: int, name=None, kwidth=5):
@@ -236,6 +269,7 @@ class Conv2D(UnopIJ, Linear, Node):
     self.child = child
     self.out_c = out_c
     self.kwidth = kwidth
+    self.in_c = None
 
 class SumR(UnopI1, Special, Node):
   def __init__(self, child, name=None):
@@ -244,6 +278,7 @@ class SumR(UnopI1, Special, Node):
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = 1
+    self.in_c = None
 
 
 @extclass(Input)
@@ -352,6 +387,13 @@ def compute_input_output_channels(self):
   self.out_c = lout_c
   return self.in_c, self.out_c
 
+@extclass(FastUpsample)
+def compute_input_output_channels(self):
+  _, lout_c = self.child.compute_input_output_channels()
+  self.in_c = lout_c
+  self.out_c = lout_c
+  return self.in_c, self.out_c
+
 @extclass(Conv1x1)
 def compute_input_output_channels(self):
   child_in_c, child_out_c = self.child.compute_input_output_channels()
@@ -447,8 +489,7 @@ Saves the AST into a file
 """
 @extclass(Node)
 def save_ast(self, filename):
-  tree_data = self.structure_to_array()
-
+  tree_data = self.structure_to_array()  
   with open(filename, "wb") as f:
     pickle.dump(tree_data, f)
     
@@ -773,6 +814,7 @@ all_insert_ops = nl_sp_insert_ops.union(l_sp_insert_ops)
 linear_ops = set((Conv1x1, Conv1D, Conv2D))
 nonlinear_ops = set((Softmax, Relu)) 
 special_ops = set((Mul, Add, Sub, AddExp, LogSub, Stack, Upsample, Downsample, SumR))
+
 sandwich_ops = set((LogSub, AddExp, Downsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
 sandwich_pairs = {
   LogSub: AddExp,
@@ -785,43 +827,43 @@ l_and_sp = linear_ops.union(special_ops)
 all_ops = nl_and_sp.union(l_and_sp)
 
 
-if __name__ == "__main__":
-  from model_lib import multires_green_model
-  import argparse
-  import random
-  import numpy as np
-  from mutate import Mutator
+# if __name__ == "__main__":
+#   from model_lib import multires_green_model
+#   import argparse
+#   import random
+#   import numpy as np
+#   from mutate import Mutator
 
-  parser = argparse.ArgumentParser("Demosaic")
-  parser.add_argument('--default_channels', type=int, default=16, help='num of output channels for conv layers')
-  parser.add_argument('--max_nodes', type=int, default=33, help='max number of nodes in a tree')
-  parser.add_argument('--min_subtree_size', type=int, default=2, help='minimum size of subtree in insertion')
-  parser.add_argument('--max_subtree_size', type=int, default=11, help='maximum size of subtree in insertion')
-  parser.add_argument('--structural_sim_reject', type=float, default=0.66, help='rejection probability threshold for structurally similar trees')
-  parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
-  parser.add_argument('--model_database_dir', type=str, default='model_database', help='path to save model statistics')
-  parser.add_argument('--database_save_freq', type=int, default=5, help='model database save frequency')
-  parser.add_argument('--save', type=str, default='SEARCH_MODELS', help='experiment name')
-  parser.add_argument('--seed', type=int, default=2, help='random seed')
-  parser.add_argument('--generations', type=int, default=20, help='model search generations')
-  parser.add_argument('--seed_model_file', type=str, help='')
-  parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
-  parser.add_argument('--tier_size', type=int, default=20, help='how many models to keep per tier')
-  parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
-  parser.add_argument('--mutation_failure_threshold', type=int, default=500, help='max number of tries to mutate a tree')
-  parser.add_argument('--delete_failure_threshold', type=int, default=25, help='max number of tries to find a node to delete')
-  args = parser.parse_args()
-  random.seed(args.seed)
-  np.random.seed(args.seed)
+#   parser = argparse.ArgumentParser("Demosaic")
+#   parser.add_argument('--default_channels', type=int, default=16, help='num of output channels for conv layers')
+#   parser.add_argument('--max_nodes', type=int, default=33, help='max number of nodes in a tree')
+#   parser.add_argument('--min_subtree_size', type=int, default=2, help='minimum size of subtree in insertion')
+#   parser.add_argument('--max_subtree_size', type=int, default=11, help='maximum size of subtree in insertion')
+#   parser.add_argument('--structural_sim_reject', type=float, default=0.66, help='rejection probability threshold for structurally similar trees')
+#   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
+#   parser.add_argument('--model_database_dir', type=str, default='model_database', help='path to save model statistics')
+#   parser.add_argument('--database_save_freq', type=int, default=5, help='model database save frequency')
+#   parser.add_argument('--save', type=str, default='SEARCH_MODELS', help='experiment name')
+#   parser.add_argument('--seed', type=int, default=2, help='random seed')
+#   parser.add_argument('--generations', type=int, default=20, help='model search generations')
+#   parser.add_argument('--seed_model_file', type=str, help='')
+#   parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
+#   parser.add_argument('--tier_size', type=int, default=20, help='how many models to keep per tier')
+#   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
+#   parser.add_argument('--mutation_failure_threshold', type=int, default=500, help='max number of tries to mutate a tree')
+#   parser.add_argument('--delete_failure_threshold', type=int, default=25, help='max number of tries to find a node to delete')
+#   args = parser.parse_args()
+#   random.seed(args.seed)
+#   np.random.seed(args.seed)
 
-  mutator = Mutator(args, None)
-  model = multires_green_model()
-  copy_model = copy_subtree(model)
-  preorder = copy_model.preorder()
-  print(copy_model.dump())
-  for i, n in enumerate(preorder):
-    print(f"node {i} {n.__class__.__name__}")
+#   mutator = Mutator(args, None)
+#   model = multires_green_model()
+#   copy_model = copy_subtree(model)
+#   preorder = copy_model.preorder()
+#   print(copy_model.dump())
+#   for i, n in enumerate(preorder):
+#     print(f"node {i} {n.__class__.__name__}")
   
-  model_inputs = set(("Input(Bayer)",))
-  mutated_tree = mutator.insert_mutation(copy_model, model_inputs, insert_above_node_id=8, insert_op=list(special_ops)[0])
-  print(mutated_tree.dump())
+#   model_inputs = set(("Input(Bayer)",))
+#   mutated_tree = mutator.insert_mutation(copy_model, model_inputs, insert_above_node_id=8, insert_op=list(special_ops)[0])
+#   print(mutated_tree.dump())
