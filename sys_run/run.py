@@ -451,7 +451,7 @@ class Searcher():
   def search(self, compute_cost_tiers, tier_size):
     cost_tiers = CostTiers(self.args.tier_database_dir, compute_cost_tiers, self.search_logger)
     if self.args.restart_generation is not None:
-      cost_tiers.load_generation_from_database(self.args.tier_snapshot, self.args.restart_generation)
+      cost_tiers.load_generation_from_database(self.args.tier_snapshot, self.args.restart_generation-1)
 
     seed_model, seed_ast = util.load_model_from_file(self.args.seed_model_file, self.args.seed_model_version, 0)
     seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)
@@ -487,8 +487,15 @@ class Searcher():
              'seen_rejections': 0})
 
     # CHANGE TO NOT BE FIXED - SHOULD BE INFERED FROM TASK
+    if self.args.restart_generation is None:
+      start_generation = 0
+      end_generation = self.args.generations 
+    else:
+      start_generation = self.args.restart_generation
+      end_generation = start_generation + self.args.generations 
 
-    for generation in range(self.args.generations):
+    self.search_logger.info(f"   --- STARTING SEARCH AT GENEARTION {start_generation} AND ENDING AT {end_generation} ---")
+    for generation in range(start_generation, end_generation):
       generational_tier_sizes = [len(tier.items()) for tier in cost_tiers.tiers]
       self.search_logger.info(f"--- STARTING GENERATION {generation} ---")
       printstr = "tier sizes: "
