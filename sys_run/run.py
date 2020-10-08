@@ -451,7 +451,7 @@ class Searcher():
   def search(self, compute_cost_tiers, tier_size):
     cost_tiers = CostTiers(self.args.tier_database_dir, compute_cost_tiers, self.search_logger)
     if self.args.restart_generation is not None:
-      cost_tiers.load_from_database(self.args.tier_snapshot, self.args.restart_generation)
+      cost_tiers.load_generation_from_database(self.args.tier_snapshot, self.args.restart_generation)
 
     seed_model, seed_ast = util.load_model_from_file(self.args.seed_model_file, self.args.seed_model_version, 0)
     seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)

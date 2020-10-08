@@ -82,6 +82,27 @@ class CostTiers():
 	"""
 	loads everything from stored snapshot up to (not including) the end generation
 	"""
+	def load_generation_from_database(self, database_file, generation):
+		self.logger.info(f"--- Reloading cost tiers from {database_file} generation {generation} ---")
+		self.build_cost_tier_database()
+		self.tier_database.load(database_file)
+		# remove any entries with generation >= end_generation
+		to_delete = [key for (key, data) in self.tier_database.table.items() if data["generation"] != generation]
+		for key in to_delete:
+			del self.tier_database.table[key]
+
+		self.tier_database.cntr = len(self.tier_database.table)
+
+		for key, data in self.tier_database.table.items():
+			self.tiers[data["tier"]][data["model_id"]] = (data["compute_cost"], data["psnr"])
+
+		for tid, tier in enumerate(self.tiers):
+			for model_id in tier:
+				self.logger.info(f"tier {tid} : model {model_id} compute cost {tier[model_id][0]}, psnr {tier[model_id][1]}")
+
+	"""
+	loads everything from stored snapshot up to (not including) the end generation
+	"""
 	def load_from_database(self, database_file, end_generation):
 		self.logger.info(f"--- Reloading cost tiers from {database_file} up to generation {end_generation} ---")
 		self.build_cost_tier_database()

@@ -392,10 +392,6 @@ class FastUpsampleOp(nn.Module):
 
   def forward(self, x):
     # upsample each channel separately 
-    up_shape = list(x.shape)
-    up_shape[2] = (up_shape[2]//2) * 3
-    up_shape[3] = (up_shape[3]//2) * 3
-
     blu = self.nn_broadcaster(x[:,:,0::2,1::2])
     red = self.nn_broadcaster(x[:,:,1::2,0::2])
     grR = self.nn_broadcaster(x[:,:,1::2,1::2])
@@ -405,10 +401,8 @@ class FastUpsampleOp(nn.Module):
     out_shape = list(x.shape)
     out_shape[2] = (out_shape[2] * 3) - 4
     out_shape[3] = (out_shape[3] * 3) - 4
-    out = torch.Tensor(torch.Size(out_shape))
 
-    if not self.gpu_id is None:
-      out = out.to(device=f"cuda:{self.gpu_id}")
+    out = torch.empty(torch.Size(out_shape), device=x.device)
 
     out[:,:,0::2,0::2] = grR[:,:,0:-2, 0:-2]
     out[:,:,0::2,1::2] = red[:,:,0:-2, 2: ]
