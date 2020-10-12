@@ -291,7 +291,7 @@ class ReluOp(nn.Module):
   def __init__(self, operand):
     super(ReluOp, self).__init__()
     self._operands = nn.ModuleList([operand])
-    self.f = nn.ReLU()
+    self.f = nn.ReLU(inplace=True)
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
