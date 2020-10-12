@@ -16,7 +16,7 @@ import util
 import meta_model
 import model_lib
 from torch_model import ast_to_model
-from dataset import GreenDataset
+from dataset import GreenDataset, FastDataLoader
 
 def train(args, models, model_id, model_dir):
   print(f"training {len(models)} models")
@@ -49,21 +49,22 @@ def train(args, models, model_id, model_dir):
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
 
-  train_queue = torch.utils.data.DataLoader(
+  train_queue = FastDataLoader(
       train_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
-      pin_memory=True, num_workers=0)
+      pin_memory=True, num_workers=8)
 
-  validation_queue = torch.utils.data.DataLoader(
+  validation_queue = FastDataLoader(
       validation_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(validation_indices),
-      pin_memory=True, num_workers=0)
+      pin_memory=True, num_workers=8)
 
 
   for epoch in range(args.epochs):
     # training
     train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, \
       model_pytorch_files, validation_queue, validation_loggers, epoch)
+    print(f"finished epoch {epoch}")
     # validation
     valid_losses = infer(args, validation_queue, models, criterion, validation_loggers)
     for i in range(len(models)):
@@ -134,13 +135,14 @@ if __name__ == "__main__":
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
   parser.add_argument('--learning_rate', type=float, default=0.025, help='init learning rate')
   parser.add_argument('--momentum', type=float, default=90., help='momentum')
-  parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay')
+  parser.add_argument('--weight_decay', type=float, default=1e-8, help='weight decay')
   parser.add_argument('--report_freq', type=float, default=200, help='report frequency')
   parser.add_argument('--save_freq', type=float, default=2000, help='save frequency')
   parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
   parser.add_argument('--epochs', type=int, default=10, help='num of training epochs')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
   parser.add_argument('--multires_model', action='store_true')
+  parser.add_argument('--fast_multires_model', action='store_true')
   parser.add_argument('--demosaicnet', action='store_true')
   parser.add_argument('--ahd', action='store_true')
   parser.add_argument('--ahd2d', action='store_true')
@@ -159,7 +161,7 @@ if __name__ == "__main__":
 
   args.model_path = os.path.join(args.save, args.model_path)
   args.results_file = os.path.join(args.save, args.results_file)
-  model_manager = util.ModelManager(args.model_path)
+  model_manager = util.ModelManager(args.model_path, 0)
   model_dir = model_manager.model_dir('seed')
   util.create_dir(model_dir)
 
@@ -174,6 +176,9 @@ if __name__ == "__main__":
   if args.multires_model:
     logger.info("TRAINING MULTIRES GREEN")
     green = model_lib.multires_green_model()
+  elif args.fast_multires_model:
+    logger.info("TRAINING FAST MULTIRES GREEN")
+    green = model_lib.fast_multires_green_model()
   elif args.demosaicnet:
     logger.info("TRAINING DEMOSAICNET GREEN")
     green = model_lib.mini_demosaicnet()
@@ -205,7 +210,7 @@ if __name__ == "__main__":
   cudnn.deterministic=True
   torch.cuda.manual_seed(args.seed)
 
-  models = [green.ast_to_model().cuda() for i in range(args.model_initializations)]
+  models = [green.ast_to_model(args.gpu).cuda() for i in range(args.model_initializations)]
   for m in models:
     m._initialize_parameters()
     
