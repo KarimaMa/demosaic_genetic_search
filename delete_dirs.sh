@@ -1,9 +1,10 @@
 #!/bin/bash
 
-START=601
-END=648
+START=$1
+END=$2
+BASEDIR=$3
 for i in $(seq $START $END)
 do
   echo $i
-  rm -rf models/$i
+  rm -rf $BASEDIR/$i
 done
