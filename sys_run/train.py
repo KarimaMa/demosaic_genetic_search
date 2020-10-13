@@ -127,9 +127,12 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   optimizers = get_optimizers(args, models)
 
   lr_tracker, optimizers, train_loggers, validation_loggers = lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, valid_queue, validation_loggers)
-  reuse_lr_search_epoch = lr_tracker.proposed_lrs[-1] == lr_tracker.proposed_lrs[-2]
-  for lr_search_iter, variance in enumerate(lr_tracker.seen_variances):
-    experiment_logger.info(f"PROPOSED LEARNING RATE {lr_tracker.proposed_lrs[lr_search_iter]} INDUCES VALIDATION VARIANCE {variance} AT A VALIDATION FRE0QUENCY OF {args.validation_freq}")
+  if args.lr_search_steps > 0:
+    reuse_lr_search_epoch = lr_tracker.proposed_lrs[-1] == lr_tracker.proposed_lrs[-2]
+    for lr_search_iter, variance in enumerate(lr_tracker.seen_variances):
+      experiment_logger.info(f"LEARNING RATE {lr_tracker.proposed_lrs[lr_search_iter]} INDUCES VALIDATION VARIANCE {variance} AT A VALIDATION FRE0QUENCY OF {args.validation_freq}")
+  else:
+    reuse_lr_search_epoch = False
   experiment_logger.info(f"USING LEARNING RATE {lr_tracker.proposed_lrs[-1]}")
 
   if not reuse_lr_search_epoch:
@@ -162,6 +165,11 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
 
 def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers):
   lr_tracker = LRTracker(args.learning_rate, args.variance_max, args.variance_min)
+  if args.lr_search_steps == 0:
+    optimizers = get_optimizers(args, models)
+    train_loggers = create_loggers(model_dir, model_id, len(models), "train")
+    validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
+
   for step in range(args.lr_search_steps):
     optimizers = get_optimizers(args, models)
     losses, validation_variance = get_validation_variance(args, gpu_id, models, criterion, optimizers, train_queue, train_loggers, validation_queue, validation_loggers)
