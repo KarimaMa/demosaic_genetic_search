@@ -245,6 +245,10 @@ class GreenExtractorOp(nn.Module):
     self.mask[0::2,1::2] = 1
     self.mask[1::2,0::2] = 1
 
+    # self.chroma_mask = torch.zeros((IMG_H, IMG_W))
+    # self.chroma_mask[1::2,1::2] = 1
+    # self.chroma_mask[0::2,0::2] = 1
+
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
@@ -258,6 +262,7 @@ class GreenExtractorOp(nn.Module):
     # if bayer.is_cuda and not self.mask.is_cuda:
     #   self.mask = self.mask.to(device=f"cuda:{self.gpu_id}")
     _, _, bayer_h, bayer_w = bayer.size()
+    #green = x * self.mask[0:bayer_h, 0:bayer_w] + (self.chroma_mask*bayer[:,0,...]).unsqueeze(1)
     green = x * self.mask[0:bayer_h, 0:bayer_w] + bayer[:,0,...].unsqueeze(1)
     return green
 
@@ -265,7 +270,7 @@ class GreenExtractorOp(nn.Module):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
     self.mask = self.mask.to(device=f"cuda:{gpu_id}")
-
+    #self.chroma_mask = self.chroma_mask.to(device=f"cuda:{gpu_id}")
 
 class SoftmaxOp(nn.Module):
   def __init__(self, operand):
