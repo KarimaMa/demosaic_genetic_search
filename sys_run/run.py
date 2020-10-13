@@ -24,7 +24,9 @@ import torch.backends.cudnn as cudnn
 import sys
 sys.path.append(sys.path[0].split("/")[0])
 from tree import has_loop
-from cost import ModelEvaluator, CostTiers, Sampler
+import cost
+import pareto
+from cost import ModelEvaluator, CostTiers
 from demosaic_ast import structural_hash, Downsample
 from mutate import Mutator, has_downsample, MutationType
 import util
@@ -290,7 +292,7 @@ class Searcher():
                                               train_psnrs, validation_psnrs, self.log_format, self.task_logger))
     return p
 
-  def run_training_tasks(self, gpu_ids, process_queue):
+  def run_training_tasks(self, gpu_ids, process_queue, train_psnrs, validation_psnrs):
     timeout = self.args.train_timeout
     bootup_time = 30
     available_gpus = set((0,1,2,3))
@@ -334,8 +336,10 @@ class Searcher():
               task.terminate()
               task.join()
               if not task_id in restarted:
-                self.task_logger.info(f"task {task_id} model_id {task_info.model_id} process name {task.name} unresponsive, restarting...")
-                task.start()
+                self.task_logger.info(f"task {task_id} model_id {task_info.model_id} process name {task.name} " +
+                                      f"unresponsive, restarting on gpu {gpu_ids[task_id]}...")
+                new_task = self.create_train_process(task_info, gpu_ids, train_psnrs, validation_psnrs)
+                new_task.start()
                 start_times[task_id] = time.time()
                 restarted.add(task_id)
               else: # we've already failed to restart this task, give up 
@@ -512,7 +516,11 @@ class Searcher():
         if len(tier) == 0:
           continue
 
-        tier_sampler = Sampler(tier)
+        if self.args.pareto_sampling:
+          tier_sampler = pareto.Sampler(tier, self.args.pareto_factor)
+        else:
+          tier_sampler = cost.Sampler(tier)
+
         self.search_logger.info(f"\n--- sampling tier {tid} size: {len(tier)} min psnr: {tier_sampler.min} max psnr: {tier_sampler.max} ---")
         
         process_queue = ProcessQueue()
@@ -572,7 +580,7 @@ class Searcher():
           task = self.create_train_process(task_info, gpu_ids, train_psnrs, valid_psnrs)
           process_queue.add((task, task_info))
 
-        failed_tasks = self.run_training_tasks(gpu_ids, process_queue)
+        failed_tasks = self.run_training_tasks(gpu_ids, process_queue, training_tasks, valid_psnrs)
 
         # update model database 
         for new_model_ast, task_info in training_tasks:
@@ -666,6 +674,8 @@ if __name__ == "__main__":
   parser.add_argument('--generations', type=int, default=20, help='model search generations')
   parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
   parser.add_argument('--tier_size', type=int, default=15, help='how many models to keep per tier')
+  parser.add_argument('--pareto_sampling', action='store_true', help='whether to use pareto sampling')
+  parser.add_argument('--pareto_factor', type=float, help='discount factor per pareto frontier')
   parser.add_argument('--mutations_per_generation', type=int, default=12, help='how many mutations produced by each tier per generation')
 
   parser.add_argument('--mutation_failure_threshold', type=int, default=500, help='max number of tries to mutate a tree')
