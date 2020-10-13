@@ -33,7 +33,9 @@ def train(args, models, model_id, model_dir):
                         for model_version in range(len(models))]
 
   models = [model.cuda() for model in models]
-
+  for m in models:
+    m.to_gpu(args.gpu)
+    
   criterion = nn.MSELoss()
 
   optimizers = [torch.optim.Adam(
@@ -41,8 +43,8 @@ def train(args, models, model_id, model_dir):
       args.learning_rate,
       weight_decay=args.weight_decay) for m in models]
 
-  train_data = GreenDataset(data_file=args.training_file, use_cropping=args.use_cropping) 
-  validation_data = GreenDataset(data_file=args.validation_file, use_cropping=args.use_cropping)
+  train_data = GreenDataset(data_file=args.training_file) 
+  validation_data = GreenDataset(data_file=args.validation_file)
 
   num_train = len(train_data)
   train_indices = list(range(int(num_train*args.train_portion)))
@@ -154,7 +156,6 @@ if __name__ == "__main__":
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
-  parser.add_argument('--use_cropping', action='store_true', help='whether to use center crop of image')
   parser.add_argument('--validation_freq', type=int, default=None, help='validation frequency')
 
   args = parser.parse_args()
