@@ -102,7 +102,6 @@ class Dataset(data.Dataset):
     else:
       self.list_IDs = data_filenames
     self.return_index = return_index
-    self.use_cropping = use_cropping
     self.RAM = RAM
     
     if self.RAM:
@@ -117,10 +116,6 @@ class Dataset(data.Dataset):
         green = np.expand_dims(img[1,...], axis=0)
         mosaic = bayer(img)
         mosaic = np.sum(mosaic, axis=0, keepdims=True)
-
-        if self.use_cropping: # take center crop of image
-          mosaic = mosaic[...,32:94,32:94]
-          green = green[...,32:94,32:94]
 
         self.inputs.append(mosaic)
         self.labels.append(green)
@@ -144,9 +139,7 @@ class Dataset(data.Dataset):
   
     if self.return_index:
       return (index, mosaic, green)
-    if self.use_cropping: # take center crop of image
-      mosaic = mosaic[...,32:94,32:94]
-      green = green[...,32:94,32:94]
+  
     return (mosaic, green) 
 
 
@@ -192,15 +185,15 @@ class GreenSharedDataset(data.Dataset):
 
 
 class GreenDataset(data.Dataset):
-  def __init__(self, data_file=None, data_filenames=None, return_index=False, use_cropping=False, RAM=False):
+  def __init__(self, data_file=None, data_filenames=None, return_index=False, RAM=False, flatten=True):
     if data_file:
       self.list_IDs = ids_from_file(data_file) # patch filenames
     else:
       self.list_IDs = data_filenames
     self.return_index = return_index
-    self.use_cropping = use_cropping
     self.RAM = RAM
-    
+    self.flatten = flatten
+
     if self.RAM:
       self.inputs = []
       self.labels = []
@@ -213,10 +206,6 @@ class GreenDataset(data.Dataset):
         green = np.expand_dims(img[1,...], axis=0)
         mosaic = bayer(img)
         mosaic = np.sum(mosaic, axis=0, keepdims=True)
-
-        if self.use_cropping: # take center crop of image
-          mosaic = mosaic[...,32:94,32:94]
-          green = green[...,32:94,32:94]
 
         self.inputs.append(mosaic)
         self.labels.append(green)
@@ -236,13 +225,13 @@ class GreenDataset(data.Dataset):
     img = np.transpose(img, [2, 0, 1])
     green = np.expand_dims(img[1,...], axis=0)
     mosaic = bayer(img)
-    mosaic = np.sum(mosaic, axis=0, keepdims=True)
+    
+    if self.flatten:
+      mosaic = np.sum(mosaic, axis=0, keepdims=True)
   
     if self.return_index:
       return (index, mosaic, green)
-    if self.use_cropping: # take center crop of image
-      mosaic = mosaic[...,32:94,32:94]
-      green = green[...,32:94,32:94]
+  
     return (mosaic, green) 
 
   def save_kcore_filenames(self, kcore_ids, kcore_filename):
