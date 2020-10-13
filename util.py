@@ -198,8 +198,9 @@ class ModelManager():
 
 
   def save_model(self, models, model_ast, model_dir):
-    ast_file = get_model_ast_file(model_dir)
-    model_ast.save_ast(ast_file)
+    if not model_ast is None:
+      ast_file = get_model_ast_file(model_dir)
+      model_ast.save_ast(ast_file)
 
     pytorch_files = [get_model_pytorch_file(model_dir, model_version) \
                     for model_version in range(len(models))]
@@ -209,7 +210,8 @@ class ModelManager():
     info_file = get_model_info_file(model_dir)
 
     with open(info_file, "w+") as f:
-      f.write(ast_file + "\n")
+      if not model_ast is None:
+        f.write(ast_file + "\n")
       for pf in pytorch_files:
         f.write(pf + "\n")
 
