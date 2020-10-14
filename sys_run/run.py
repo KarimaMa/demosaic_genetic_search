@@ -610,7 +610,10 @@ class Searcher():
 
         self.model_database.save()
 
-      new_cost_tiers.keep_topk(tier_size)
+      if self.args.pareto_sampling:
+        new_cost_tiers.pareto_keep_topk(tier_size)
+      else:
+        new_cost_tiers.keep_topk(tier_size)
       cost_tiers = new_cost_tiers
 
       self.update_model_occurences()
@@ -652,9 +655,9 @@ def parse_cost_tiers(s):
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
   parser.add_argument('--default_channels', type=int, default=16, help='num of output channels for conv layers')
-  parser.add_argument('--max_nodes', type=int, default=33, help='max number of nodes in a tree')
+  parser.add_argument('--max_nodes', type=int, default=35, help='max number of nodes in a tree')
   parser.add_argument('--min_subtree_size', type=int, default=2, help='minimum size of subtree in insertion')
-  parser.add_argument('--max_subtree_size', type=int, default=11, help='maximum size of subtree in insertion')
+  parser.add_argument('--max_subtree_size', type=int, default=12, help='maximum size of subtree in insertion')
   parser.add_argument('--structural_sim_reject', type=float, default=0.66, help='rejection probability threshold for structurally similar trees')
 
   parser.add_argument('--starting_model_id', type=int)
@@ -664,9 +667,9 @@ if __name__ == "__main__":
   parser.add_argument('--tier_database_dir', type=str, default='cost_tier_database', help='path to save cost tier snapshot')
   parser.add_argument('--restart_generation', type=int, help='generation to start search from if restarting a prior run')
   parser.add_argument('--tier_snapshot', type=str, help='saved cost tiers to restart from')
-  parser.add_argument('--save', type=str, default='MODEL_SEARCH', help='experiment name')
+  parser.add_argument('--save', type=str, help='experiment name')
 
-  parser.add_argument('--seed', type=int, default=2, help='random seed')
+  parser.add_argument('--seed', type=int, default=1, help='random seed')
   parser.add_argument('--seed_model_file', type=str, default='DATADUMP/BASIC_GREEN_SEED_5NEG3_LR/models/seed/model_info', help='')
   parser.add_argument('--seed_model_version', type=int, default=0)
   parser.add_argument('--seed_model_psnr', type=float, default=31.38)
@@ -690,7 +693,7 @@ if __name__ == "__main__":
   parser.add_argument('--save_timeout', type=int, default=10)
 
   # training parameters
-  parser.add_argument('--num_gpus', type=int, default=1, help='number of available GPUs') # change this to use all available GPUs
+  parser.add_argument('--num_gpus', type=int, default=4, help='number of available GPUs') # change this to use all available GPUs
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
   parser.add_argument('--learning_rate', type=float, default=0.01, help='initial learning rate')
   parser.add_argument('--lr_search_steps', type=int, default=1, help='how many line search iters for finding learning rate')
