@@ -10,10 +10,13 @@ import torch.nn as nn
 import torch.utils
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
+import numpy as np 
 
 from demosaic_ast import *
 from dataset import GreenDataset
 from database import Database
+from pareto import get_pareto_ranks
+
 
 ADD_COST = 1
 MUL_COST = 1
@@ -148,7 +151,34 @@ class CostTiers():
 			self.tiers[tid] = new_tier
 
 
+	def pareto_keep_topk(self, k):
+		self.logger.info(f"--- Pareto Top K culling ---")
+		for tid, tier in enumerate(self.tiers):
+			if len(tier) == 0:
+				continue
+			model_ids = list(tier.keys())
+			values = list(zip(*[tier[model_id] for model_id in model_ids]))
+			compute_costs = values[0]
+			psnrs = values[1]
+			ranks = get_pareto_ranks(compute_costs, psnrs)
 
+			new_tier = {}
+			curr_rank = 0
+			while len(new_tier) < k and curr_rank <= max(ranks):
+				frontier_indices = np.argwhere(ranks == curr_rank)
+				rank_size = len(frontier_indices)
+				if len(new_tier) + rank_size <= k:
+					for f_idx in frontier_indices:
+						f_idx = f_idx[0]
+						new_tier[model_ids[f_idx]] = (compute_costs[f_idx], psnrs[f_idx])
+						self.logger.info(f"tier {tid} adding model with rank {ranks[f_idx]} cost {compute_costs[f_idx]} psnr {psnrs[f_idx]}")
+				else:
+					portion = k - len(new_tier)
+					chosen = np.random.choice(frontier_indices, portion)
+					for f_idx in chosen:
+						new_tier[model_ids[f_idx]] = (compute_costs[f_idx], psnrs[f_idx])
+						self.logger.info(f"tier {tid} adding model with rank {ranks[f_idx]} cost {compute_costs[f_idx]} psnr {psnrs[f_idx]}")
+				curr_rank += 1
 
 class ModelEvaluator():
 	def __init__(self, training_args):

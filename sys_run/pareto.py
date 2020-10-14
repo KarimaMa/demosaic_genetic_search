@@ -1,9 +1,10 @@
 from paretoset import paretoset
 import pandas as pd 
+import numpy as np
 import math
 import random
 
-def get_pareto_ranks(self, compute_costs, psnrs):
+def get_pareto_ranks(compute_costs, psnrs):
 	data = pd.DataFrame({
 			"compute": compute_costs,
 			"psnr": psnrs
@@ -37,13 +38,15 @@ class Sampler():
 		self.cost_tier = cost_tier
 		self.factor = factor
 
-		self.model_ids = self.cost_tier.keys()
-		values = zip(*[self.cost_tier[model_id] for model_id in model_ids])
+		self.model_ids = list(self.cost_tier.keys())
+		values = list(zip(*[self.cost_tier[model_id] for model_id in self.model_ids]))
 		self.compute_costs = values[0]
 		self.psnrs = values[1]
 		self.ranks = get_pareto_ranks(self.compute_costs, self.psnrs)
 		self.pdf = get_pareto_pdf(self.ranks, self.factor)
 		self.cdf = np.cumsum(self.pdf)
+		self.min = min(self.psnrs)
+		self.max = max(self.psnrs)
 
 	def sample(self):
 		value = random.uniform(0,1)
