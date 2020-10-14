@@ -48,7 +48,7 @@ def launch_train(args, model_ast, model_dir, model_id):
 											os.path.join(model_dir, f'model_{model_id}_training_log'))
 	training_logger.info("args = %s", args)
 
-	val_psnrs, train_psrns = train_model(args, args.gpu, model_id, models, model_dir, training_logger)
+	val_psnrs, train_psnrs = train_model(args, args.gpu, model_id, models, model_dir, training_logger)
 
 	return val_psnrs, train_psnrs
 
