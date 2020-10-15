@@ -165,11 +165,10 @@ class CostTiers():
 			new_tier = {}
 			curr_rank = 0
 			while len(new_tier) < k and curr_rank <= max(ranks):
-				frontier_indices = np.argwhere(ranks == curr_rank)
+				frontier_indices = np.argwhere(ranks == curr_rank).flatten()
 				rank_size = len(frontier_indices)
 				if len(new_tier) + rank_size <= k:
 					for f_idx in frontier_indices:
-						f_idx = f_idx[0]
 						new_tier[model_ids[f_idx]] = (compute_costs[f_idx], psnrs[f_idx])
 						self.logger.info(f"tier {tid} adding model with rank {ranks[f_idx]} cost {compute_costs[f_idx]} psnr {psnrs[f_idx]}")
 				else:
