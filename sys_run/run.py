@@ -656,7 +656,7 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
   parser.add_argument('--default_channels', type=int, default=16, help='num of output channels for conv layers')
   parser.add_argument('--max_nodes', type=int, default=35, help='max number of nodes in a tree')
-  parser.add_argument('--min_subtree_size', type=int, default=2, help='minimum size of subtree in insertion')
+  parser.add_argument('--min_subtree_size', type=int, default=1, help='minimum size of subtree in insertion')
   parser.add_argument('--max_subtree_size', type=int, default=12, help='maximum size of subtree in insertion')
   parser.add_argument('--structural_sim_reject', type=float, default=0.66, help='rejection probability threshold for structurally similar trees')
 
@@ -699,7 +699,7 @@ if __name__ == "__main__":
   parser.add_argument('--lr_search_steps', type=int, default=1, help='how many line search iters for finding learning rate')
   parser.add_argument('--variance_min', type=float, default=0.003, help='minimum validation psnr variance')
   parser.add_argument('--variance_max', type=float, default=0.02, help='maximum validation psnr variance')
-  parser.add_argument('--weight_decay', type=float, default=1e-10, help='weight decay')
+  parser.add_argument('--weight_decay', type=float, default=1e-16, help='weight decay')
   parser.add_argument('--report_freq', type=float, default=200, help='training report frequency')
   parser.add_argument('--save_freq', type=float, default=2000, help='trained weights save frequency')
   parser.add_argument('--epochs', type=int, default=3, help='num of training epochs')
