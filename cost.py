@@ -179,6 +179,8 @@ class CostTiers():
 						self.logger.info(f"tier {tid} adding model with rank {ranks[f_idx]} cost {compute_costs[f_idx]} psnr {psnrs[f_idx]}")
 				curr_rank += 1
 
+			self.tiers[tid] = new_tier
+
 class ModelEvaluator():
 	def __init__(self, training_args):
 		self.args = training_args
