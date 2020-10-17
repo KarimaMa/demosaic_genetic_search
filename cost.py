@@ -94,7 +94,7 @@ class CostTiers():
 		for key in to_delete:
 			del self.tier_database.table[key]
 
-		self.tier_database.cntr = max(self.tier_database.table.key())
+		self.tier_database.cntr = max(self.tier_database.table.keys())
 
 		for key, data in self.tier_database.table.items():
 			self.tiers[data["tier"]][data["model_id"]] = (data["compute_cost"], data["psnr"])
