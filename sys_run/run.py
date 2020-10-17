@@ -459,7 +459,7 @@ class Searcher():
 
     if self.args.model_db_snapshot is not None:
       self.model_database.load(self.args.model_db_snapshot)
-      
+
     seed_model, seed_ast = util.load_model_from_file(self.args.seed_model_file, self.args.seed_model_version, 0)
     seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)
     util.create_dir(seed_model_dir)
@@ -670,6 +670,7 @@ if __name__ == "__main__":
   parser.add_argument('--tier_database_dir', type=str, default='cost_tier_database', help='path to save cost tier snapshot')
   parser.add_argument('--restart_generation', type=int, help='generation to start search from if restarting a prior run')
   parser.add_argument('--tier_snapshot', type=str, help='saved cost tiers to restart from')
+  parser.add_argument('--model_db_snapshot', type=str, help='saved model database to restart from')
   parser.add_argument('--save', type=str, help='experiment name')
 
   parser.add_argument('--seed', type=int, default=1, help='random seed')
