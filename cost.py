@@ -129,7 +129,7 @@ class CostTiers():
 	"""
 	def add(self, model_id, compute_cost, model_accuracy):
 		for i, cost_range in enumerate(self.compute_cost_ranges):
-			if compute_cost < cost_range[1]:
+			if compute_cost <= cost_range[1]:
 				self.tiers[i][model_id] = (compute_cost, model_accuracy)				
 				self.logger.info(f"adding model {model_id} with compute cost " +
 								f"{compute_cost} and psnr {model_accuracy} to tier {i}")

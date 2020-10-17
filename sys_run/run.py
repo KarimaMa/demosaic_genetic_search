@@ -457,6 +457,9 @@ class Searcher():
     if self.args.restart_generation is not None:
       cost_tiers.load_generation_from_database(self.args.tier_snapshot, self.args.restart_generation-1)
 
+    if self.args.model_db_snapshot is not None:
+      self.model_database.load(self.args.model_db_snapshot)
+      
     seed_model, seed_ast = util.load_model_from_file(self.args.seed_model_file, self.args.seed_model_version, 0)
     seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)
     util.create_dir(seed_model_dir)
@@ -498,7 +501,7 @@ class Searcher():
       start_generation = self.args.restart_generation
       end_generation = start_generation + self.args.generations 
 
-    self.search_logger.info(f"   --- STARTING SEARCH AT GENEARTION {start_generation} AND ENDING AT {end_generation} ---")
+    self.search_logger.info(f"   --- STARTING SEARCH AT GENERATION {start_generation} AND ENDING AT {end_generation} ---")
     for generation in range(start_generation, end_generation):
       generational_tier_sizes = [len(tier.items()) for tier in cost_tiers.tiers]
       self.search_logger.info(f"--- STARTING GENERATION {generation} ---")
