@@ -42,7 +42,7 @@ import mysql_db
 
 def build_model_database(args):
   fields = ["model_id", "id_str", "hash", "structural_hash", "generation", "occurrences", "best_init"]
-  field_types = [int, int, int, int, int, int, int]
+  field_types = [int, str, int, int, int, int, int]
   for model_init in range(args.model_initializations):
     fields += [f"psnr_{model_init}"]
     field_types += [float]
