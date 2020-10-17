@@ -49,7 +49,7 @@ class Node:
     id_str = f"{self.__class__.__name__}-"
     id_str += f"{self.out_c}-"
     if type(self.in_c) is tuple:
-      id_str += f"{self.in_c[0]},{self.in_c[1]}-"
+      id_str += f"{self.in_c[0]};{self.in_c[1]}-"
     else:
       id_str += f"{self.in_c}-"
     if self.num_children == 2:
