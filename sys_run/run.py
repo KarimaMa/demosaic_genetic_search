@@ -209,6 +209,10 @@ class Searcher():
       failure_data = {"model_id" : model_id,
                     "hash" : hash(model_ast),
                     "mutation_type" : failure["mutation_type"]}
+      print(f"mutation type: {failure['mutation_type']}")
+      print(failure["mutation_type"] == MutationType.INSERTION.name)
+      print(failure)
+      
       if failure["mutation_type"] == MutationType.INSERTION.name:
         failure_data["insert_ops"] = failure["insert_ops"]
         failure_data["insert_child_id"] = failure["insert_child_id"]
