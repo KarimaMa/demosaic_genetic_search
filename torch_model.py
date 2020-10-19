@@ -67,20 +67,39 @@ def init_dense2fullres_bayer(weights):
 
 
 class InputOp(nn.Module):
-  def __init__(self):
+  def __init__(self, input_name, model=None, model_name=None):
     super(InputOp, self).__init__()
+    self.name = input_name
+    if model:
+      self.model = model
+      self.model_name = f"input_model_{model_name}"
+      setattr(self, self.model_name, model)
+      self.output = None
 
   def _initialize_parameters(self):
-    pass
+    if hasattr(self, "model"):
+      self.model._initialize_parameters()
 
-  def foward(self, bayer):
-    return bayer
+  def reset(self):
+    self.output = None
 
-  def run(self, bayer, kcore_features=None):
-    return bayer
+  # unnecessary function, never called but needed by nn.Module
+  def foward(self, model_inputs):
+    return model_inputs[self.name]
+
+  def run(self, model_inputs):
+    if hasattr(self, "model"):
+      if not self.output is None:
+        return self.output
+      else:
+        self.output = self.model.run(model_inputs)
+        return self.output
+    else:
+      return model_inputs[self.name]
 
   def to_gpu(self, gpu_id):
-    pass
+    if hasattr(self, "model"):
+      self.model.to_gpu(gpu_id)
 
 
 class AddOp(nn.Module):
@@ -92,9 +111,13 @@ class AddOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    loperand = self._operands[0].run(bayer, kcore_features)
-    roperand = self._operands[1].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+
+  def run(self, model_inputs):
+    loperand = self._operands[0].run(model_inputs)
+    roperand = self._operands[1].run(model_inputs)
     return self.forward(loperand, roperand)
 
   def forward(self, x, y):
@@ -114,12 +137,16 @@ class SubOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    loperand = self._operands[0].run(bayer, kcore_features)
-    roperand = self._operands[1].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+
+  def run(self, model_inputs):
+    loperand = self._operands[0].run(model_inputs)
+    roperand = self._operands[1].run(model_inputs)
     return self.forward(loperand, roperand)
 
-  def forward(self, x, y):
+  def forward(self, x, y): 
     return x - y
 
   def to_gpu(self, gpu_id):
@@ -136,9 +163,13 @@ class MulOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    loperand = self._operands[0].run(bayer, kcore_features)
-    roperand = self._operands[1].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+
+  def run(self, model_inputs):
+    loperand = self._operands[0].run(model_inputs)
+    roperand = self._operands[1].run(model_inputs)
     return self.forward(loperand, roperand)
 
   def forward(self, x, y):
@@ -158,9 +189,13 @@ class LogSubOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    loperand = self._operands[0].run(bayer, kcore_features)
-    roperand = self._operands[1].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+
+  def run(self, model_inputs):
+    loperand = self._operands[0].run(model_inputs)
+    roperand = self._operands[1].run(model_inputs)
     return self.forward(loperand, roperand)
 
   def forward(self, x, y):
@@ -180,9 +215,13 @@ class AddExpOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    loperand = self._operands[0].run(bayer, kcore_features)
-    roperand = self._operands[1].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+
+  def run(self, model_inputs):
+    loperand = self._operands[0].run(model_inputs)
+    roperand = self._operands[1].run(model_inputs)
     return self.forward(loperand, roperand)
 
   def forward(self, x, y):
@@ -202,9 +241,13 @@ class StackOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    loperand = self._operands[0].run(bayer, kcore_features)
-    roperand = self._operands[1].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+
+  def run(self, model_inputs):
+    loperand = self._operands[0].run(model_inputs)
+    roperand = self._operands[1].run(model_inputs)
     return self.forward(loperand, roperand)
 
   def forward(self, x, y):
@@ -216,25 +259,51 @@ class StackOp(nn.Module):
 
 
 class ChromaExtractorOp(nn.Module):
-  def __init__(self, loperand, roperand, gpu_id):
+  def __init__(self, operand1, operand2, operand3):
     super(ChromaExtractorOp, self).__init__()
-    self._operands = nn.ModuleList([loperand, roperand])
+    self._operands = nn.ModuleList([operand1, operand2, operand3])
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
+    self._operands[2]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    loperand = self._operands[0].run(bayer, kcore_features)
-    roperand = self._operands[1].run(bayer, kcore_features)
-    return self.forward(loperand, roperand)
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+    self._operands[2].reset()
 
-  def forward(self, x, y):
-    pass
+  def run(self, model_inputs):
+    self.reset()
+    operand1 = self._operands[0].run(model_inputs)
+    operand2 = self._operands[1].run(model_inputs)
+    operand3 = self._operands[2].run(model_inputs)
+
+    return self.forward(operand1, operand2, operand3)
+
+  def forward(self, chroma_hvq, bayer, green):
+    # input: cq, cv, ch and bayer output: red and blue 
+    out_shape = list(bayer.shape)
+    out_shape[1] = 3
+    out = torch.empty(torch.Size(out_shape), device=chroma_hvq.device)
+
+    out[:,0,0::2,0::2] = chroma_hvq[:,0,0::2,0::2]
+    out[:,0,1::2,1::2] = chroma_hvq[:,1,1::2,1::2]
+    out[:,0,1::2,0::2] = chroma_hvq[:,2,1::2,0::2]
+    out[:,0,0::2,1::2] = bayer[:,0,0::2,1::2]
+
+    out[:,1,:,:]       =  green[:,0,:,:]
+    out[:,2,1::2,1::2] = chroma_hvq[:,0,1::2,1::2]
+    out[:,2,0::2,0::2] = chroma_hvq[:,1,0::2,0::2]
+    out[:,2,0::2,1::2] = chroma_hvq[:,2,0::2,1::2]
+    out[:,2,1::2,0::2] = bayer[:,0,1::2,0::2]
+
+    return out
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
+    self._operands[2].to_gpu(gpu_id)
 
 
 class GreenExtractorOp(nn.Module):
@@ -253,9 +322,13 @@ class GreenExtractorOp(nn.Module):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    loperand = self._operands[0].run(bayer, kcore_features)
-    roperand = self._operands[1].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+
+  def run(self, model_inputs):
+    loperand = self._operands[0].run(model_inputs)
+    roperand = self._operands[1].run(model_inputs)
     return self.forward(loperand, roperand)
 
   def forward(self, x, bayer):
@@ -281,8 +354,11 @@ class SoftmaxOp(nn.Module):
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    operand = self._operands[0].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+
+  def run(self, model_inputs):
+    operand = self._operands[0].run(model_inputs)
     return self.forward(operand)
 
   def forward(self, x):
@@ -301,8 +377,11 @@ class ReluOp(nn.Module):
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    operand = self._operands[0].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+
+  def run(self, model_inputs):
+    operand = self._operands[0].run(model_inputs)
     return self.forward(operand)
 
   def forward(self, x):
@@ -320,8 +399,11 @@ class LogOp(nn.Module):
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    operand = self._operands[0].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+
+  def run(self, model_inputs):
+    operand = self._operands[0].run(model_inputs)
     return self.forward(operand)
 
   def forward(self, x):
@@ -339,8 +421,11 @@ class ExpOp(nn.Module):
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    operand = self._operands[0].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+
+  def run(self, model_inputs):
+    operand = self._operands[0].run(model_inputs)
     return self.forward(operand)
 
   def forward(self, x):
@@ -367,8 +452,11 @@ class DownsampleOp(nn.Module):
     pool.weight.requires_grad = False
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    operand = self._operands[0].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+
+  def run(self, model_inputs):
+    operand = self._operands[0].run(model_inputs)
     return self.forward(operand)
 
   def forward(self, x):
@@ -391,8 +479,11 @@ class FastUpsampleOp(nn.Module):
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    operand = self._operands[0].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+
+  def run(self, model_inputs):
+    operand = self._operands[0].run(model_inputs)
     return self.forward(operand)
 
   def forward(self, x):
@@ -444,8 +535,11 @@ class UpsampleOp(nn.Module):
     dense2fullres_bayer.weight.requires_grad = False
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    operand = self._operands[0].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+
+  def run(self, model_inputs):
+    operand = self._operands[0].run(model_inputs)
     return self.forward(operand)
 
   def forward(self, x):
@@ -483,15 +577,16 @@ class Conv1x1Op(nn.Module):
     nn.init.xavier_normal_(f.weight)
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    operand = self._operands[0].run(bayer, kcore_features)
-    return self.forward(operand, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
 
-  def forward(self, x, kcore_features): 
+  def run(self, model_inputs):
+    operand = self._operands[0].run(model_inputs)
+    return self.forward(operand)
+
+  def forward(self, x): 
     f = getattr(self, self.param_name)
     out = f(x)
-    if not kcore_features is None and "KcoreFeature" in self.param_name:
-      kcore_features["feat"] = out.mean(-1).mean(-1).detach()
     return out
 
   def to_gpu(self, gpu_id):
@@ -517,8 +612,7 @@ class DiagLRConv(nn.Module):
     return nn.functional.conv2d(x, torch.diag_embed(filter_w), padding=padding)
 
   def to_gpu(self, gpu_id):
-    self._operands[0].to_gpu(gpu_id)
-
+    pass
 
 # 1D diagonal convolution from top right corner to bottom left corner
 class DiagRLConv(nn.Module):
@@ -576,8 +670,11 @@ class Conv1DOp(nn.Module):
     self.diag2._initialize_parameters()
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    operand = self._operands[0].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+
+  def run(self, model_inputs):
+    operand = self._operands[0].run(model_inputs)
     return self.forward(operand)
 
   def forward(self, x):
@@ -603,8 +700,11 @@ class Conv2DOp(nn.Module):
     nn.init.xavier_normal_(f.weight)
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    operand = self._operands[0].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+
+  def run(self, model_inputs):
+    operand = self._operands[0].run(model_inputs)
     return self.forward(operand)
 
   def forward(self, x):
@@ -623,8 +723,11 @@ class SumROp(nn.Module):
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
-  def run(self, bayer, kcore_features=None):
-    operand = self._operands[0].run(bayer, kcore_features)
+  def reset(self):
+    self._operands[0].reset()
+
+  def run(self, model_inputs):
+    operand = self._operands[0].run(model_inputs)
     return self.forward(operand)
 
   def forward(self, x):
@@ -636,7 +739,17 @@ class SumROp(nn.Module):
 
 @extclass(Input)
 def ast_to_model(self, shared_children=None):
-  return InputOp()
+  if shared_children is None:
+    shared_children = {}
+  if hasattr(self, "node"):
+    if id(self) in shared_children:
+      return shared_children[id(self)]
+    else:
+      node_model = self.node.ast_to_model()
+      input_op = InputOp(self.name, model=node_model, model_name=self.name)
+      shared_children[id(self)] = input_op
+    return input_op
+  return InputOp(self.name)
 
 @extclass(Add)
 def ast_to_model(self, shared_children=None):
@@ -704,9 +817,11 @@ def ast_to_model(self, shared_children=None):
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  lmodel = self.lchild.ast_to_model(shared_children)
-  rmodel = self.rchild.ast_to_model(shared_children)
-  return ChromaExtractorOp(lmodel, rmodel)
+  model1 = self.child1.ast_to_model(shared_children)
+  model2 = self.child2.ast_to_model(shared_children)
+  model3 = self.child3.ast_to_model(shared_children)
+
+  return ChromaExtractorOp(model1, model2, model3)
 
 @extclass(GreenExtractor)
 def ast_to_model(self, shared_children=None):

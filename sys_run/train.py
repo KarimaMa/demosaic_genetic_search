@@ -9,18 +9,14 @@ import os
 import random 
 import numpy as np
 import sys
-from dataset import GreenDataset, ids_from_file, FastDataLoader
-
+from dataset import Dataset, ids_from_file, FastDataLoader
 
 sys.path.append(sys.path[0].split("/")[0])
 sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
 
 import util
-import meta_model
-import model_lib
-from torch_model import ast_to_model
-from dataset import GreenSharedDataset, ids_from_file
 from validation_variance_tracker import  VarianceTracker, LRTracker
+
 
 def get_optimizers(args, models):
   optimizers = [torch.optim.Adam(
@@ -39,47 +35,9 @@ def create_loggers(model_dir, model_id, num_models, mode):
   return loggers
 
 
-# def create_validation_dataset(args, inputs, inputs_shape, labels, labels_shape):
-#   inputs = np.frombuffer(inputs, dtype=float)
-#   labels = np.frombuffer(labels, dtype=float)
-
-#   inputs = inputs.reshape(inputs_shape)
-#   labels = labels.reshape(labels_shape)
-
-#   validation_data = GreenSharedDataset(data_file=args.validation_file, inputs=inputs, labels=labels)
-#   num_validation = len(validation_data)
-#   validation_indices = list(range(num_validation))
-
-#   validation_queue = torch.utils.data.DataLoader(
-#       validation_data, batch_size=args.batch_size,
-#       sampler=torch.utils.data.sampler.SubsetRandomSampler(validation_indices),
-#       pin_memory=True, num_workers=0)
-#   return validation_queue
-
-
-# def create_train_dataset(args, inputs, inputs_shape, labels, labels_shape):
-#   full_data_filenames = ids_from_file(args.training_file)
-#   used_filenames = full_data_filenames[0:int(args.train_portion)]
-#   inputs = np.frombuffer(inputs, dtype=float)
-#   labels = np.frombuffer(labels, dtype=float)
-  
-#   inputs = inputs.reshape(inputs_shape)
-#   labels = labels.reshape(labels_shape)
-
-#   train_data = GreenSharedDataset(data_filenames=used_filenames, inputs=inputs, labels=labels) 
-
-#   num_train = len(train_data)
-#   train_indices = list(range(num_train))
-  
-#   train_queue = torch.utils.data.DataLoader(
-#       train_data, batch_size=args.batch_size,
-#       sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
-#       pin_memory=True, num_workers=0)
-#   return train_queue
-
-
 def create_validation_dataset(args):
-  validation_data = GreenDataset(data_file=args.validation_file, RAM=False)
+  validation_data = Dataset(data_file=args.validation_file, RAM=False, \
+                            green_input=args.use_green_input, green_output=(not args.full_model))
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
 
@@ -93,8 +51,9 @@ def create_validation_dataset(args):
 def create_train_dataset(args):
   full_data_filenames = ids_from_file(args.training_file)
   used_filenames = full_data_filenames[0:int(args.train_portion)]
-  train_data = GreenDataset(data_filenames=used_filenames, RAM=False) 
 
+  train_data = Dataset(data_filenames=used_filenames, RAM=False, \
+                      green_input=args.use_green_input, green_output=(not args.full_model))
   num_train = len(train_data)
   train_indices = list(range(num_train))
   
@@ -194,14 +153,29 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
     m.train()
 
   print(f"LEN OF TRAIN QUEUE {len(train_queue)}")
+
   for step, (input, target) in enumerate(train_queue):
-    n = input.size(0)
-    input = Variable(input, requires_grad=False).to(device=f"cuda:{gpu_id}")#cuda()
-    target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}")#cuda()
+
+    if args.use_green_input:
+      bayer, green = input 
+      green_input = Variable(green, requires_grad=False).to(device=f"cuda:{gpu_id}")
+    else:
+      bayer = input
+
+    bayer_input = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}")
+    target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}")
+
+    n = bayer.size(0)
 
     for i, model in enumerate(models):
       optimizers[i].zero_grad()
-      pred = model.run(input)
+      if args.use_green_input:
+        model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
+        pred = model.run(model_inputs)
+      else:
+        model_inputs = {"Bayer": bayer_input}
+
+      pred = model.run(model_inputs)
       loss = criterion(pred, target)
 
       loss.backward()
@@ -228,14 +202,27 @@ def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_
     m.train()
 
   for step, (input, target) in enumerate(train_queue):
-    n = input.size(0)
 
-    input = Variable(input, requires_grad=False).to(device=f"cuda:{gpu_id}")#cuda()
-    target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}")#cuda()
+    if args.use_green_input:
+      bayer, green = input 
+      green_input = Variable(green, requires_grad=False).to(device=f"cuda:{gpu_id}")
+    else:
+      bayer = input
+
+    bayer_input = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}")
+    target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}")
+
+    n = bayer.size(0)
 
     for i, model in enumerate(models):
       optimizers[i].zero_grad()
-      pred = model.run(input)
+      if args.use_green_input:
+        model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
+        pred = model.run(model_inputs)
+      else:
+        model_inputs = {"Bayer": bayer_input}
+
+      pred = model.run(model_inputs)
       loss = criterion(pred, target)
 
       loss.backward()
@@ -260,12 +247,26 @@ def infer(args, gpu_id, valid_queue, models, criterion):
 
   with torch.no_grad():
     for step, (input, target) in enumerate(valid_queue):
-      input = Variable(input, requires_grad=False).to(device=f"cuda:{gpu_id}")#cuda()
-      target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}")#cuda()
-      n = input.size(0)
+  
+      if args.use_green_input:
+        bayer, green = input 
+        green_input = Variable(green, requires_grad=False).to(device=f"cuda:{gpu_id}")
+      else:
+        bayer = input
+
+      bayer_input = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}")
+      target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}")
+
+      n = bayer.size(0)
 
       for i, model in enumerate(models):
-        pred = model.run(input)
+        if args.use_green_input:
+          model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
+          pred = model.run(model_inputs)
+        else:
+          model_inputs = {"Bayer": bayer_input}
+
+        pred = model.run(model_inputs)
         loss = criterion(pred, target)
         loss_trackers[i].update(loss.item(), n)
 

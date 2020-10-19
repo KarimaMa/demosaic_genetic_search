@@ -564,7 +564,7 @@ class Searcher():
           task_info = MutationTaskInfo(task_id, new_model_entry, new_model_dir, pytorch_models, new_model_id)
 
           # consult mysql db for seen models on other machines
-          seen_psnrs = mysql_db.find(self.args.mysql_auth, hash(new_model_ast), \
+          seen_psnrs = mysql_db.find(self.args.mysql_auth, self.args.tablename, hash(new_model_ast), \
                                       new_model_ast.id_string(), self.mysql_logger)
           if not seen_psnrs is None: # model seen on other machine, skip training and use the given psnrs
             self.search_logger.info(f"model {new_model_id} already seen on another machine")
@@ -608,7 +608,7 @@ class Searcher():
 
           compute_cost = task_info.database_entry["compute_cost"]
           new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
-          mysql_db.mysql_insert(self.args.mysql_auth, task_info.model_id, self.args.machine, \
+          mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
                                 self.args.save, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
 
         self.model_database.save()
@@ -674,9 +674,15 @@ if __name__ == "__main__":
   parser.add_argument('--save', type=str, help='experiment name')
 
   parser.add_argument('--seed', type=int, default=1, help='random seed')
-  parser.add_argument('--seed_model_file', type=str, default='DATADUMP/BASIC_GREEN_SEED_5NEG3_LR/models/seed/model_info', help='')
-  parser.add_argument('--seed_model_version', type=int, default=0)
-  parser.add_argument('--seed_model_psnr', type=float, default=31.38)
+
+  # seed models 
+  parser.add_argument('--green_seed_model_file', type=str, default='DATADUMP/BASIC_GREEN_SEED_5NEG3_LR/models/seed/model_info', help='')
+  parser.add_argument('--green_seed_model_version', type=int, default=0)
+  parser.add_argument('--green_seed_model_psnr', type=float, default=31.38)
+
+  parser.add_argument('--chroma_seed_model_file', type=str, default='DATADUMP/SIMPLE_GREEN_INPUT_CHROMA_MODEL/models/seed/model_info', help='')
+  parser.add_argument('--chroma_seed_model_version', type=int, default=0)
+  parser.add_argument('--chroma_seed_model_psnr', type=float, default=32.32)
 
   parser.add_argument('--generations', type=int, default=20, help='model search generations')
   parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
@@ -713,8 +719,13 @@ if __name__ == "__main__":
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
 
+  # training full chroma + green parameters
+  parser.add_argument('--use_green_input', action="store_true")
+  parser.add_argument('--full_model', action="store_true")
+
   parser.add_argument('--mysql_auth', type=str)
   parser.add_argument("--machine", type=str)
+
   args = parser.parse_args()
 
   if not torch.cuda.is_available():
@@ -729,6 +740,17 @@ if __name__ == "__main__":
   cudnn.enabled=True
   cudnn.deterministic=True
   torch.cuda.manual_seed(args.seed)
+
+  if args.full_model:
+    args.seed_model_file = args.chroma_seed_model_file
+    args.seed_model_version = args.chroma_seed_model_version
+    args.seed_model_psnr = args.chroma_seed_model_psnr
+    args.tablename = "chroma"
+  else:
+    args.seed_model_file = args.green_seed_model_file
+    args.seed_model_version = args.green_seed_model_version
+    args.seed_model_psnr = args.green_seed_model_psnr
+    args.tablename = "green"
 
   args.cost_tiers = parse_cost_tiers(args.cost_tiers)
   util.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))

@@ -23,7 +23,6 @@ from tree import *
 from restrictions import *
 from util import extclass
 from enum import Enum
-from mysql_db import find, mysql_insert
 
 
 CHANNELS = set((1,4,8,12))
@@ -242,6 +241,13 @@ def remove_deleted_partner_connections(partners_of_deleted, deleted):
 fixes up parent child relationships to remove given node
 """
 def remove_node(parent, deletion_node, new_child):
+  if parent.num_children == 3:
+    if deletion_node is parent.child1:
+      parent.child1 = new_child
+    elif deletion_node is parent.child2:
+      parent.child2 = new_child
+    else:
+      parent.child3 = new_child 
   if parent.num_children == 2:
     if deletion_node is parent.lchild:
       parent.lchild = new_child
@@ -259,6 +265,13 @@ def fix_channels_after_deletion(tree, deletion_parent, deletion_child):
   if deletion_parent is None:
     return 
   # check that channel counts are ok
+  if deletion_parent.num_children == 3:
+    if deletion_child is deletion_parent.child1:
+      out_c = deletion_parent.in_c[0]
+    elif deletion_child is deletion_parent.child2:
+      out_c = deletion_parent.in_c[1]
+    else:
+      out_c = deletion_parent.in_c[2]
   if deletion_parent.num_children == 2:
     if deletion_child is deletion_parent.lchild:
       out_c = deletion_parent.in_c[0]
@@ -485,6 +498,13 @@ node: the node inserted directly below insert_parent
 """
 @extclass(Mutator)
 def link_insertion_parent_to_new_child(self, insert_parent, insert_child, node):
+  if insert_parent.num_children == 3:
+    if insert_child is insert_parent.child1:
+      insert_parent.child1 = node
+    elif insert_child is insert_parent.child2:
+      insert_parent.child2 = node
+    else:
+      insert_parent.child3 = node
   if insert_parent.num_children == 2:
     if insert_child is insert_parent.rchild:
       insert_parent.rchild = node
@@ -564,8 +584,7 @@ def insert_binop(self, tree, input_set, insert_op, insert_child):
 @extclass(Mutator)
 def insert_unary_op(self, OpClass, insert_child):
   params = list(signature(OpClass).parameters.items())
-
-  if len(params) == 3:
+  if len(params) == 3: # not sure what's going on here with number of params...
     out_c = insert_child.out_c # self.defualt_channels
     new_node = OpClass(insert_child, out_c)
   elif len(params) == 2:
@@ -819,6 +838,11 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
 def has_downsample(tree):
   if isinstance(tree, Downsample):
     return True
+  elif tree.num_children == 3:
+    c1_has = has_downsample(tree.child1)
+    c2_has = has_downsample(tree.child2)
+    c3_has = has_downsample(tree.child3)
+    return c1_has or c2_has or c3_has
   elif tree.num_children == 2:
     l_has = has_downsample(tree.lchild)
     r_has = has_downsample(tree.rchild)
@@ -831,6 +855,11 @@ def has_downsample(tree):
 def has_upsample(tree):
   if isinstance(tree, Upsample):
     return True
+  elif tree.num_children == 3:
+    c1_has = has_upsample(tree.child1)
+    c2_has = has_upsample(tree.child2)
+    c3_has = has_upsample(tree.child3)
+    return c1_has or c2_has or c3_has
   elif tree.num_children == 2:
     l_has = has_upsample(tree.lchild)
     r_has = has_upsample(tree.rchild)
@@ -856,19 +885,22 @@ def splits_sandwich_ops(tree):
     return True
   return False 
   
-def splits_sandwich_ops_helper(tree, partner_pool=set()):
+def splits_sandwich_ops_helper(tree, partner_pool=None):
+  if partner_pool is None:
+    partner_pool = set()
   if hasattr(tree, "partner_set") and not \
   (isinstance(tree, Downsample) or isinstance(tree, Upsample)):
     partner_pool = partner_pool.union(tree.partner_set)
 
+  if tree.num_children == 3:
+    child1_pool = splits_sandwich_ops_helper(tree.child1, partner_pool)
+    child2_pool = splits_sandwich_ops_helper(tree.child2, child1_pool)
+    partner_pool = splits_sandwich_ops_helper(tree.child3, child2_pool) 
   if tree.num_children == 2:
     lchild_pool = splits_sandwich_ops_helper(tree.lchild, partner_pool)
-    rchild_pool = splits_sandwich_ops_helper(tree.rchild, partner_pool)
-    partner_pool = partner_pool.union(lchild_pool)
-    partner_pool = partner_pool.union(rchild_pool)
+    partner_pool = splits_sandwich_ops_helper(tree.rchild, lchild_pool)
   if tree.num_children == 1:
-    child_pool = splits_sandwich_ops_helper(tree.child, partner_pool)
-    partner_pool = partner_pool.union(child_pool)
+    partner_pool = splits_sandwich_ops_helper(tree.child, partner_pool)
   return partner_pool
 
 
@@ -1046,6 +1078,7 @@ def accept_tree(tree):
     return accept_tree(tree.lchild) and accept_tree(tree.rchild)
   elif tree.num_children == 1:
     return accept_tree(tree.child)
-
+  elif tree.num_children == 3:
+    return accept_tree(tree.child1) and accept_tree(tree.child2) and accept_tree(tree.child3)
 
         

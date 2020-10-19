@@ -16,7 +16,7 @@ import util
 import meta_model
 import model_lib
 from torch_model import ast_to_model
-from dataset import GreenDataset, FastDataLoader
+from dataset import GreenDataset, Dataset, FastDataLoader
 
 def train(args, models, model_id, model_dir):
   print(f"training {len(models)} models")
@@ -43,8 +43,12 @@ def train(args, models, model_id, model_dir):
       args.learning_rate,
       weight_decay=args.weight_decay) for m in models]
 
-  train_data = GreenDataset(data_file=args.training_file) 
-  validation_data = GreenDataset(data_file=args.validation_file)
+  if args.full_model or args.full_model_green_input:
+    train_data = Dataset(data_file=args.training_file, green=args.green_input) 
+    validation_data = Dataset(data_file=args.validation_file, green=args.green_input)
+  else:
+    train_data = GreenDataset(data_file=args.training_file)
+    validation_data = GreenDataset(data_file=args.validation_file)
 
   num_train = len(train_data)
   train_indices = list(range(int(num_train*args.train_portion)))
@@ -81,13 +85,25 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
     m.train()
 
   for step, (input, target) in enumerate(train_queue):
-    n = input.size(0)
-    input = Variable(input, requires_grad=False).cuda()
+    if args.green_input:
+      bayer, green = input 
+      green_input = Variable(green, requires_grad=False).cuda()
+    else:
+      bayer = input
+
+    bayer_input = Variable(bayer, requires_grad=False).cuda()
     target = Variable(target, requires_grad=False).cuda()
+
+    n = bayer.size(0)
 
     for i, model in enumerate(models):
       optimizers[i].zero_grad()
-      pred = model.run(input)
+      if args.green_input:
+        model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
+        pred = model.run(model_inputs)
+      else:
+        model_inputs = {"Bayer": bayer_input}
+        pred = model.run(model_inputs)
       loss = criterion(pred, target)
 
       loss.backward()
@@ -98,11 +114,6 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
       if step % args.report_freq == 0 or step == len(train_queue)-1:
         train_loggers[i].info('train %03d %e', epoch*len(train_queue)+step, loss.item())
 
-    """
-    if step % args.report_freq == 0 or step == len(train_queue)-1:
-      for i in range(len(models)):
-        train_loggers[i].info('train %03d %e', epoch*len(train_queue)+step, loss_trackers[i].avg)
-    """
     if step % args.save_freq == 0 or step == len(train_queue)-1:
       for i in range(len(models)):
         torch.save(models[i].state_dict(), model_pytorch_files[i])
@@ -121,12 +132,25 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
     m.eval()
 
   for step, (input, target) in enumerate(valid_queue):
-    input = Variable(input, volatile=True).cuda()
+    if args.green_input:
+      bayer, green = input 
+      green_input = Variable(green, volatile=True).cuda()
+    else:
+      bayer = input
+
+    bayer_input = Variable(bayer, volatile=True).cuda()
     target = Variable(target, volatile=True).cuda()
-    n = input.size(0)
+
+    n = bayer.size(0)
 
     for i, model in enumerate(models):
-      pred = model.run(input)
+      if args.green_input:
+        model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
+        pred = model.run(model_inputs)
+      else:
+        model_inputs = {"Input(Bayer)": bayer_input}
+        pred = model.run(model_inputs)
+ 
       loss = criterion(pred, target)
       loss_trackers[i].update(loss.item(), n)
 
@@ -149,15 +173,17 @@ if __name__ == "__main__":
   parser.add_argument('--ahd', action='store_true')
   parser.add_argument('--ahd2d', action='store_true')
   parser.add_argument('--basic_model2d', action='store_true')
+  parser.add_argument('--full_model', action='store_true')
+  parser.add_argument('--full_model_green_input', action='store_true')
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
   parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--seed', type=int, default=2, help='random seed')
   parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
-  parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
+  parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/val_files.txt", help='filename of file with list of validation data image files')
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
   parser.add_argument('--validation_freq', type=int, default=None, help='validation frequency')
-
+  parser.add_argument('--green_input', action="store_true")
   args = parser.parse_args()
 
   args.model_path = os.path.join(args.save, args.model_path)
@@ -176,27 +202,34 @@ if __name__ == "__main__":
 
   if args.multires_model:
     logger.info("TRAINING MULTIRES GREEN")
-    green = model_lib.multires_green_model()
+    model = model_lib.multires_green_model()
   elif args.fast_multires_model:
     logger.info("TRAINING FAST MULTIRES GREEN")
-    green = model_lib.fast_multires_green_model()
+    model = model_lib.fast_multires_green_model()
   elif args.demosaicnet:
     logger.info("TRAINING DEMOSAICNET GREEN")
-    green = model_lib.mini_demosaicnet()
+    model = model_lib.mini_demosaicnet()
   elif args.ahd:
     logger.info(f"TRAINING AHD GREEN")
-    green = model_lib.ahd1D_green_model()
+    model = model_lib.ahd1D_green_model()
   elif args.ahd2d:
     logger.info(f"TRAINING AHD2D GREEN")
-    green = model_lib.ahd2D_green_model()
+    model = model_lib.ahd2D_green_model()
   elif args.basic_model2d:
     logger.info(f"TRAINING BASIC_MODEL2D GREEN")
-    green = model_lib.basic2D_green_model()
+    model = model_lib.basic2D_green_model()
+  elif args.full_model:
+    logger.info(f"TRAINING FULL MODEL USING BASIC AS GREEN MODEL")
+    green_model = model_lib.basic1D_green_model()
+    model = model_lib.full_model_end2end(green_model)
+  elif args.full_model_green_input:
+    logger.info(f"TRAINING FULL MODEL USING GREEN INPUT")
+    model = model_lib.simple_full_model_green_input()
   else:
     logger.info("TRAINING BASIC GREEN")
     full_model = meta_model.MetaModel()
     full_model.build_default_model() 
-    green = full_model.green
+    model = full_model.green
 
   if not torch.cuda.is_available():
     sys.exit(1)
@@ -211,18 +244,18 @@ if __name__ == "__main__":
   cudnn.deterministic=True
   torch.cuda.manual_seed(args.seed)
 
-  models = [green.ast_to_model(args.gpu).cuda() for i in range(args.model_initializations)]
-  for m in models:
+  torch_models = [model.ast_to_model().cuda() for i in range(args.model_initializations)]
+  for m in torch_models:
     m._initialize_parameters()
     
-  for name, param in models[0].named_parameters():
+  for name, param in torch_models[0].named_parameters():
     print(f"{name} {param.size()}")
 
-  model_manager.save_model(models, green, model_dir)
+  model_manager.save_model(torch_models, model, model_dir)
 
-  validation_losses, training_losses = train(args, models, 'seed', model_dir) 
+  validation_losses, training_losses = train(args, torch_models, 'seed', model_dir) 
 
-  model_manager.save_model(models, green, model_dir)
+  model_manager.save_model(torch_models, model, model_dir)
 
   with open(args.results_file, "a+") as f:
     training_losses = [str(tl) for tl in training_losses]

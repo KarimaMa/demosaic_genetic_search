@@ -268,6 +268,70 @@ def multires_green_model3():
   return green
 
 
+def full_model_end2end(green_model):
+  bayer = Input(1, "Bayer")
+  green_input = Input(1, node=green_model)
+  diff = Sub(bayer, green_input)
+  chroma_diff = Conv2D(diff, 3) # cq, cv, ch
+  chroma_hvq = Add(chroma_diff, green_input)
+  rgb = ChromaExtractor(chroma_hvq, bayer, green_input)
+  #out = Conv2D(rgb, 3)
+
+  rgb.assign_parents()
+  rgb.compute_input_output_channels()
+
+  return rgb 
+
+
+def simple_full_model_green_input():
+  bayer = Input(1, "Bayer")
+  green_input = Input(1, "Green")
+
+  diff = Sub(bayer, green_input)
+
+  conv1 = Conv2D(diff, 16)
+  relu1 = Relu(conv1)
+  chroma_diff = Conv2D(relu1, 3)
+
+  chroma_hvq = Add(chroma_diff, green_input)
+
+  rgb = ChromaExtractor(chroma_hvq, bayer, green_input)
+  rgb.assign_parents()
+  rgb.compute_input_output_channels()
+
+  return rgb 
+
+
+def full_model_greenInput():
+  bayer = Input(1, "Bayer")
+  green_input = Input(1, "Green")
+
+  diff = Sub(bayer, green_input)
+
+  h_conv1 = Conv2D(diff, 16)
+  h_relu1 = Relu(h_conv1)
+  chroma_h = Conv2D(h_relu1, 1)
+
+  v_conv1 = Conv2D(diff, 16)
+  v_relu1 = Relu(v_conv1)
+  chroma_v = Conv2D(v_relu1, 1)
+
+  q_conv1 = Conv2D(diff, 16)
+  q_relu1 = Relu(q_conv1)
+  chroma_q = Conv2D(q_relu1, 1)
+
+  stack1 = Stack(chroma_h, chroma_v)
+  chroma_diff = Stack(stack1, chroma_q)
+
+  chroma_hvq = Add(chroma_diff, green_input)
+
+  rgb = ChromaExtractor(chroma_hvq, bayer, green_input)
+  rgb.assign_parents()
+  rgb.compute_input_output_channels()
+
+  return rgb 
+
+
 def build_full_model(green_model):
   bayer = Input(1, "Bayer")
   green = GreenExtractor(green_model, bayer)

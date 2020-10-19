@@ -78,95 +78,6 @@ def ids_from_file(filename):
   return ids
 
 
-class Dataset(data.Dataset):
-  def __init__(self, train_filenames):
-    self.list_IDs = ids_from_file(train_filenames) # patch filenames
-
-  def __len__(self):
-    return len(self.list_IDs)
-
-  def __getitem__(self, index):
-
-    image_f = self.list_IDs[index]
-    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-    img = np.transpose(img, [2, 0, 1])
-
-    mosaic = bayer(img)
-
-    return (mosaic, img) 
-
-  # load entire dataset into mp.Array 
-  def __init__(self, data_file=None, data_filenames=None, return_index=False):
-    if data_file:
-      self.list_IDs = ids_from_file(data_file) # patch filenames
-    else:
-      self.list_IDs = data_filenames
-    self.return_index = return_index
-    self.RAM = RAM
-    
-    if self.RAM:
-      self.inputs = []
-      self.labels = []
-      for index in range(len(self.list_IDs)):
-        if index % 10000 == 0:
-          print(f"loading {index}")
-        image_f = self.list_IDs[index]
-        img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-        img = np.transpose(img, [2, 0, 1])
-        green = np.expand_dims(img[1,...], axis=0)
-        mosaic = bayer(img)
-        mosaic = np.sum(mosaic, axis=0, keepdims=True)
-
-        self.inputs.append(mosaic)
-        self.labels.append(green)
-
-  def __len__(self):
-    return len(self.list_IDs)
-
-  def __getitem__(self, index):
-    if self.RAM:
-      if self.return_index:
-        return (index, self.inputs[index], self.labels[index])
-      else:
-        return (self.inputs[index], self.labels[index])
-
-    image_f = self.list_IDs[index]
-    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-    img = np.transpose(img, [2, 0, 1])
-    green = np.expand_dims(img[1,...], axis=0)
-    mosaic = bayer(img)
-    mosaic = np.sum(mosaic, axis=0, keepdims=True)
-  
-    if self.return_index:
-      return (index, mosaic, green)
-  
-    return (mosaic, green) 
-
-
-def load_data_to_RAM(data_file=None, data_filenames=None):
-  if data_file:
-    list_IDs = ids_from_file(data_file) # patch filenames
-  else:
-    list_IDs = data_filenames
-  
-  inputs = []
-  labels = []
-  for index in range(len(list_IDs)):
-    if index % 10000 == 0:
-      print(f"loading {index}")
-    image_f = list_IDs[index]
-    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-    img = np.transpose(img, [2, 0, 1])
-    green = np.expand_dims(img[1,...], axis=0)
-    mosaic = bayer(img)
-    mosaic = np.sum(mosaic, axis=0, keepdims=True)
-
-    inputs.append(mosaic)
-    labels.append(green)
-
-  return np.array(inputs), np.array(labels)
-
-
 
 class GreenSharedDataset(data.Dataset):
   def __init__(self, data_file=None, data_filenames=None, inputs=None, labels=None):
@@ -239,3 +150,83 @@ class GreenDataset(data.Dataset):
       for kcore_id in kcore_ids:
         f.write(self.list_IDs[kcore_id] + "\n")
     
+
+class Dataset(data.Dataset):
+  def __init__(self, data_file=None, data_filenames=None, return_index=False, RAM=False, \
+              flatten=True, green_input=False, green_output=True):
+    if data_file:
+      self.list_IDs = ids_from_file(data_file) # patch filenames
+    else:
+      self.list_IDs = data_filenames
+    self.return_index = return_index
+    self.RAM = RAM
+    self.flatten = flatten
+    self.green_output = green_output
+    self.green_input = green_input
+
+    if self.RAM:
+      self.inputs = []
+      self.labels = []
+      for index in range(len(self.list_IDs)):
+        if index % 10000 == 0:
+          print(f"loading {index}")
+        image_f = self.list_IDs[index]
+        img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+        img = np.transpose(img, [2, 0, 1])
+
+        if self.green_output:
+          target = np.expand_dims(img[1,...], axis=0)
+        else:
+          target = img
+
+        mosaic = bayer(img)
+
+        if self.flatten:
+          mosaic = np.sum(mosaic, axis=0, keepdims=True)
+
+        if self.green_input:
+          green = np.expand_dims(img[1,...], axis=0)
+          input = (mosaic, green)
+        else:
+          input = mosaic
+
+        self.inputs.append(input)
+        self.labels.append(target)
+
+
+  def __len__(self):
+    return len(self.list_IDs)
+
+  def __getitem__(self, index):
+    if self.RAM:
+      if self.return_index:
+        return (index, self.inputs[index], self.labels[index])
+      else:
+        return (self.inputs[index], self.labels[index])
+
+    image_f = self.list_IDs[index]
+    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+    img = np.transpose(img, [2, 0, 1])
+
+    if self.green_output:
+      target = np.expand_dims(img[1,...], axis=0)
+    else:
+      target = img
+
+    mosaic = bayer(img)
+    
+    if self.flatten:
+      mosaic = np.sum(mosaic, axis=0, keepdims=True)
+
+    if self.green_input:
+      green = np.expand_dims(img[1,...], axis=0)
+      input = (mosaic, green)
+    else:
+      input = mosaic
+
+    if self.return_index:
+      return (index, input, target)
+  
+    return (input, target) 
+
+ 

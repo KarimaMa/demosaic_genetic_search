@@ -33,26 +33,43 @@ class Node:
 
     h = hash_combine(name_hash, self.out_c)
     if type(self.in_c) is tuple:
-      h = hash_combine(h, self.in_c[0])
-      h = hash_combine(h, self.in_c[1])
+      for c_idx in range(len(self.in_c)):
+        h = hash_combine(h, self.in_c[c_idx])
     else: 
       h = hash_combine(h, self.in_c)
 
-    if self.num_children == 2:
+    if self.num_children == 3:
+      h = hash_combine(h, hash(self.child1))
+      h = hash_combine(h, hash(self.child2))
+      h = hash_combine(h, hash(self.child3))
+    elif self.num_children == 2:
       h = hash_combine(h, hash(self.lchild))
       h = hash_combine(h, hash(self.rchild))
     elif self.num_children == 1:
       h = hash_combine(h, hash(self.child))
+
     return int(h)
 
   def id_string(self):
-    id_str = f"{self.__class__.__name__}-"
+    if self.num_children == 0:
+      id_str = f"{self.name}-"
+    else:
+      id_str = f"{self.__class__.__name__}-"
+
     id_str += f"{self.out_c}-"
+
     if type(self.in_c) is tuple:
-      id_str += f"{self.in_c[0]};{self.in_c[1]}-"
+      if len(self.in_c) == 2:
+        id_str += f"{self.in_c[0]};{self.in_c[1]}-"
+      else:
+        id_str += f"{self.in_c[0]};{self.in_c[1]};{self.in_c[2]}-"
     else:
       id_str += f"{self.in_c}-"
-    if self.num_children == 2:
+    if self.num_children == 3:
+      id_str += f"{self.child1.id_string()}-"
+      id_str += f"{self.child2.id_string()}-"
+      id_str += f"{self.child3.id_string()}-"
+    elif self.num_children == 2:
       id_str += f"{self.lchild.id_string()}-"
       id_str += f"{self.rchild.id_string()}-"
     elif self.num_children == 1:
@@ -69,7 +86,11 @@ class Node:
     if not hasattr(self, 'in_c'):
       self.compute_input_output_channels()
     printstr += "\n {} {} {} {}".format(indent, self.name, self.in_c, self.out_c)
-    if self.num_children == 2:
+    if self.num_children == 3:
+      printstr = self.child1.dump(indent+tab, printstr)
+      printstr = self.child2.dump(indent+tab, printstr)
+      printstr = self.child3.dump(indent+tab, printstr)
+    elif self.num_children == 2:
       printstr = self.lchild.dump(indent+tab, printstr)
       printstr = self.rchild.dump(indent+tab, printstr)
     elif self.num_children == 1:
@@ -82,7 +103,12 @@ class Node:
   """
   def compute_size(self, seen_inputs, count_all_inputs=False, count_input_exprs=False):
     self.size = 0
-    if self.num_children == 2:
+    if self.num_children == 3:
+      size1 = self.child1.compute_size(seen_inputs, count_all_inputs, count_input_exprs)
+      size2 = self.child2.compute_size(seen_inputs, count_all_inputs, count_input_exprs)
+      size3 = self.child3.compute_size(seen_inputs, count_all_inputs, count_input_exprs)
+      self.size += size1 + size2 + size3 + 1
+    elif self.num_children == 2:
       lsize = self.lchild.compute_size(seen_inputs, count_all_inputs, count_input_exprs)
       rsize = self.rchild.compute_size(seen_inputs, count_all_inputs, count_input_exprs)
       self.size += lsize + rsize + 1
@@ -109,7 +135,11 @@ class Node:
 
     nodes += [self]
 
-    if self.num_children == 2:
+    if self.num_children == 3:
+      self.child1.preorder(nodes)
+      self.child2.preorder(nodes)
+      self.child3.preorder(nodes)
+    elif self.num_children == 2:
       self.lchild.preorder(nodes)
       self.rchild.preorder(nodes)
     elif self.num_children == 1:
@@ -133,6 +163,10 @@ class Node:
     elif self.num_children == 2:
       self.lchild.get_inputs(nodes)
       self.rchild.get_inputs(nodes)
+    elif self.num_children == 3:
+      self.child1.get_inputs(nodes)
+      self.child2.get_inputs(nodes)
+      self.child3.get_inputs(nodes)
     else:
       assert False, "Invalid number of children"
     return nodes
@@ -155,7 +189,14 @@ class Node:
   should only be called when a tree is first constructed
   """
   def assign_parents(self):
-    if self.num_children == 2:
+    if self.num_children == 3:
+      self.child1.parent = self
+      self.child2.parent = self
+      self.child3.parent = self
+      self.child1.assign_parents()
+      self.child2.assign_parents()
+      self.child3.assign_parents()
+    elif self.num_children == 2:
       if self.lchild.parent:
         # child has multiple parents:
         self.lchild.parent = (self.lchild.parent, self)
@@ -195,7 +236,14 @@ class Node:
       #if self.in_c[0] == other.in_c[0] and self.in_c[1] == other.in_c[1]:
       same = self.lchild.is_same_as(other.lchild) and self.rchild.is_same_as(other.rchild) 
       return same or flipped_same
-
+    elif self.num_children == 3:
+      if self.out_c != other.out_c:
+        return False
+      # nodes with three children are not symmetric, order must be obeyed
+      same = self.child1.is_same_as(other.child1) 
+      same = same and self.child2.is_same_as(other.child2)
+      same = same and self.child3.is_same_as(other.child3)
+      return same 
   """
   returns whether or not two ASTs are the same - IGNORING channel count
   """
@@ -212,6 +260,11 @@ class Node:
     elif self.num_children == 2:
       return (self.lchild.is_same_mod_channels(other.lchild) and self.rchild.is_same_mod_channels(other.rchild))\
           or (self.rchild.is_same_mod_channels(other.lchild) and self.lchild.is_same_mod_channels(other.rchild))
+    elif self.num_children == 3:
+      same = self.child1.is_same_mod_channels(other.child1)
+      same = same and self.child2.is_same_mod_channels(other.child2)
+      same = same and self.child3.is_same_mod_channels(other.child3)
+      return same
 
   """
   returns a list of the input and output channels of a tree in preorder
@@ -246,9 +299,11 @@ def has_loop(tree, seen=None):
   if id(tree) in seen:
     return True
   seen.add(id(tree))
-  if tree.num_children == 2:
+  if tree.num_children == 3:
+    return any([has_loop(c) for c in [tree.child1, tree.child2, tree.child3]]) 
+  elif tree.num_children == 2:
     return has_loop(tree.lchild) or has_loop(tree.rchild)
-  if tree.num_children == 1:
+  elif tree.num_children == 1:
     return has_loop(tree.child)
   return False
 

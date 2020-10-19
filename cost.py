@@ -307,7 +307,11 @@ class ModelEvaluator():
 		elif isinstance(root, Stack):
 			cost += self.compute_cost(root.lchild)
 			cost += self.compute_cost(root.rchild) 
-		elif isinstance(root, ChromaExtractor) or isinstance(root, GreenExtractor):
+		elif isinstance(root, ChromaExtractor):
+			cost += self.compute_cost(root.child1)
+			cost += self.compute_cost(root.child2)
+			cost += self.compute_cost(root.child3)
+		elif isinstance(root, GreenExtractor):
 			cost += self.compute_cost(root.lchild)
 			cost += self.compute_cost(root.rchild) 
 		elif isinstance(root, Softmax):

@@ -48,6 +48,13 @@ def shrink_channels(node, target_c, out_c=None):
     shrink_channels(node.lchild, target_c, out_c=node.Ic())
     shrink_channels(node.rchild, target_c, out_c=node.Jc())
     return node.out_c
+  elif isinstance(node, BinopHcIcJcKc):
+    if not out_c is None:
+      assert out_c == node.Kc(), f"output channels of {node.__class__.__name__} cannot be set to {out_c}"
+    shrink_channels(node.child1, target_c, out_c=node.Hc())
+    shrink_channels(node.child2, target_c, out_c=node.Ic())
+    shrink_channels(node.child3, target_c, out_c=node.Jc()) 
+    return node.out_c  
   elif isinstance(node, UnopIJ):
     if out_c is None:
       node.out_c = min(node.out_c, target_c)
@@ -91,7 +98,14 @@ def spatial_resolution(subtree):
   elif isinstance(subtree, Downsample):
     res = Resolution.DOWNSAMPLED
 
-  if subtree.num_children == 2:
+  if subtree.num_children == 3:
+    res1 = spatial_resolution(subtree.child1)
+    res2 = spatial_resolution(subtree.child2)
+    res3 = spatial_resolution(subtree.child3)
+    if res1 != res2 or res1 != res3:
+      return Resolution.INVALID
+    child_res = res1
+  elif subtree.num_children == 2:
     lres = spatial_resolution(subtree.lchild)
     rres = spatial_resolution(subtree.rchild)
     if lres != rres :
@@ -108,7 +122,7 @@ def spatial_resolution(subtree):
   if res is None: # resolution obeys children 
     return child_res
   else:
-    if res == child_res: # this node up or downsamples, child much have opposite resolution
+    if res == child_res: # this node up or downsamples, child must have opposite resolution
       return Resolution.INVALID
     return res
     
@@ -132,6 +146,12 @@ def check_channel_count(node):
     rchild_c = check_channel_count(node.rchild)
     assert(lchild_c == node.Ic() and rchild_c == node.Jc())
     return node.Kc()
+  elif isinstance(node, BinopHcIcJcKc):
+    child1_c = check_channel_count(node.child1)
+    child2_c = check_channel_count(node.child2)
+    child3_c = check_channel_count(node.child3)
+    assert(child1_c == node.Hc() and child2_c == node.Ic() and child3_c == node.Jc())
+    return node.Kc()
   elif isinstance(node, UnopII):
     child_c = check_channel_count(node.child)
     return child_c
@@ -154,6 +174,20 @@ def find_type(root, T, level, ignore_root=False):
     return [root], level
   elif isinstance(root, Const): # reached leaf node
     return None, 1e10
+  elif root.num_children == 3:
+    found1, level1 = find_type(root.child1, T, level+1)
+    found2, level2 = find_type(root.child2, T, level+1)
+    found3, level3 = find_type(root.child3, T, level+1)
+    found1 = list(filter(None, found1))
+    found2 = list(filter(None, found2))
+    found3 = list(filter(None, found3))
+
+    found = [found1, found2, found3]
+    level = np.array([level1, level2, level3])
+
+    idx = np.argmin(level)
+    return found[idx], level[idx]
+
   elif root.num_children == 2:
     lfound, leftl = find_type(root.lchild, T, level+1)
     rfound, rightl = find_type(root.rchild, T, level+1)
@@ -235,6 +269,10 @@ def fix_channel_count_downwards(root, out_c, fixed_shared_children=None):
         if type(root.parent) is tuple:
           fixed_shared_children[id(root)] = root
         return True
+    elif isinstance(root, BinopHcIcJcKc):
+      if root.out_c != out_c:
+        return False
+      return True
     else: # is type UnopII
       fixed = fix_channel_count_downwards(root.child, out_c, fixed_shared_children)
       if fixed and type(root.parent) is tuple:
@@ -276,6 +314,13 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c):
       return parent.in_c[0] == in_c
     else:
       return parent.in_c[1] == in_c
+  elif isinstance(parent, BinopHcIcJcKc):
+    if cur_node is parent.child1:
+      return parent.in_c[0] == in_c
+    if cur_node is parent.child2:
+      return parent.in_c[1] == in_c
+    else:
+      return parent.in_c[2] == in_c
   elif isinstance(parent, tuple):
     fixed = True
     for p in parent:
@@ -318,7 +363,11 @@ def check_linear_types(root):
       assert(isinstance(root.child, Linear) or isinstance(root.child, Special))
       check_linear_types(root.child)
   else:
-    if root.num_children == 2:
+    if root.num_children == 3:
+      check_linear_types(root.child1)
+      check_linear_types(root.child2)
+      check_linear_types(root.child3)
+    elif root.num_children == 2:
       check_linear_types(root.lchild)
       check_linear_types(root.rchild)
     elif root.num_children == 1:
@@ -333,9 +382,13 @@ def is_linear(tree):
   if tree_type is Input:
     return True
   if tree_type is Add or tree_type is Sub or isinstance(tree, Linear):
+    if tree.num_children == 3:
+      return isinstance(tree, Linear) and is_linear(tree.child1) and is_linear(tree.child2) and is_linear(tree.child3)
     if tree.num_children == 2:
-      return is_linear(tree.lchild) and is_linear(tree.rchild)
+      return isinstance(tree, Linear) and is_linear(tree.lchild) and is_linear(tree.rchild)
     elif tree.num_children == 1:
-      return is_linear(tree.child)
+      return isinstance(tree, Linear) and is_linear(tree.child)
   return False
+
+
 

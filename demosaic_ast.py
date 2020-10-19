@@ -43,6 +43,26 @@ class BinopIcJcKc(Binop):
   def Kc(self):
     pass
 
+class BinopHcIcJcKc(Binop):
+  def __init__(self):
+    assert False, "Do not try to instantiate abstract expressions"
+  @property
+  @abstractmethod
+  def Hc(self):
+    pass
+  @property
+  @abstractmethod
+  def Ic(self):
+    pass
+  @property
+  @abstractmethod
+  def Jc(self):
+    pass
+  @property
+  @abstractmethod
+  def Kc(self):
+    pass
+
 class Unop(ABC):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
@@ -82,6 +102,7 @@ class Input(Const, Special, Node):
     if node:
       name = node.name
       self.node = node
+      assert(out_c == node.out_c), "output channels of node to input doesn't match given out_c"
     Node.__init__(self, "Input({})".format(name), 0)
     self.in_c = out_c
     self.out_c = out_c 
@@ -146,21 +167,24 @@ class Stack(BinopIJK, Special, Node):
     self.out_c = None
     self.in_c = None
     
-class ChromaExtractor(BinopIcJcKc, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+class ChromaExtractor(BinopHcIcJcKc, Special, Node):
+  def __init__(self, child1, child2, child3, name=None):
     if name is None:
       name = "ChromaExtractor"
-    Node.__init__(self, name, 2)
-    self.lchild = lchild
-    self.rchild = rchild
-    self.in_c = (3, 1) # CH, CV, CQ and Bayer
-    self.out_c = 2
+    Node.__init__(self, name, 3)
+    self.child1 = child1
+    self.child2 = child2
+    self.child3 = child3
+    self.in_c = (3, 1, 1) # CH, CV, CQ, Bayer, Green
+    self.out_c = 3
+  def Hc(self):
+    return 3 # ch chv, cq
   def Ic(self):
-    return 3
+    return 1 # bayer
   def Jc(self):
-    return 1
+    return 1 # green
   def Kc(self):
-    return 2
+    return 3
 
 class GreenExtractor(BinopIcJcKc, Special, Node):
   def __init__(self, lchild, rchild, name=None):
@@ -335,8 +359,9 @@ def compute_input_output_channels(self):
 
 @extclass(ChromaExtractor)
 def compute_input_output_channels(self):
-  self.lchild.compute_input_output_channels()
-  self.rchild.compute_input_output_channels()
+  self.child1.compute_input_output_channels()
+  self.child2.compute_input_output_channels()
+  self.child3.compute_input_output_channels()
   return self.in_c, self.out_c
 
 @extclass(GreenExtractor)
@@ -454,6 +479,21 @@ def structure_to_array(self):
           parents += [j]
     node_info["parent"] = parents
 
+    if n.num_children == 3:
+      child1_id = None
+      child2_id = None
+      child3_id = None
+      for j in range(i, len(preorder)):
+        if preorder[j] is n.child1:
+          child1_id = j
+        elif preorder[j] is n.child2:
+          child2_id = j
+        elif preorder[j] is n.child3:
+          child3_id = j
+        if not any([c is None for c in [child1_id, child2_id, child3_id]]):
+          break
+      node_info["children"] = [child1_id, child2_id, child3_id]
+
     if n.num_children == 2:
       lchild_id = None
       rchild_id = None
@@ -503,7 +543,12 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None):
   node_name = node_info["name"]
   if "children" in node_info:
     children_ids = node_info["children"]
-    if len(children_ids) == 2:
+    if len(children_ids) == 3:
+      child1_node = build_tree_from_data(children_ids[0], preorder_nodes, shared_children)
+      child2_node = build_tree_from_data(children_ids[1], preorder_nodes, shared_children)
+      child3_node = build_tree_from_data(children_ids[2], preorder_nodes, shared_children)
+      new_node = node_class(child1_node, child2_node, child3_node, name=node_name)
+    elif len(children_ids) == 2:
       lchild_node = build_tree_from_data(children_ids[0], preorder_nodes, shared_children)
       rchild_info = preorder_nodes[children_ids[1]]
       if len(rchild_info["parent"]) == 2:
@@ -599,7 +644,20 @@ def copy_subtree_helper(root, shared_children=None):
   if shared_children is None:
     shared_children = {}
   new_root = copy.copy(root)
-  if new_root.num_children == 2:
+  if new_root.num_children == 3:
+    c1copy = copy_subtree_helper(root.child1, shared_children)
+    c2copy = copy_subtree_helper(root.child2, shared_children)
+    c3copy = copy_subtree_helper(root.child3, shared_children)
+    
+    c1copy.parent = new_root
+    c2copy.parent = new_root
+    c3copy.parent = new_root
+
+    new_root.child1 = c1copy
+    new_root.child2 = c2copy
+    new_root.child3 = c3copy
+
+  elif new_root.num_children == 2:
     lcopy = copy_subtree_helper(root.lchild, shared_children)
     if "LogSub" in root.name or "AddExp" in root.name:    
       if root.rchild in shared_children:
@@ -785,13 +843,18 @@ def find_closest_parents(node, OpClasses):
  
 
 """
-Returns a refernce to the closest child belonging to the 
-given opclasses. If we encounter a binary op before reaching
+Returns a reference to the closest child belonging to the 
+given opclasses. If we encounter a ternary or binary op before reaching
 such a child, return the closest found in each branch
 """
 def find_closest_children(node, OpClasses):
   if any([issubclass(type(node), oc) for oc in OpClasses]):
-      return set( [(node, id(node))] )
+    return set( [(node, id(node))] )
+  if node.num_children == 3:
+    found1 = find_closest_children(node.child1, OpClasses)
+    found2 = find_closest_children(node.child2, OpClasses)
+    found3 = find_closest_children(node.child3, OpClasses)
+    return found1.union(found2).union(found3)
   if node.num_children == 2:
     lfound = find_closest_children(node.lchild, OpClasses)
     rfound = find_closest_children(node.rchild, OpClasses)
