@@ -109,7 +109,7 @@ class Mutator():
           else:
             new_tree = self.delete_mutation(tree_copy)
     
-          if accept_tree(new_tree):
+          if self.accept_tree(new_tree):
             break
 
           prune_rejections += 1
@@ -983,7 +983,8 @@ def pick_subtree(self, root, input_set, target_out_c=None, resolution=None, root
 Pruner
 rejects stupid trees
 """
-def accept_tree(tree):
+@extclass(Mutator)
+def accept_tree(self, tree):
   if len(tree.preorder()) > MAX_SIZE:
     return False
 
@@ -1077,10 +1078,10 @@ def accept_tree(tree):
   if tree.num_children == 0:
     return True
   elif tree.num_children == 2:
-    return accept_tree(tree.lchild) and accept_tree(tree.rchild)
+    return self.accept_tree(tree.lchild) and self.accept_tree(tree.rchild)
   elif tree.num_children == 1:
-    return accept_tree(tree.child)
+    return self.accept_tree(tree.child)
   elif tree.num_children == 3:
-    return accept_tree(tree.child1) and accept_tree(tree.child2) and accept_tree(tree.child3)
+    return self.accept_tree(tree.child1) and self.accept_tree(tree.child2) and self.accept_tree(tree.child3)
 
         
