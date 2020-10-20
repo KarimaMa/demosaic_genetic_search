@@ -283,12 +283,15 @@ def fix_channel_count_downwards(root, out_c, fixed_shared_children=None):
 attempts to fix input channels of parent tree to match output channels of subtree
 by finding closest UnopIJ ancestor and changing its input channels to out_c
 if a Binop is encountered, fix the channel counts downwards for the other child
+if the requried input channels is not 1.
 """
 def fix_channel_count_upwards_helper(subtree, parent, in_c):
   cur_node = subtree
   if parent is None:
     return True
   elif isinstance(parent, BinopIII):
+    if in_c == 1: # don't need to change other child, Binops can broadcast
+      return True
     if cur_node is parent.lchild:
       child_fixed = fix_channel_count_downwards(parent.rchild, in_c)
       if not child_fixed: # allowed to broadcast so 1 is also a valid channel count
@@ -317,7 +320,7 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c):
   elif isinstance(parent, TernaryHcIcJcKc):
     if cur_node is parent.child1:
       return parent.in_c[0] == in_c
-    if cur_node is parent.child2:
+    elif cur_node is parent.child2:
       return parent.in_c[1] == in_c
     else:
       return parent.in_c[2] == in_c
@@ -384,7 +387,7 @@ def is_linear(tree):
   if tree_type is Add or tree_type is Sub or isinstance(tree, Linear):
     if tree.num_children == 3:
       return isinstance(tree, Linear) and is_linear(tree.child1) and is_linear(tree.child2) and is_linear(tree.child3)
-    if tree.num_children == 2:
+    elif tree.num_children == 2:
       return isinstance(tree, Linear) and is_linear(tree.lchild) and is_linear(tree.rchild)
     elif tree.num_children == 1:
       return isinstance(tree, Linear) and is_linear(tree.child)
