@@ -620,7 +620,8 @@ These ops only make sense when used in combination with other ops
 def accept_insertion_op(insert_ops):
   return not (len(insert_ops) == 1 and (insert_ops[0] is Relu or insert_ops[0] is Softmax)) 
 
-def accept_insertion_choice(child, parent, insert_ops):
+@extclass(Mutator)
+def accept_insertion_choice(self, child, parent, insert_ops):
   if not accept_insertion_loc(child, parent, insert_ops):
     self.debug_logger.debug("rejecting inserting {} with child {}".format(insert_ops, child.dump()))
     return False
@@ -814,7 +815,7 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
       if sum(map(lambda x : x in sandwich_ops, new_ops)) <= 1: 
         break
 
-    if accept_insertion_choice(insert_child, insert_parent, new_ops):
+    if self.accept_insertion_choice(insert_child, insert_parent, new_ops):
       break
 
   new_ops = [format_for_insert(o) for o in new_ops]
