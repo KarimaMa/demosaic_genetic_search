@@ -590,9 +590,9 @@ class Searcher():
           task_id = task_info.task_id 
           index = task_id * model_inits
 
-          model_psnrs = np.random.rand(len(model_ids)) * 8 + 25
+          model_psnrs = list(np.random.rand(len(model_ids)) * 8 + 25)
           self.update_model_database(task_info, model_psnrs)
-
+          util.create_dir(task_info.model_dir)
           # training subprocess handles saving the model weights - save the ast here in the master process
           success = self.save_model_ast(new_model_ast, task_info.model_id, task_info.model_dir)
           if not success:

@@ -43,7 +43,12 @@ class BinopIcJcKc(Binop):
   def Kc(self):
     pass
 
-class BinopHcIcJcKc(Binop):
+
+class Ternary(ABC):
+  def __init__(self):
+    assert False, "Do not try to instantiate abstract expressions"
+
+class TernaryHcIcJcKc(Ternary):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
   @property
@@ -167,7 +172,7 @@ class Stack(BinopIJK, Special, Node):
     self.out_c = None
     self.in_c = None
     
-class ChromaExtractor(BinopHcIcJcKc, Special, Node):
+class ChromaExtractor(TernaryHcIcJcKc, Special, Node):
   def __init__(self, child1, child2, child3, name=None):
     if name is None:
       name = "ChromaExtractor"

@@ -262,6 +262,7 @@ def remove_node(parent, deletion_node, new_child):
 fixes channel counts after deleting nodes
 """
 def fix_channels_after_deletion(tree, deletion_parent, deletion_child):
+
   if deletion_parent is None:
     return 
   # check that channel counts are ok
@@ -272,7 +273,7 @@ def fix_channels_after_deletion(tree, deletion_parent, deletion_child):
       out_c = deletion_parent.in_c[1]
     else:
       out_c = deletion_parent.in_c[2]
-  if deletion_parent.num_children == 2:
+  elif deletion_parent.num_children == 2:
     if deletion_child is deletion_parent.lchild:
       out_c = deletion_parent.in_c[0]
     else:
@@ -400,6 +401,7 @@ def select_node_to_delete(self, tree):
     # delete the selected node
     node_id = random.randint(0, n-1)
     node = preorder_nodes[node_id]
+
     # reject deleting a node with c/n probability where n is total number
     # of nodes and c is the max number of nodes lost by deleting this node
     if isinstance(node, Binop):

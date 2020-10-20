@@ -48,7 +48,7 @@ def shrink_channels(node, target_c, out_c=None):
     shrink_channels(node.lchild, target_c, out_c=node.Ic())
     shrink_channels(node.rchild, target_c, out_c=node.Jc())
     return node.out_c
-  elif isinstance(node, BinopHcIcJcKc):
+  elif isinstance(node, TernaryHcIcJcKc):
     if not out_c is None:
       assert out_c == node.Kc(), f"output channels of {node.__class__.__name__} cannot be set to {out_c}"
     shrink_channels(node.child1, target_c, out_c=node.Hc())
@@ -146,7 +146,7 @@ def check_channel_count(node):
     rchild_c = check_channel_count(node.rchild)
     assert(lchild_c == node.Ic() and rchild_c == node.Jc())
     return node.Kc()
-  elif isinstance(node, BinopHcIcJcKc):
+  elif isinstance(node, TernaryHcIcJcKc):
     child1_c = check_channel_count(node.child1)
     child2_c = check_channel_count(node.child2)
     child3_c = check_channel_count(node.child3)
@@ -269,7 +269,7 @@ def fix_channel_count_downwards(root, out_c, fixed_shared_children=None):
         if type(root.parent) is tuple:
           fixed_shared_children[id(root)] = root
         return True
-    elif isinstance(root, BinopHcIcJcKc):
+    elif isinstance(root, TernaryHcIcJcKc):
       if root.out_c != out_c:
         return False
       return True
@@ -314,7 +314,7 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c):
       return parent.in_c[0] == in_c
     else:
       return parent.in_c[1] == in_c
-  elif isinstance(parent, BinopHcIcJcKc):
+  elif isinstance(parent, TernaryHcIcJcKc):
     if cur_node is parent.child1:
       return parent.in_c[0] == in_c
     if cur_node is parent.child2:
