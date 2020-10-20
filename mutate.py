@@ -186,7 +186,7 @@ returns whether parent and child linearity type sequence is allowed
 def legal_parent_child_linearity(parent, child):
   if type(parent) is tuple:
     if not (type(parent[0]) is type(parent[1])):
-      logging.debug("Node with multiple parents cannot have parents of different types")
+      self.debug_logger.debug("Node with multiple parents cannot have parents of different types")
       assert False, "If a node has multiple parents they must have same type"
     parent_type = type(parent[0])
   else:
@@ -299,7 +299,7 @@ def fix_channels_after_deletion(tree, deletion_parent, deletion_child):
       tree.compute_input_output_channels()
       check_channel_count(tree)
     else:
-      logging.debug("Could not make channel counts agree after deleting ops")
+      self.debug_logger.debug("Could not make channel counts agree after deleting ops")
       assert False, "Could not make channel counts agree after deleting ops"
 
 
@@ -470,7 +470,7 @@ def get_insert_types(self, parent, child):
     elif isinstance(child, Special):
       return [nl_sp_insert_ops]
     else:
-      logging.debug("Linear parent cannot have Linear child")
+      self.debug_logger.debug("Linear parent cannot have Linear child")
       assert False, "Linear parent cannot have Linear child"
   elif isinstance(parent, NonLinear):
     if isinstance(child, Linear):
@@ -482,7 +482,7 @@ def get_insert_types(self, parent, child):
     elif isinstance(child, Special):
       return [l_sp_insert_ops]
     else:
-      logging.debug("NonLinear parent cannot have NonLinear child")
+      self.debug_logger.debug("NonLinear parent cannot have NonLinear child")
       assert False, "NonLinear parent cannot have NonLinear child"
   elif isinstance(parent, Special):
     if isinstance(child, Linear):
@@ -515,7 +515,7 @@ def link_insertion_parent_to_new_child(self, insert_parent, insert_child, node):
   elif insert_parent.num_children == 1:
     insert_parent.child = node
   else:
-    logging.debug("Should not be inserting after an input node")
+    self.debug_logger.debug("Should not be inserting after an input node")
     assert False, "Should not be inserting after an input node"
 
 @extclass(Mutator)
@@ -529,7 +529,7 @@ def insert_binop(self, tree, input_set, insert_op, insert_child):
     # make subtree's output channels match other child's output channels
     if use_child is None:
       if tree.size < self.args.min_subtree_size + 2:
-        logging.debug(f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}")
+        self.debug_logger.debug(f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}")
         assert False, f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}"
       subtree = self.pick_subtree(tree, input_set, target_out_c=insert_child.out_c, resolution=spatial_resolution(insert_child))
       subtree.compute_input_output_channels()         
@@ -538,12 +538,12 @@ def insert_binop(self, tree, input_set, insert_op, insert_child):
       # make channel count of insert_child agree with required use_child
       fixed = fix_channel_count_downwards(insert_child, use_child.out_c)
       if not fixed:
-        logging.debug(f"Could not make channel counts of insert_child agree with required child")
+        self.debug_logger.debug(f"Could not make channel counts of insert_child agree with required child")
         assert False, f"Could not make channel counts of insert_child agree with required child"
   else: # Op is BinopIJK - keep the output channels of the chosen subtree
     # subtree = self.pick_subtree(tree, input_set, root_id=6)
     if tree.size < self.args.min_subtree_size + 2:
-      logging.debug(f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}")
+      self.debug_logger.debug(f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}")
       assert False, f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}"
     subtree = self.pick_subtree(tree, input_set, resolution=spatial_resolution(insert_child))
   
@@ -553,7 +553,7 @@ def insert_binop(self, tree, input_set, insert_op, insert_child):
   insert_child_res = spatial_resolution(insert_child)
 
   if subtree_res != insert_child_res:
-    logging.debug(f"resolution of chosen subtree for binary op does not match insert_child resolution")
+    self.debug_logger.debug(f"resolution of chosen subtree for binary op does not match insert_child resolution")
     assert False, f"resolution of chosen subtree for binary op does not match insert_child resolution"
   elif subtree_res == Resolution.DOWNSAMPLED:
     # add new subtree partner nodes to the sets of partner nodes in the insertion parent(s) 
@@ -592,7 +592,7 @@ def insert_unary_op(self, OpClass, insert_child):
   elif len(params) == 2:
     new_node = OpClass(insert_child)
   else:
-    logging.debug("Invalid number of parameters for Unary op")
+    self.debug_logger.debug("Invalid number of parameters for Unary op")
     assert False, "Invalid number of parameters for Unary op"
 
   insert_child.parent = new_node
@@ -622,10 +622,10 @@ def accept_insertion_op(insert_ops):
 
 def accept_insertion_choice(child, parent, insert_ops):
   if not accept_insertion_loc(child, parent, insert_ops):
-    logging.debug("rejecting inserting {} with child {}".format(insert_ops, child.dump()))
+    self.debug_logger.debug("rejecting inserting {} with child {}".format(insert_ops, child.dump()))
     return False
   if not accept_insertion_op(insert_ops):
-    logging.debug("rejecting inserting {}".format(insert_ops))
+    self.debug_logger.debug("rejecting inserting {}".format(insert_ops))
     return False
   return True
 
@@ -691,7 +691,7 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
       break
     tries += 1
     if tries > self.args.select_insert_loc_tries:
-      logging.debug(f"unable to find an insertion location for partner op of {op_node} with resolution {resolution}")
+      self.debug_logger.debug(f"unable to find an insertion location for partner op of {op_node} with resolution {resolution}")
       assert False, f"unable to find an insertion location for partner op of {op_node} with resolution {resolution}"
 
   if OpClass is LogSub:
@@ -711,7 +711,7 @@ def insert_partner_op(self, tree, input_set, op_class, op_node):
   try:
     insert_op, insert_child = self.choose_partner_op_loc(op_node, op_class, op_partner_class)
   except AssertionError:
-    logging.debug(f"failed to find insertion location for partner of {op_node}")
+    self.debug_logger.debug(f"failed to find insertion location for partner of {op_node}")
     assert False, f"failed to find insertion location for partner of {op_node}"
   
   insert_nodes = self.insert(tree, insert_op, insert_child, input_set)
@@ -775,7 +775,7 @@ def insert(self, tree, insert_ops, insert_child, input_set):
   cur_child.compute_input_output_channels()
   fixed = fix_channel_count_upwards(cur_child, cur_child.out_c)
   if not fixed:
-    logging.debug("unable to make inserted nodes channel counts agree with tree")
+    self.debug_logger.debug("unable to make inserted nodes channel counts agree with tree")
     assert False, "Could not make channel counts agree with inserted ops"
 
   tree.compute_input_output_channels()
@@ -916,18 +916,18 @@ Returns a copy of the subtree with channels appropriately modified if necessary
 def allow_subtree(self, root, input_set, target_out_c=None, resolution=None):
   subtree_resolution = spatial_resolution(root)
   if subtree_resolution != resolution:
-    logging.debug(f"subtree with resolution {subtree_resolution} does not match required resolution {resolution}")
+    self.debug_logger.debug(f"subtree with resolution {subtree_resolution} does not match required resolution {resolution}")
     assert False, f"subtree with resolution {subtree_resolution} does not match required resolution {resolution}"
   size = root.compute_size(set(), count_input_exprs=True)
   # reject small trees or large trees
   if size < self.args.min_subtree_size or size > self.args.max_subtree_size: 
-      logging.debug(f"Subtree of size {size} is too small or too large")
+      self.debug_logger.debug(f"Subtree of size {size} is too small or too large")
       assert False, f"Subtree of size {size} is too small or too large"
 
   # reject trees that require inputs out of sanctioned input_set
   subtree_inputs = root.get_inputs()
   if not subtree_inputs.issubset(input_set):
-    logging.debug("rejecting subtree with invalid inputs")
+    self.debug_logger.debug("rejecting subtree with invalid inputs")
     assert False, "rejecting subtree with invalid inputs"
 
   # reject subtrees that split up sandwich nodes LogSub and AddExp
@@ -945,7 +945,7 @@ def allow_subtree(self, root, input_set, target_out_c=None, resolution=None):
       if fixed:
         root_copy.compute_input_output_channels()
       else:
-        logging.debug(f"rejecting subtree: cannot make output channels {out_c} match {target_out_c}")
+        self.debug_logger.debug(f"rejecting subtree: cannot make output channels {out_c} match {target_out_c}")
         assert False, f"rejecting subtree: cannot make output channels {out_c} match {target_out_c}"
   return root_copy
   
@@ -969,10 +969,10 @@ def pick_subtree(self, root, input_set, target_out_c=None, resolution=None, root
       subtree_copy = self.allow_subtree(subtree, input_set, target_out_c, resolution)
     except AssertionError:
       failures += 1
-      logging.debug("selected subtree is invalid")
+      self.debug_logger.debug("selected subtree is invalid")
       if failures > self.args.subtree_selection_tries:
-        logging.debug(f"TOO MANY TRIES TO FIND SUBTREE with resolution {resolution} from:")
-        logging.debug(root.dump())
+        self.debug_logger.debug(f"TOO MANY TRIES TO FIND SUBTREE with resolution {resolution} from:")
+        self.debug_logger.debug(root.dump())
         assert False, f"Too many tries to find subtree with resolution {resolution}"
     else:
       subtree_copy.parent = None
@@ -992,7 +992,7 @@ def accept_tree(tree):
   if tree_type is SumR: 
     # don't sum reduce over one channel
     if tree.child.out_c == 1:
-      logging.debug("rejecting SumR over one channel")
+      self.debug_logger.debug("rejecting SumR over one channel")
       return False
     # don't use sum reduce if model immediately expands channel count again afterwards
     parent = tree.parent
@@ -1000,7 +1000,7 @@ def accept_tree(tree):
     while parent:
       # make sure the first parent seen is not a conv or a softmax - ignoring relus as parents
       if type(parent) in banned_parents:
-        logging.debug("Rejecting SumR with parent Conv / Softmax")
+        self.debug_logger.debug("Rejecting SumR with parent Conv / Softmax")
         return False
       elif (not type(parent) is Relu) and (not type(parent) in banned_parents):
         break
@@ -1013,27 +1013,27 @@ def accept_tree(tree):
   # don't allow subtraction or addition of same trees
   if tree_type is Sub or tree_type is Add:
     if tree.lchild.is_same_as(tree.rchild):
-      logging.debug("Rejecting sub or add same tree")
+      self.debug_logger.debug("Rejecting sub or add same tree")
       return False
     # don't allow addition or subtraction of linear subtrees
     if is_linear(tree):
-      logging.debug("Rejecting sub or add linear trees")
+      self.debug_logger.debug("Rejecting sub or add linear trees")
       return False
   
   # don't allow LogSub of same trees
   if tree_type is LogSub:
     if tree.lchild.is_same_as(tree.rchild):
-      logging.debug("rejecting LogSub same tree")
+      self.debug_logger.debug("rejecting LogSub same tree")
       return False
 
   # don't allow stacking of same trees
   # don't allow stack to stack trees that could have been one tree with channel count changes
   if tree_type is Stack:
     if tree.lchild.is_same_as(tree.rchild):
-      logging.debug("rejecting stacking same children")
+      self.debug_logger.debug("rejecting stacking same children")
       return False
     if tree.lchild.is_same_mod_channels(tree.rchild):
-      logging.debug("rejecting stacking structurally same children")
+      self.debug_logger.debug("rejecting stacking structurally same children")
       return False
 
   # don't allow softmax over a single channel
@@ -1045,33 +1045,33 @@ def accept_tree(tree):
     ancestors_from_binop_to_node = find_closest_ancestor(tree, set((Binop,)))
     instances = sum([1 for n in ancestors_from_binop_to_node if type(n) is tree_type])
     if instances > 1:
-      logging.debug("rejecting nested up/down or softmax")
+      self.debug_logger.debug("rejecting nested up/down or softmax")
       return False
 
   # don't allow adjacent LogSub / AddExp or adjacent Downsample / Upsample
   if tree_type is LogSub:
     if type(tree.parent) is AddExp:
-      logging.debug("rejecting adjacent LogSub / AddExp")
+      self.debug_logger.debug("rejecting adjacent LogSub / AddExp")
       return False
   if tree_type is Downsample:
     if type(tree.parent) is Upsample:
-      logging.debug("rejecting adjacent Down / Up")
+      self.debug_logger.debug("rejecting adjacent Down / Up")
       return False
     # downsample must be parent of input
     if not type(tree.child) is Input:
-      logging.debug("rejecting downsample with non input child")
+      self.debug_logger.debug("rejecting downsample with non input child")
       return False
 
   # Mul must have either Softmax or Relu as one of its children
   # and do not allow two Mul in a row
   if tree_type is Mul:
     if type(tree.rchild) is tree_type or type(tree.lchild) is tree_type:
-      logging.debug("rejecting two consecutive Mul")
+      self.debug_logger.debug("rejecting two consecutive Mul")
       return False
     relu_or_softmax = set((Relu, Softmax))
     childtypes = set((type(tree.lchild), type(tree.rchild)))
     if len(relu_or_softmax.intersection(childtypes)) == 0:
-      logging.debug("rejecting Mul without ReLU or Softmax child")
+      self.debug_logger.debug("rejecting Mul without ReLU or Softmax child")
       return False
 
   if tree.num_children == 0:
