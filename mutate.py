@@ -183,7 +183,8 @@ class Mutator():
 """
 returns whether parent and child linearity type sequence is allowed
 """
-def legal_parent_child_linearity(parent, child):
+@extclass(Mutator)
+def legal_parent_child_linearity(self, parent, child):
   if type(parent) is tuple:
     if not (type(parent[0]) is type(parent[1])):
       self.debug_logger.debug("Node with multiple parents cannot have parents of different types")
@@ -248,7 +249,7 @@ def remove_node(parent, deletion_node, new_child):
       parent.child2 = new_child
     else:
       parent.child3 = new_child 
-  if parent.num_children == 2:
+  elif parent.num_children == 2:
     if deletion_node is parent.lchild:
       parent.lchild = new_child
     else:
@@ -261,7 +262,8 @@ def remove_node(parent, deletion_node, new_child):
 """
 fixes channel counts after deleting nodes
 """
-def fix_channels_after_deletion(tree, deletion_parent, deletion_child):
+@extclass(Mutator)
+def fix_channels_after_deletion(self, tree, deletion_parent, deletion_child):
 
   if deletion_parent is None:
     return 
@@ -346,7 +348,7 @@ def delete_nodes(self, tree, node, already_deleted=None):
     else:
       remove_node(parent, cur_node, child)
 
-    if legal_parent_child_linearity(parent, child):
+    if self.legal_parent_child_linearity(parent, child):
       break
 
     # deletion caused illegal linearity, move up the tree to delete next node
@@ -378,7 +380,7 @@ def delete_nodes(self, tree, node, already_deleted=None):
   for n, nid in filtered_partners_of_deleted:
     tree = self.delete_nodes(tree, n, already_deleted)
   
-  fix_channels_after_deletion(tree, parent, child)
+  self.fix_channels_after_deletion(tree, parent, child)
 
   return tree
 
@@ -507,7 +509,7 @@ def link_insertion_parent_to_new_child(self, insert_parent, insert_child, node):
       insert_parent.child2 = node
     else:
       insert_parent.child3 = node
-  if insert_parent.num_children == 2:
+  elif insert_parent.num_children == 2:
     if insert_child is insert_parent.rchild:
       insert_parent.rchild = node
     else:
@@ -515,7 +517,7 @@ def link_insertion_parent_to_new_child(self, insert_parent, insert_child, node):
   elif insert_parent.num_children == 1:
     insert_parent.child = node
   else:
-    self.debug_logger.debug("Should not be inserting after an input node")
+    self.debug_logger.debug(f"Should not be inserting {node} after parent {insert_parent.dump()}")
     assert False, "Should not be inserting after an input node"
 
 @extclass(Mutator)
@@ -747,6 +749,7 @@ returns the new nodes in the same order as their corresponding insert_ops
 """
 @extclass(Mutator)
 def insert(self, tree, insert_ops, insert_child, input_set):
+  self.debug_logger.debug(f"inserting {insert_ops} the tree before insertion {tree.dump()}")
   insert_parent = insert_child.parent
   cur_child = insert_child
   new_nodes = [] 
@@ -774,6 +777,7 @@ def insert(self, tree, insert_ops, insert_child, input_set):
 
   # make sure output channels of inserted nodes agree with parent
   cur_child.compute_input_output_channels()
+  self.debug_logger.debug(f"the tree right before fixing channels {tree.dump()}")
   fixed = fix_channel_count_upwards(cur_child, cur_child.out_c)
   if not fixed:
     self.debug_logger.debug("unable to make inserted nodes channel counts agree with tree")
@@ -823,8 +827,12 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
   self.current_mutation_info["insert_ops"] = ",".join([new_op[0].__name__ for new_op in new_ops])
   self.current_mutation_info["insert_child_id"] = insert_above_node_id
 
-  new_nodes = self.insert(tree, new_ops, insert_child, input_set)
-
+  try:
+    new_nodes = self.insert(tree, new_ops, insert_child, input_set)
+  except AssertionError:
+    self.debug_logger.debug(f"failed to insert {new_ops} into tree\n{tree.dump()}\nwith insert child\n{insert_child.dump()}")
+    assert False, "insertion mutation failed"
+    
   # if we inserted a sandwich op, we must insert its partner node as well
   # if we inserted Mul, and neither child is Softmax or Relu, add Softmax or Relu as a child
   """
@@ -899,10 +907,10 @@ def splits_sandwich_ops_helper(tree, partner_pool=None):
     child1_pool = splits_sandwich_ops_helper(tree.child1, partner_pool)
     child2_pool = splits_sandwich_ops_helper(tree.child2, child1_pool)
     partner_pool = splits_sandwich_ops_helper(tree.child3, child2_pool) 
-  if tree.num_children == 2:
+  elif tree.num_children == 2:
     lchild_pool = splits_sandwich_ops_helper(tree.lchild, partner_pool)
     partner_pool = splits_sandwich_ops_helper(tree.rchild, lchild_pool)
-  if tree.num_children == 1:
+  elif tree.num_children == 1:
     partner_pool = splits_sandwich_ops_helper(tree.child, partner_pool)
   return partner_pool
 
