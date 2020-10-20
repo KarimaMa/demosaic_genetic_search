@@ -260,7 +260,10 @@ class Searcher():
     self.mutate_monitor.set_error_msg(f"---\nfailed to mutate model id {parent_id}\n---")
     with self.mutate_monitor:
       try:
-        model_inputs = set(("Input(Bayer)",))
+        if self.args.full_model:
+          model_inputs = set(("Input(Bayer)", "Input(Green)"))
+        else: 
+          model_inputs = set(("Input(Bayer)",))
         new_model_ast, shash, mutation_stats = self.mutator.mutate(new_model_id, model_ast, model_inputs)
         generation_stats.update(mutation_stats)
 
