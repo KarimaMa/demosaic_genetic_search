@@ -682,7 +682,12 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
     resolution = spatial_resolution(op_node.rchild)
   else:
     # don't insert sandwich op as parent of a binary op
-    insertion_child_options = find_closest_ancestor(op_node, set((Binop,)))[1:]
+    #insertion_child_options = find_closest_ancestor(op_node, set((Binop,)))[1:]
+
+    # allow upsamples to be parent of certain binops: Subs and Adds --> requires fixing resolution of children
+    # because we may subtract or add downsampled Green from/to downsampled Bayer
+    # upsample cannot be inserted above a pre-existing downsample op or any other binary op: Mul, Stack
+    insertion_child_options = find_closest_ancestor(op_node, set((Downsample, Upsample, Mul, Stack)))[1:]       
     resolution = None
 
   tries = 0
@@ -707,6 +712,28 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
 
   return insert_ops, insert_child
 
+
+"""
+fixes the resolution of children downstream from newly inserted
+Upsample when upsample is inserted above a Binop
+"""
+@extclass(Mutator)
+def fix_res(self, tree, input_set, curr_node):
+  if isinstance(curr_node, Upsample) or isinstance(curr_node, Input):
+    self.insert(tree, [(Downsample, None, None)], curr_node, input_set)
+    return
+  elif isinstance(curr_node, Unop):
+    self.fix_res(tree, input_set, curr_node.child)
+    return
+  elif isinstance(curr_node, Binop):
+    lres = spatial_resolution(curr_node.lchild)
+    rres = spatial_resolution(curr_node.rchild)
+    if lres == Resolution.FULL:
+      self.fix_res(tree, input_set, curr_node.lchild)
+    if rres == Resolution.FULL:
+      self.fix_res(tree, input_set, curr_node.rchild)
+    return
+
 """
 inserts the partner op of the given op_node with class op_class
 """
@@ -721,6 +748,11 @@ def insert_partner_op(self, tree, input_set, op_class, op_node):
   
   insert_nodes = self.insert(tree, insert_op, insert_child, input_set)
   partner_node = insert_nodes[0]
+
+  if op_partner_class is Upsample:
+    # fix spatial resolution of downstream children if Upsample inserted above binary op 
+    if find_type_between(partner_node, op_node, Binop):
+      self.fix_res(tree, input_set, partner_node.child) 
 
   # manually fix linear / nonlinearity by inserting an additional node
   if issubclass(op_partner_class, NonLinear):
@@ -999,6 +1031,9 @@ def accept_tree(self, tree):
   if len(tree.preorder()) > MAX_SIZE:
     return False
 
+  if spatial_resolution(tree) == Resolution.INVALID:
+    return False
+
   tree_type = type(tree) 
 
   if tree_type is SumR: 
@@ -1076,6 +1111,11 @@ def accept_tree(self, tree):
     #if not type(tree.child) is Input:
       self.debug_logger.debug("rejecting downsample with a Conv child")
       return False
+    # downsample cannot be parent of an upsample
+    found_node, found_level = find_type(tree.child, Upsample, 0, ignore_root=False)
+    if any(found_node):
+      self.debug_logger.debug("rejecting downsample with an Upsample child")
+      return False 
 
   # Mul must have either Softmax or Relu as one of its children
   # and do not allow two Mul in a row

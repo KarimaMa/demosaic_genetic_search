@@ -164,7 +164,17 @@ def check_channel_count(node):
   elif isinstance(node, Const):
     return node.out_c
 
-
+"""
+returns whether given type exists between two nodes
+"""
+def find_type_between(top, bottom, T):
+  if bottom is top:
+    return False
+  elif isinstance(bottom, T):
+    return True
+  else:
+    return find_type_between(top, bottom.parent, T)
+    
 """
 returns list of earliest occurence(s) of type in tree
 and the level of occurence
