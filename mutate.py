@@ -607,7 +607,9 @@ reject if LogSub would be inserted without enough space above to insert its part
 """
 def accept_insertion_loc(child, parent, insert_ops):
   if insert_ops[-1] is Downsample:
-    if not isinstance(child, Input):
+    found_node, found_level = find_type(child, Linear, 0, ignore_root=False)
+    if any(found_node): # Downsample cannot be parent of any Conv
+    #if not isinstance(child, Input):
       return False
   if insert_ops[-1] is LogSub:
     insertion_loc_options = find_closest_ancestor(child, set((Binop, Softmax)))
@@ -1067,9 +1069,12 @@ def accept_tree(self, tree):
     if type(tree.parent) is Upsample:
       self.debug_logger.debug("rejecting adjacent Down / Up")
       return False
-    # downsample must be parent of input
-    if not type(tree.child) is Input:
-      self.debug_logger.debug("rejecting downsample with non input child")
+
+    # downsample cannot be parent of any conv
+    found_node, found_level = find_type(tree.child, Linear, 0, ignore_root=False)
+    if any(found_node):
+    #if not type(tree.child) is Input:
+      self.debug_logger.debug("rejecting downsample with a Conv child")
       return False
 
   # Mul must have either Softmax or Relu as one of its children

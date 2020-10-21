@@ -173,7 +173,7 @@ def find_type(root, T, level, ignore_root=False):
   if isinstance(root, T) and not ignore_root:
     return [root], level
   elif isinstance(root, Const): # reached leaf node
-    return None, 1e10
+    return [None], 1e10
   elif root.num_children == 3:
     found1, level1 = find_type(root.child1, T, level+1)
     found2, level2 = find_type(root.child2, T, level+1)
@@ -191,6 +191,7 @@ def find_type(root, T, level, ignore_root=False):
   elif root.num_children == 2:
     lfound, leftl = find_type(root.lchild, T, level+1)
     rfound, rightl = find_type(root.rchild, T, level+1)
+  
     lfound = list(filter(None, lfound))
     rfound = list(filter(None, rfound))
 
@@ -204,7 +205,9 @@ def find_type(root, T, level, ignore_root=False):
     elif any(lfound):
       return lfound, leftl
     elif any(rfound):
-      return rfound, rightl  
+      return rfound, rightl 
+    else:
+      return [None], 1e10
   else:
     found, l = find_type(root.child, T, level+1)
     return found, l
