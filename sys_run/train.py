@@ -173,7 +173,7 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
         model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
         pred = model.run(model_inputs)
       else:
-        model_inputs = {"Bayer": bayer_input}
+        model_inputs = {"Input(Bayer)": bayer_input}
 
       pred = model.run(model_inputs)
       loss = criterion(pred, target)
@@ -220,7 +220,7 @@ def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_
         model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
         pred = model.run(model_inputs)
       else:
-        model_inputs = {"Bayer": bayer_input}
+        model_inputs = {"Input(Bayer)": bayer_input}
 
       pred = model.run(model_inputs)
       loss = criterion(pred, target)
@@ -264,7 +264,7 @@ def infer(args, gpu_id, valid_queue, models, criterion):
           model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
           pred = model.run(model_inputs)
         else:
-          model_inputs = {"Bayer": bayer_input}
+          model_inputs = {"Input(Bayer)": bayer_input}
 
         pred = model.run(model_inputs)
         loss = criterion(pred, target)
