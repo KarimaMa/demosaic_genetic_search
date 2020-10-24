@@ -588,8 +588,8 @@ def insert_binop(self, tree, input_set, insert_op, insert_child):
 @extclass(Mutator)
 def insert_unary_op(self, OpClass, insert_child):
   params = list(signature(OpClass).parameters.items())
-  if len(params) == 3: # not sure what's going on here with number of params...
-    out_c = insert_child.out_c # self.defualt_channels
+  if len(params) == 3 or len(params) == 4: # child, out_c, name, kwidth
+    out_c = self.args.default_channels #insert_child.out_c 
     new_node = OpClass(insert_child, out_c)
   elif len(params) == 2:
     new_node = OpClass(insert_child)
