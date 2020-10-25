@@ -10,11 +10,6 @@ sys.path.append(os.path.join(sys.path[0], "sys_run"))
 from cost import CostTiers
 import util
 
-def parse_cost_tiers(s):
-  ranges = s.split(' ')
-  ranges = [[int(x) for x in r.split(',')] for r in ranges]
-  print(ranges)
-  return ranges
 
 parser = argparse.ArgumentParser("Demosaic")
 parser.add_argument('--model_db_csv', type=str)
@@ -25,7 +20,6 @@ parser.add_argument('--model_inits', type=int)
 
 args = parser.parse_args()
 
-args.cost_tiers = parse_cost_tiers(args.cost_tiers)
 
 log_format = '%(asctime)s %(levelname)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, \
@@ -33,24 +27,24 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO, \
 
 logger = util.create_logger('logger', logging.INFO, log_format, 'foo_log')
 
-fields = ["model_id", "generation", "tier", "depth", "epoch0", "epoch1", "epoch2"]
-field_types = [int, int, int, int, float, float, float]
+fields = ["model_id", "depth", "epoch0", "epoch1", "epoch2"]
+field_types = [int, int, float, float, float]
 util.create_dir("val_psnr_database")
 val_psnr_db = Database('ValPSNR_Databse', fields, field_types, "val_psnr_database")
 val_psnr_db.cntr = 0
 
-def build_model_database(model_inits):
+def build_model_database(args):
   fields = ["model_id", "id_str", "hash", "structural_hash", "generation", "occurrences", "best_init"]
   field_types = [int, str, int, int, int, int, int]
-  for model_init in range(model_inits):
+  for model_init in range(args.model_inits):
     fields += [f"psnr_{model_init}"]
     field_types += [float]
   fields += ["compute_cost", "parent_id", "failed_births", "failed_mutations",\
              "prune_rejections", "structural_rejections", "seen_rejections"]
   field_types += [float, int, int, int, int, int, int]
-  return Database("ModelDatabase", fields, field_types, args.model_database_dir)
+  return Database("ModelDatabase", fields, field_types, 'junk')
 
-model_db = build_model_database(3)
+model_db = build_model_database(args)
 model_db.load(args.model_db_csv)
 
 for model_id in model_db.table:
@@ -90,8 +84,11 @@ for model_id in model_db.table:
   data["model_id"] = model_id
   data["depth"] = depth
 
-  for init in range(args.model_inits):
-    data[f"epoch{init}"] = used_psnrs[init]
+  if len(used_psnrs) != args.epochs:
+    continue
+
+  for epoch in range(args.epochs):
+    data[f"epoch{epoch}"] = used_psnrs[epoch]
 
   val_psnr_db.add(val_psnr_db.cntr, data)
   val_psnr_db.cntr += 1
