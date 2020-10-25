@@ -11,16 +11,9 @@ from cost import CostTiers
 import util
 import shutil
 
-def parse_cost_tiers(s):
-  ranges = s.split(' ')
-  ranges = [[int(x) for x in r.split(',')] for r in ranges]
-  print(ranges)
-  return ranges
-
 
 parser = argparse.ArgumentParser("Demosaic")
-parser.add_argument('--tier_database_file', type=str, default='cost_tier_database')
-parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
+parser.add_argument('--model_db_csv', type=str, default='model database')
 parser.add_argument('--model_parentdir', type=str)
 parser.add_argument('--max_gen', type=int)
 parser.add_argument('--output_dir', type=str, help='where to store model info')
@@ -31,8 +24,6 @@ args = parser.parse_args()
 if not os.path.exists(args.model_depth_list_dir):
 	util.create_dir(args.model_depth_list_dir)
 
-args.cost_tiers = parse_cost_tiers(args.cost_tiers)
-
 log_format = '%(asctime)s %(levelname)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, \
   format=log_format, datefmt='%m/%d %I:%M:%S %p')
@@ -40,32 +31,39 @@ logger = util.create_logger('logger', logging.INFO, log_format, 'foo_log')
 
 models_by_depth = {}
 
-for gen in range(args.max_gen+1):
-	cost_tiers = CostTiers('junk', args.cost_tiers, logger)
-	cost_tiers.load_generation_from_database(args.tier_database_file, gen)
+def build_model_database(args):
+  fields = ["model_id", "id_str", "hash", "structural_hash", "generation", "occurrences", "best_init"]
+  field_types = [int, str, int, int, int, int, int]
+  for model_init in range(args.model_inits):
+    fields += [f"psnr_{model_init}"]
+    field_types += [float]
+  fields += ["compute_cost", "parent_id", "failed_births", "failed_mutations",\
+             "prune_rejections", "structural_rejections", "seen_rejections"]
+  field_types += [float, int, int, int, int, int, int]
+  return Database("ModelDatabase", fields, field_types, 'junk')
 
-	for tid, tier in enumerate(cost_tiers.tiers):
-		for model_id in tier:
-			model_dir = os.path.join(args.model_parentdir, f"{model_id}")
-			init_psnrs = []
-			data = {}
-			ast_file = os.path.join(model_dir, "model_ast")
-			ast = load_ast(ast_file)
-			depth = count_parameterized_depth(ast)
+model_db = build_model_database(args)
+model_db.load(args.model_db_csv)
 
-			data["model_id"] = model_id
-			data["generation"] = gen
-			data["tier"] = tid
-			data["depth"] = depth
+for model_id in model_db.table:
+	model_dir = os.path.join(args.model_parentdir, f"{model_id}")
+	init_psnrs = []
+	data = {}
+	ast_file = os.path.join(model_dir, "model_ast")
+	ast = load_ast(ast_file)
+	depth = count_parameterized_depth(ast)
 
-			if depth in models_by_depth:
-				models_by_depth[depth].append(data)
-			else:
-				models_by_depth[depth] = [data]
-			depth_filename = f"{args.model_depth_list_dir}/depth_{depth}_models.txt"
+	data["model_id"] = model_id
+	data["depth"] = depth
 
-			with open(depth_filename, "a+") as f:
-				f.write(f"{model_id}\n")
+	if depth in models_by_depth:
+		models_by_depth[depth].append(data)
+	else:
+		models_by_depth[depth] = [data]
+	depth_filename = f"{args.model_depth_list_dir}/depth_{depth}_models.txt"
+
+	with open(depth_filename, "a+") as f:
+		f.write(f"{model_id}\n")
 
 # sample each depth for models to retrain
 max_depth = max(list(models_by_depth.keys()))
