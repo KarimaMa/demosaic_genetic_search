@@ -15,6 +15,7 @@ import numpy as np
 from demosaic_ast import *
 from dataset import GreenDataset
 from database import Database
+sys.path.append(sys.path[0].split("/")[0])
 from pareto import get_pareto_ranks
 
 
@@ -89,15 +90,12 @@ class CostTiers():
 		self.logger.info(f"--- Reloading cost tiers from {database_file} generation {generation} ---")
 		self.build_cost_tier_database()
 		self.tier_database.load(database_file)
-		# remove any entries with generation >= end_generation
-		to_delete = [key for (key, data) in self.tier_database.table.items() if data["generation"] != generation]
-		for key in to_delete:
-			del self.tier_database.table[key]
-
+		
 		self.tier_database.cntr = max(self.tier_database.table.keys())
 
 		for key, data in self.tier_database.table.items():
-			self.tiers[data["tier"]][data["model_id"]] = (data["compute_cost"], data["psnr"])
+			if data["generation"] == generation:
+				self.tiers[data["tier"]][data["model_id"]] = (data["compute_cost"], data["psnr"])
 
 		for tid, tier in enumerate(self.tiers):
 			for model_id in tier:
