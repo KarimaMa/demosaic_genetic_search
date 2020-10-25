@@ -16,6 +16,7 @@ def drop_table(password, tablename):
       'host': db_host,
       'user': db_user,
       'passwd': db_password,
+      'port': 3306,
   }
 
   db = MySQLDatabase(db_name, **db_conn)
@@ -70,6 +71,7 @@ def create_table(password, tablename):
       'host': db_host,
       'user': db_user,
       'passwd': db_password,
+      'port': 3306,
   }
 
   db = MySQLDatabase(db_name, **db_conn)
@@ -137,6 +139,7 @@ def select(password, tablename):
       'host': db_host,
       'user': db_user,
       'passwd': db_password,
+      'port': 3306,
   }
 
   db = MySQLDatabase(db_name, **db_conn)
@@ -189,6 +192,7 @@ def select_range(password, tablename, id_min, id_max):
       'host': db_host,
       'user': db_user,
       'passwd': db_password,
+      'port': 3306,
   }
 
   db = MySQLDatabase(db_name, **db_conn)
@@ -243,6 +247,7 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
       'host': db_host,
       'user': db_user,
       'passwd': db_password,
+      'port': 3306,
   }
 
   db = MySQLDatabase(db_name, **db_conn)
@@ -308,6 +313,7 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
       'host': db_host,
       'user': db_user,
       'passwd': db_password,
+      'port': 3306,
   }
 
   db = MySQLDatabase(db_name, **db_conn)
@@ -367,6 +373,7 @@ def mysql_delete_all(password, tablename):
       'host': db_host,
       'user': db_user,
       'passwd': db_password,
+      'port': 3306,
   }
 
   db = MySQLDatabase(db_name, **db_conn)
@@ -418,6 +425,7 @@ def mysql_delete(password, tablename, id_min, id_max):
       'host': db_host,
       'user': db_user,
       'passwd': db_password,
+      'port': 3306,
   }
 
   db = MySQLDatabase(db_name, **db_conn)
@@ -471,10 +479,11 @@ if __name__ == "__main__":
   import logging
   log_format = '%(asctime)s %(levelname)s %(message)s'
   logger = util.create_logger(f'mysql_logger', logging.INFO, log_format, f'mysql_log')
-  mysql_delete_all(args.password, args.table)
-  #mysql_delete("trisan4th", 1332, 1364)
-  #drop_table(args.password, args.table)
-  #create_table(args.password, args.table)
+  #mysql_delete_all(args.password, args.table)
+  
+  #mysql_delete(args.password, args.table, 0, 9999)
+  drop_table(args.password, args.table)
+  create_table(args.password, args.table)
   #select_range(args.password, args.table, 1332, 1999)
   print("checking insertion worked...")
   select(args.password, args.table)

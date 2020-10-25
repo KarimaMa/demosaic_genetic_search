@@ -613,6 +613,8 @@ class Searcher():
           if math.isnan(best_psnr):
             continue # don't add model to tier 
 
+          self.search_logger.info(f"adding model {task_info.model_id} with psnrs {model_psnrs} to db")
+
           compute_cost = task_info.database_entry["compute_cost"]
           new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
           mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
