@@ -406,5 +406,31 @@ def is_linear(tree):
       return isinstance(tree, Linear) and is_linear(tree.child)
   return False
 
+"""
+counts the number of convolutional layers in a tree
+"""
+def count_parameterized_depth(tree):
+  if tree.num_children == 3:
+    child1_d = count_parameterized_depth(tree.child1)
+    child2_d = count_parameterized_depth(tree.child2)
+    chidl3_d = count_parameterized_depth(tree.child3)
+    depth = max([child1_d, child2_d, child3_d])
+  elif tree.num_children == 2:
+    lchild_d = count_parameterized_depth(tree.lchild)
+    rchild_d = count_parameterized_depth(tree.rchild)
+    depth = max(lchild_d, rchild_d)
+  elif tree.num_children == 1:
+    depth = count_parameterized_depth(tree.child)
+  else:
+    depth = 0
+  if isinstance(tree, Linear):
+    depth += 1
+
+  return depth
+
+
+
+
+
 
 
