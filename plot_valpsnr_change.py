@@ -21,7 +21,6 @@ def parse_cost_tiers(s):
 parser = argparse.ArgumentParser("Demosaic")
 parser.add_argument('--tier_database_file', type=str, default='cost_tier_database')
 parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
-parser.add_argument('--outfile', type=str)
 parser.add_argument('--model_parentdir', type=str)
 parser.add_argument('--max_gen', type=int)
 parser.add_argument('--epochs', type=int)
@@ -54,7 +53,7 @@ for gen in range(args.max_gen+1):
 			data = {}
 			ast_file = os.path.join(model_dir, "model_ast")
 			ast = load_ast(ast_file)
-			depth = count_paremeterized_depth(ast)
+			depth = count_parameterized_depth(ast)
 
 			for init in range(args.model_inits):
 				if model_id == 0:
