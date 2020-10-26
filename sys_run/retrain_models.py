@@ -22,6 +22,7 @@ import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 import sys
+import shutil
 sys.path.append(sys.path[0].split("/")[0])
 from cost import ModelEvaluator
 import util
@@ -48,7 +49,7 @@ def init_process(task_id, fn, train_args, gpu_ids, model_id, models, model_dir,\
                 train_psnrs, valid_psnrs, log_format, task_logger, backend='nccl'):
   fn(task_id, train_args, gpu_ids, model_id, models, model_dir, \
     train_psnrs, valid_psnrs, log_format, task_logger)
-  
+
 
 def run_train(task_id, train_args, gpu_ids, model_id, pytorch_models, model_dir, \
               train_psnrs, valid_psnrs, log_format, task_logger):
@@ -223,14 +224,20 @@ class Trainer():
     gpu_ids = mp.Array(ctypes.c_int, [-1]*len(model_ids))
 
     for task_id, model_id in enumerate(model_ids):
-      model_dir = os.path.join(self.args.model_path, f"{model_id}")
-      model_ast = load_ast(os.path.join(model_dir, "model_ast"))
+      model_info_dir = os.path.join(self.args.model_info_dir, f"{model_id}")
+      model_ast_file = os.path.join(model_info_dir, "model_ast")
+      model_ast = load_ast(model_ast_file)
      
       pytorch_models = self.lower_model(model_id, model_ast)
     
       compute_cost = self.model_evaluator.compute_cost(model_ast)
       
-      task_info = TrainTaskInfo(task_id, model_dir, pytorch_models, model_id)
+      save_model_dir = os.path.join(self.args.model_path, f"{model_id}")
+      util.create_dir(save_model_dir)
+      
+      shutil.copyfile(model_ast_file, os.path.join(save_model_dir, "model_ast"))
+
+      task_info = TrainTaskInfo(task_id, save_model_dir, pytorch_models, model_id)
 
       training_tasks.append((model_ast, task_info))
     
@@ -244,7 +251,8 @@ class Trainer():
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
-  parser.add_argument('--model_path', type=str, help='path with model information and where to save training results')
+  parser.add_argument('--model_path', type=str, default='models', help='where to save training results')
+  parser.add_argument('--model_info_dir', type=str, help='where model asts are stored')
   parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--model_retrain_list', type=str, help='filename with list of model ids to retrain')
   parser.add_argument('--train_timeout', type=int, default=2400)
