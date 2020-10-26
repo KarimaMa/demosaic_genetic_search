@@ -23,12 +23,12 @@ import torch
 import torch.backends.cudnn as cudnn
 import sys
 sys.path.append(sys.path[0].split("/")[0])
-import cost
-from cost import ModelEvaluator, CostTiers
+from cost import ModelEvaluator
 import util
 from database import Database 
 from monitor import Monitor, TimeoutError
 from train import train_model
+from demosaic_ast import load_ast
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import ctypes
@@ -48,7 +48,29 @@ def init_process(task_id, fn, train_args, gpu_ids, model_id, models, model_dir,\
                 train_psnrs, valid_psnrs, log_format, task_logger, backend='nccl'):
   fn(task_id, train_args, gpu_ids, model_id, models, model_dir, \
     train_psnrs, valid_psnrs, log_format, task_logger)
+  
 
+def run_train(task_id, train_args, gpu_ids, model_id, pytorch_models, model_dir, \
+              train_psnrs, valid_psnrs, log_format, task_logger):
+  inits = train_args.model_initializations
+  gpu_id = gpu_ids[task_id]
+  try:
+    for m in pytorch_models:
+      m._initialize_parameters()
+  except RuntimeError:
+    debug_logger.debug(f"Failed to initialize model {model_id}")
+    print(f"Failed to initialize model {model_id}")
+  else:
+    util.create_dir(model_dir)
+    training_logger = util.create_logger(f'model_{model_id}_train_logger', logging.INFO, log_format, \
+                                        os.path.join(model_dir, f'model_{model_id}_training_log'))
+    
+    print('Task ', task_id, ' launched on GPU ', gpu_id, ' model id ', model_id)
+    model_valid_psnrs, model_train_psnrs = train_model(train_args, gpu_id, model_id, pytorch_models, model_dir, training_logger)
+    for i in range(train_args.model_initializations):
+      index = train_args.model_initializations * task_id + i 
+      train_psnrs[index] = model_train_psnrs[i]
+      valid_psnrs[index] = model_valid_psnrs[i]
 
 
 class Trainer():
@@ -65,41 +87,32 @@ class Trainer():
     self.train_logger.info("args = %s", args)
 
     self.args = args  
-  
+    self.model_evaluator = ModelEvaluator(args)
+
     mp.set_start_method("spawn")
 
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '29500'
 
-    self.model_manager = util.ModelManager(args.model_path, args.starting_model_id)
-
 
   def load_model(self, model_id):
-    self.load_monitor.set_error_msg(f"---\nLoading model id {model_id} timed out\n---")
-    with self.load_monitor:
-      try:
-        model_ast = self.model_manager.load_model_ast(model_id)
-      except RuntimeError:
-        self.load_monitor.logger.info(f"---\nError loading model {model_id}\n---")
-        return None
-      except TimeoutError:
-        return None
-      else:
-        if has_loop(model_ast):
-          self.debug_logger.info(f"Tree has loop!!\n{model_ast.dump()}")
-          return None
-        return model_ast
+    try:
+      model_ast = self.model_manager.load_model_ast(model_id)
+    except RuntimeError:
+      return None
+    except TimeoutError:
+      return None
+    else:
+      return model_ast
 
               
   def lower_model(self, new_model_id, new_model_ast):
-    self.lowering_monitor.set_error_msg(f"---\nfailed to lower model {new_model_id}\n---")
-    with self.lowering_monitor:
-      try:
-        new_models = [new_model_ast.ast_to_model() for i in range(self.args.model_initializations)]
-      except TimeoutError:
-        return None
-      else:
-        return new_models
+    try:
+      new_models = [new_model_ast.ast_to_model() for i in range(self.args.model_initializations)]
+    except TimeoutError:
+      return None
+    else:
+      return new_models
 
 
   def create_train_process(self, train_task_info, gpu_ids, train_psnrs, validation_psnrs):
@@ -188,31 +201,7 @@ class Trainer():
     return failed 
 
 
-  def save_model_ast(self, model_ast, model_id, model_dir):
-    self.save_monitor.set_error_msg(f"---\nfailed to save model {model_id}\n---")
-    with self.save_monitor:
-      try:
-        self.model_manager.save_model_ast(model_ast, model_dir)
-        self.model_manager.save_model_info_file(model_dir, self.args.model_initializations)
-      except TimeoutError:
-        return False
-      else:
-        return True
-
-  def save_model(self, mutation_batch_info, new_model_id):
-    self.save_monitor.set_error_msg(f"---\nfailed to save model {new_model_id}\n---")
-    with self.save_monitor:
-      try:
-        pytorch_models = mutation_batch_info.pytorch_models[new_model_id]
-        model_ast = mutation_batch_info.model_asts[new_model_id]
-        model_dir = mutation_batch_info.model_dirs[new_model_id]
-        self.model_manager.save_model(pytorch_models, model_ast, model_dir)
-      except TimeoutError:
-        return False
-      else:
-        return True
-
-  def sample_models_to_retrain(self):
+  def get_models_to_retrain(self):
     model_list = []
     with open(self.args.model_retrain_list, "r") as f:
       for l in f:
@@ -225,8 +214,7 @@ class Trainer():
     process_queue = ProcessQueue()
 
     # importance sample which models from each tier to mutate based on PSNR
-    model_ids = self.sample_models_to_retrain()
-    mutation_batch_info = MutationBatchInfo() # we'll store results from this mutation batch here          
+    model_ids = self.get_models_to_retrain()
     training_tasks = []
 
     size = len(model_ids) * self.args.model_initializations
@@ -235,13 +223,12 @@ class Trainer():
     gpu_ids = mp.Array(ctypes.c_int, [-1]*len(model_ids))
 
     for task_id, model_id in enumerate(model_ids):
-      model_ast = self.load_model(model_id)
+      model_dir = os.path.join(self.args.model_path, f"{model_id}")
+      model_ast = load_ast(os.path.join(model_dir, "model_ast"))
      
       pytorch_models = self.lower_model(model_id, model_ast)
     
-      compute_cost = self.evaluator.compute_cost(model_ast)
-
-      model_dir = self.model_manager.model_dir(model_id)
+      compute_cost = self.model_evaluator.compute_cost(model_ast)
       
       task_info = TrainTaskInfo(task_id, model_dir, pytorch_models, model_id)
 
@@ -259,10 +246,11 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
   parser.add_argument('--model_path', type=str, help='path with model information and where to save training results')
   parser.add_argument('--save', type=str, help='experiment name')
-
+  parser.add_argument('--model_retrain_list', type=str, help='filename with list of model ids to retrain')
   parser.add_argument('--train_timeout', type=int, default=2400)
 
   # training parameters
+  parser.add_argument('--seed', type=int, default=2)
   parser.add_argument('--num_gpus', type=int, default=4, help='number of available GPUs') # change this to use all available GPUs
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
   parser.add_argument('--learning_rate', type=float, default=0.01, help='initial learning rate')
@@ -302,6 +290,6 @@ if __name__ == "__main__":
   args.model_path = os.path.join(args.save, args.model_path)
 
   trainer = Trainer(args)
-  trainer.train(args.cost_tiers, args.tier_size)
+  trainer.run()
 
 
