@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.utils
-import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 import argparse
 import os
@@ -30,7 +29,7 @@ def compare(args):
   print(f"FINISHED creating datasets")
 
   criterion = nn.MSELoss()
-  loss_trackers = util.AvgrageMeter() 
+  loss_tracker = util.AvgrageMeter() 
 
   green_list_IDs = ids_from_file(args.green_data_file) # patch filenames
 
@@ -45,11 +44,11 @@ def compare(args):
       green = np.load(green_f)
       green_batch[i,...] = torch.from_numpy(green)
 
-    loss = criterion(pred, target)
-    loss_trackers[i].update(loss.item(), n)
+    loss = criterion(green_batch, target)
+    loss_tracker.update(loss.item(), n)
 
-    if step % 50 == 0 or step == len(train_queue)-1:
-      print('validation %03d %e', epoch*len(valid_queue)+step, loss.item())
+    if step % 50 == 0 or step == len(validation_queue)-1:
+      print('validation %03d %e', len(validation_queue)+step, loss.item())
 
   print(f"average loss: {loss_tracker.avg} psnr: {util.compute_psnr(loss_tracker.avg)}")
 
