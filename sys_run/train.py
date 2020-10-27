@@ -37,7 +37,9 @@ def create_loggers(model_dir, model_id, num_models, mode):
 
 def create_validation_dataset(args):
   validation_data = Dataset(data_file=args.validation_file, RAM=False, \
-                            green_input=args.use_green_input, green_output=(not args.full_model))
+                            green_input=args.use_green_input, green_pred_input=args.use_green_pred,\
+                            green_file=args.green_validation_file,
+                            green_output=(not args.full_model))
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
 
@@ -52,8 +54,14 @@ def create_train_dataset(args):
   full_data_filenames = ids_from_file(args.training_file)
   used_filenames = full_data_filenames[0:int(args.train_portion)]
 
+  if args.use_green_pred:
+    full_green_filenames = ids_from_file[args.green_training_file]
+    used_green_filenames = full_green_filenames[0:int(args.train_portion)]
+
   train_data = Dataset(data_filenames=used_filenames, RAM=False, \
-                      green_input=args.use_green_input, green_output=(not args.full_model))
+                      green_input=args.use_green_input, green_pred_input=args.use_green_pred,\
+                      green_filenames=used_green_filenames, \
+                      green_output=(not args.full_model))
   num_train = len(train_data)
   train_indices = list(range(num_train))
   

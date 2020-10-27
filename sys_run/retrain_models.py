@@ -278,7 +278,9 @@ if __name__ == "__main__":
   # training full chroma + green parameters
   parser.add_argument('--use_green_input', action="store_true")
   parser.add_argument('--full_model', action="store_true")
-
+  parser.add_argument('--use_green_pred', action="store_true", help="whether to use precomputed green predictions")
+  parser.add_argument('--green_training_file', type=str, help="filename of file with list of precomputed green for training data")
+  parser.add_argument('--green_validation_file', type=str, help="filename of file with list of precomputed green for validation data")
   args = parser.parse_args()
 
   if not torch.cuda.is_available():

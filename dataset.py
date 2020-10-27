@@ -152,12 +152,24 @@ class GreenDataset(data.Dataset):
     
 
 class Dataset(data.Dataset):
-  def __init__(self, data_file=None, data_filenames=None, return_index=False, RAM=False, \
-              flatten=True, green_input=False, green_output=True):
+  def __init__(self, data_file=None, data_filenames=None,\
+              return_index=False, RAM=False, flatten=True, \
+              green_file=None, green_filenames=None, \
+              green_input=False, green_pred_input=False, green_output=True):
     if data_file:
       self.list_IDs = ids_from_file(data_file) # patch filenames
     else:
       self.list_IDs = data_filenames
+
+    self.green_pred_input = green_pred_input
+
+    if self.green_pred_input:
+      assert(not (green_file is None and green_filenames is None)), "missing precomputed green data"
+      if green_file:
+        self.green_list_IDs = ids_from_file(green_file)
+      else:
+        self.green_list_IDs = green_filenames
+
     self.return_index = return_index
     self.RAM = RAM
     self.flatten = flatten
@@ -185,7 +197,11 @@ class Dataset(data.Dataset):
           mosaic = np.sum(mosaic, axis=0, keepdims=True)
 
         if self.green_input:
-          green = np.expand_dims(img[1,...], axis=0)
+          if self.green_pred_input:
+            green_f = self.green_list_IDs[index]
+            green = torch.load(green_f)
+          else:
+            green = np.expand_dims(img[1,...], axis=0)
           input = (mosaic, green)
         else:
           input = mosaic
@@ -219,7 +235,11 @@ class Dataset(data.Dataset):
       mosaic = np.sum(mosaic, axis=0, keepdims=True)
 
     if self.green_input:
-      green = np.expand_dims(img[1,...], axis=0)
+      if self.green_pred_input:
+        green_f = self.green_list_IDs[index]
+        green = torch.load(green_f)
+      else:
+        green = np.expand_dims(img[1,...], axis=0)
       input = (mosaic, green)
     else:
       input = mosaic
