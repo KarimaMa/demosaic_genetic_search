@@ -8,11 +8,8 @@ import os
 import random 
 import numpy as np
 import sys
-from dataset import Dataset, ids_from_file, FastDataLoader
-
 sys.path.append(sys.path[0].split("/")[0])
-sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
-
+from dataset import Dataset, ids_from_file, FastDataLoader
 import util
 
 
