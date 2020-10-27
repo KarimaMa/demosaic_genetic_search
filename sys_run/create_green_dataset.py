@@ -37,6 +37,8 @@ def precompute_training_green(args, gpu_id, model):
       sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
       pin_memory=True, num_workers=8)
 
+  criterion = torch.nn.MSELoss()
+
   for step, (index, input, target) in enumerate(train_queue):
     bayer = input
     bayer_input = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}")
@@ -44,18 +46,23 @@ def precompute_training_green(args, gpu_id, model):
 
     model_inputs = {"Input(Bayer)": bayer_input}
     pred = model.run(model_inputs)
+    loss = criterion(pred, target)
+    if step % 500 == 0:
+      print(f"loss {loss}")
 
     for i in index:
       input_filename = used_filenames[i]
-      subpath = ('/').join(input_filename.split('/')[-4:])
+      if args.satori:
+        subpath = ('/').join(input_filename.split('/')[-2:])
+      else:
+        subpath = ('/').join(input_filename.split('/')[-4:])
+	
       subpath = subpath.strip('png')
       subpath += "pytensor"
       subdir = os.path.join(args.green_data_dir, ("/").join(subpath.split("/")[0:-1]))
-      print(subdir)
       os.makedirs(subdir, exist_ok=True)
       pred_filename = os.path.join(subdir, subpath.split("/")[-1])
-      print(pred_filename)
-      torch.save(pred, pred_filename)
+      torch.save(pred[i], pred_filename)
 
 
 def precompute_validation_green(args, gpu_id, model):
@@ -70,6 +77,7 @@ def precompute_validation_green(args, gpu_id, model):
       sampler=torch.utils.data.sampler.SubsetRandomSampler(validation_indices),
       pin_memory=True, num_workers=8)
 
+  criterion = torch.nn.MSELoss()
   for step, (index, input, target) in enumerate(train_queue):
     bayer = input
     bayer_input = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}")
@@ -77,21 +85,29 @@ def precompute_validation_green(args, gpu_id, model):
 
     model_inputs = {"Input(Bayer)": bayer_input}
     pred = model.run(model_inputs)
+    loss = criterion(pred, target)
 
-    input_filename = used_filenames[index]
-    subpath = ('/').join(input_filename.split('/')[-4:])
-    subpath = subpath.strip('png')
-    subpath += "pytensor"
-    
-    pred_filename = os.path.join(args.green_data_dir, subpath)
-    print(pred_filename)
-    subdir = ("/").join(subpath.split("/")[0:-1])
-    print(subdir)
-    os.makedirs(subdir, exist_ok=True)
-    torch.save(pred, pred_filename)
+    if step % 500 == 0:
+      print(f"loss {loss}")
+
+    for i in index:
+      input_filename = used_filenames[i]
+      if args.satori:
+        subpath = ('/').join(input_filename.split('/')[-2:])
+      else:
+        subpath = ('/').join(input_filename.split('/')[-4:])
+
+      subpath = subpath.strip('png')
+      subpath += "pytensor"
+      
+      subdir = os.path.join(args.green_data_dir, ("/").join(subpath.split("/")[0:-1]))
+      os.makedirs(subdir, exist_ok=True)
+      pred_filename = os.path.join(subdir, subpath.split("/")[-1])
+      torch.save(pred[i], pred_filename)
 
 
 def run(args, gpu_id):
+  """
   model_id = 0 
   model_dir = args.model_path
   util.create_dir(model_dir)
@@ -102,26 +118,33 @@ def run(args, gpu_id):
 
   training_logger = util.create_logger(f'model_green_train_logger', logging.INFO, log_format, \
                                         os.path.join(model_dir, f'model_green_training_log'))
+  """
+
   model_ast = load_ast(args.green_model_ast_file)
-  pytorch_models = [model_ast.ast_to_model() for i in range(args.model_initializations)]
+  #pytorch_models = [model_ast.ast_to_model() for i in range(args.model_initializations)]
+  pytorch_model = model_ast.ast_to_model()
+  pytorch_model.load_state_dict(torch.load(args.green_model_weight_file))
 
-  model_valid_psnrs, model_train_psnrs = train_model(args, gpu_id, model_id, pytorch_models, model_dir, training_logger)
+  #model_valid_psnrs, model_train_psnrs = train_model(args, gpu_id, model_id, pytorch_models, model_dir, training_logger)
 
-  best_model = pytorch_models[np.argmax(model_valid_psnrs)]
+  #best_model = pytorch_models[np.argmax(model_valid_psnrs)]
 
-  precompute_training_green(args, gpu_id, best_model)
-  precompute_validation_green(args, gpu_id, best_model)
+  precompute_training_green(args, gpu_id, pytorch_model)
+  precompute_validation_green(args, gpu_id, pytorch_model)
  
 
 
 if __name__ == "__main__":
-  parser = argparse.ArgumentParser("Demosaic")
+  #parser = argparse.ArgumentParser("Demosaic")
   parser.add_argument('--model_path', type=str, default='models', help='where to save training results')
   parser.add_argument('--green_model_ast_file', type=str, help='ast file for green model')
-  parser.add_argument('--save', type=str, help='experiment name')
+  parser.add_argument('--green_model_weight_file', type=str, help='torch file with greem model weights')
+  #parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--green_data_dir', type=str, help='where to save green precomputed predictions')
+  parser.add_argument('--satori', action='store_true')
 
   # training parameters
+  """
   parser.add_argument('--seed', type=int, default=2)
   parser.add_argument('--num_gpus', type=int, default=4, help='number of available GPUs') # change this to use all available GPUs
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
@@ -138,7 +161,7 @@ if __name__ == "__main__":
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
-
+  """
 
   args = parser.parse_args()
   args.use_green_input=False
@@ -147,18 +170,20 @@ if __name__ == "__main__":
   if not torch.cuda.is_available():
     sys.exit(1)
 
+  """
   random.seed(args.seed)
   np.random.seed(args.seed)
-  #torch.cuda.set_device(args.gpu)
-  cudnn.benchmark = False
   torch.manual_seed(args.seed)
+  """
 
+  cudnn.benchmark = False
   cudnn.enabled=True
   cudnn.deterministic=True
-  torch.cuda.manual_seed(args.seed)
+  #torch.cuda.manual_seed(args.seed)
 
-  util.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
-  args.model_path = os.path.join(args.save, args.model_path)
+  #util.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
+  #args.model_path = os.path.join(args.save, args.model_path)
+
   os.makedirs(args.green_data_dir, exist_ok=True)
 
   run(args, 0)
