@@ -199,7 +199,7 @@ class Dataset(data.Dataset):
         if self.green_input:
           if self.green_pred_input:
             green_f = self.green_list_IDs[index]
-            green = torch.load(green_f)
+            green = np.load(green_f)
           else:
             green = np.expand_dims(img[1,...], axis=0)
           input = (mosaic, green)
@@ -237,7 +237,7 @@ class Dataset(data.Dataset):
     if self.green_input:
       if self.green_pred_input:
         green_f = self.green_list_IDs[index]
-        green = torch.load(green_f)
+        green = np.load(green_f)
       else:
         green = np.expand_dims(img[1,...], axis=0)
       input = (mosaic, green)
