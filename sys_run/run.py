@@ -199,7 +199,7 @@ class Searcher():
     self.mutation_batch_size = args.num_gpus
     self.mutation_batches_per_generation = int(math.ceil(args.mutations_per_generation / self.mutation_batch_size))
 
-    mp.set_start_method("spawn")
+    mp.set_start_method("spawn", force=True)
 
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '29500'
@@ -731,6 +731,9 @@ if __name__ == "__main__":
   # training full chroma + green parameters
   parser.add_argument('--use_green_input', action="store_true")
   parser.add_argument('--full_model', action="store_true")
+  parser.add_argument('--use_green_pred', action="store_true", help="whether to use precomputed green predictions")
+  parser.add_argument('--green_training_file', type=str, help="filename of file with list of precomputed green for training data")
+  parser.add_argument('--green_validation_file', type=str, help="filename of file with list of precomputed green for validation data")
 
   parser.add_argument('--mysql_auth', type=str)
   parser.add_argument("--machine", type=str)
