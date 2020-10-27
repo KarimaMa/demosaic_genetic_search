@@ -55,7 +55,7 @@ def create_train_dataset(args):
   used_filenames = full_data_filenames[0:int(args.train_portion)]
 
   if args.use_green_pred:
-    full_green_filenames = ids_from_file[args.green_training_file]
+    full_green_filenames = ids_from_file(args.green_training_file)
     used_green_filenames = full_green_filenames[0:int(args.train_portion)]
 
   train_data = Dataset(data_filenames=used_filenames, RAM=False, \

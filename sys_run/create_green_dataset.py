@@ -60,11 +60,11 @@ def precompute_training_green(args, gpu_id, model):
           subpath = ('/').join(input_filename.split('/')[-4:])
     
         subpath = subpath.strip('png')
-        subpath += "pytensor"
+        subpath += "npy"
         subdir = os.path.join(args.green_data_dir, ("/").join(subpath.split("/")[0:-1]))
         os.makedirs(subdir, exist_ok=True)
         pred_filename = os.path.join(subdir, subpath.split("/")[-1])
-        torch.save(pred[i].clone(), pred_filename)
+        np.save(pred_filename, pred[i].clone().cpu().numpy())
 
 
 def precompute_validation_green(args, gpu_id, model):
@@ -103,12 +103,12 @@ def precompute_validation_green(args, gpu_id, model):
           subpath = ('/').join(input_filename.split('/')[-4:])
 
         subpath = subpath.strip('png')
-        subpath += "pytensor"
+        subpath += "npy"
         
         subdir = os.path.join(args.green_data_dir, ("/").join(subpath.split("/")[0:-1]))
         os.makedirs(subdir, exist_ok=True)
         pred_filename = os.path.join(subdir, subpath.split("/")[-1])
-        torch.save(pred[i].clone(), pred_filename)
+        np.save(pred_filename, pred[i].clone().cpu().numpy())
 
 
 def run(args, gpu_id):
