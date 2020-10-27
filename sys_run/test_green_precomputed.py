@@ -57,6 +57,7 @@ def compare(args):
 parser = argparse.ArgumentParser()
 parser.add_argument("--validation_file", type=str)
 parser.add_argument("--green_data_file", type=str)
+parser.add_argument("--batch_size", type=int, default=64)
 args = parser.parse_args()
 
 compare(args)
