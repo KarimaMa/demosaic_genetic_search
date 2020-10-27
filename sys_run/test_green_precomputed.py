@@ -43,7 +43,7 @@ def compare(args):
     for i, idx in enumerate(index):
       green_f = green_list_IDs[idx]
       green = np.load(green_f)
-      green_batch[i,...] = green
+      green_batch[i,...] = torch.from_numpy(green)
 
     loss = criterion(pred, target)
     loss_trackers[i].update(loss.item(), n)
