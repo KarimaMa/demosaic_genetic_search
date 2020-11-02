@@ -9,7 +9,7 @@ import os
 import random 
 import numpy as np
 import sys
-from dataset import Dataset, ids_from_file, FastDataLoader
+from dataset import Dataset, GreenDataset, ids_from_file, FastDataLoader
 
 sys.path.append(sys.path[0].split("/")[0])
 sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
@@ -36,10 +36,19 @@ def create_loggers(model_dir, model_id, num_models, mode):
 
 
 def create_validation_dataset(args):
-  validation_data = Dataset(data_file=args.validation_file, RAM=False, \
-                            green_input=args.use_green_input, green_pred_input=args.use_green_pred,\
-                            green_file=args.green_validation_file,
-                            green_output=(not args.full_model))
+  if args.full_model:
+    if args.use_green_pred:
+      validation_data = Dataset(data_file=args.validation_file, RAM=False, \
+                                green_input=args.use_green_input, green_pred_input=args.use_green_pred,\
+                                green_file=args.green_validation_file,
+                                green_output=(not args.full_model))
+    else:
+      validation_data = Dataset(data_file=args.validation_file, RAM=False, \
+                                green_input=args.use_green_input, green_pred_input=args.use_green_pred,\
+                                green_output=(not args.full_model))
+  else:
+    validation_data = GreenDataset(data_file=args.validation_file, RAM=False)
+
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
 
@@ -54,14 +63,22 @@ def create_train_dataset(args):
   full_data_filenames = ids_from_file(args.training_file)
   used_filenames = full_data_filenames[0:int(args.train_portion)]
 
-  if args.use_green_pred:
-    full_green_filenames = ids_from_file(args.green_training_file)
-    used_green_filenames = full_green_filenames[0:int(args.train_portion)]
+  if args.full_model:
+    if args.use_green_pred:
+      full_green_filenames = ids_from_file(args.green_training_file)
+      used_green_filenames = full_green_filenames[0:int(args.train_portion)]
 
-  train_data = Dataset(data_filenames=used_filenames, RAM=False, \
-                      green_input=args.use_green_input, green_pred_input=args.use_green_pred,\
-                      green_filenames=used_green_filenames, \
-                      green_output=(not args.full_model))
+      train_data = Dataset(data_filenames=used_filenames, RAM=False, \
+                          green_input=args.use_green_input, green_pred_input=args.use_green_pred,\
+                          green_filenames=used_green_filenames, \
+                          green_output=(not args.full_model))
+    else:
+      train_data = Dataset(data_filenames=used_filenames, RAM=False, \
+                          green_input=args.use_green_input, green_pred_input=args.use_green_pred,\
+                          green_output=(not args.full_model))
+  else:
+    train_data = GreenDataset(data_filenames=used_filenames, RAM=False)
+
   num_train = len(train_data)
   train_indices = list(range(num_train))
   
