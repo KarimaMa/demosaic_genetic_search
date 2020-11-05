@@ -15,7 +15,7 @@ sys.path.append(sys.path[0].split("/")[0])
 import util
 import meta_model
 import demosaicnet_models
-from dataset import GreenDataset, FastDataLoader
+from dataset import GreenDataset, Dataset, FastDataLoader
 
 
 def train(args, models, model_dir):
@@ -33,19 +33,21 @@ def train(args, models, model_dir):
                         for model_version in range(len(models))]
 
   models = [model.to(device=f"cuda:{args.gpu}") for model in models]
-
   for m in models:
     m.to_gpu(args.gpu)
-    
+
   criterion = nn.MSELoss()
 
   optimizers = [torch.optim.Adam(
       m.parameters(),
-      args.learning_rate,
-      weight_decay=args.weight_decay) for m in models]
+      args.learning_rate) for m in models]
 
-  train_data = GreenDataset(data_file=args.training_file, flatten=False) 
-  validation_data = GreenDataset(data_file=args.validation_file, flatten=False)
+  if not args.full_model:
+    train_data = GreenDataset(data_file=args.training_file, flatten=False) 
+    validation_data = GreenDataset(data_file=args.validation_file, flatten=False)
+  else:
+    train_data = Dataset(data_file=args.training_file, flatten=False, green_output=False)
+    validation_data = Dataset(data_file=args.validation_file, flatten=False, green_output=False)
 
   num_train = len(train_data)
   train_indices = list(range(int(num_train*args.train_portion)))
@@ -89,6 +91,13 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
       optimizers[i].zero_grad()
       pred = model(input)
       loss = criterion(pred, target)
+
+      if args.testing:
+        print("pred")
+        print(pred[0,:,0:4,0:4])
+        print("target")
+        print(target[0,:,0:4,0:4])
+        exit()
 
       loss.backward()
       optimizers[i].step()
@@ -135,7 +144,7 @@ if __name__ == "__main__":
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
   parser.add_argument('--learning_rate', type=float, default=0.025, help='init learning rate')
   parser.add_argument('--momentum', type=float, default=90., help='momentum')
-  parser.add_argument('--weight_decay', type=float, default=1e-16, help='weight decay')
+  parser.add_argument('--weight_decay', type=float, default=1e-32, help='weight decay')
   parser.add_argument('--report_freq', type=float, default=200, help='report frequency')
   parser.add_argument('--save_freq', type=float, default=2000, help='save frequency')
   parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
@@ -151,7 +160,9 @@ if __name__ == "__main__":
   parser.add_argument('--validation_freq', type=int, default=None, help='validation frequency')
   parser.add_argument('--layers', type=int)
   parser.add_argument('--width', type=int)
-
+  parser.add_argument('--full_model', action='store_true')
+  parser.add_argument('--testing', action='store_true')
+  
   args = parser.parse_args()
 
   args.model_path = os.path.join(args.save, args.model_path)
@@ -168,8 +179,16 @@ if __name__ == "__main__":
                                 os.path.join(args.save, 'training_log'))
   logger.info("args = %s", args)
 
-  models = [demosaicnet_models.GreenDemosaicknet(depth=args.layers, width=args.width).cuda() \
+  if args.full_model:
+    print("using full demosaicknet")
+    models = [demosaicnet_models.FullDemosaicknet(depth=args.layers, width=args.width).cuda() \
               for i in range(args.model_initializations)]
+  else:
+    models = [demosaicnet_models.GreenDemosaicknet(depth=args.layers, width=args.width).cuda() \
+              for i in range(args.model_initializations)]
+
+  for n,p in models[0].named_parameters():
+    print(p.shape)
 
   if not torch.cuda.is_available():
     sys.exit(1)
@@ -187,7 +206,12 @@ if __name__ == "__main__":
   for m in models:
     m._initialize_parameters()
     
-  print(f"compute cost : {demosaicnet_models.compute_cost(args.layers, args.width, 1)}")
+  if args.full_model:
+    out_c = 3
+  else:
+    out_c = 1
+  
+  #print(f"compute cost : {models[0].compute_cost()}")
 
   model_manager.save_model(models, None, model_dir)
 

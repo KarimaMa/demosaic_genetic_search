@@ -1,6 +1,7 @@
 import torch as th
 import torch.nn as nn
 from collections import OrderedDict
+import sys 
 
 from cost import ADD_COST, MUL_COST, RELU_COST
 
@@ -13,7 +14,7 @@ https://github.com/mgharbi/demosaicnet/blob/master/demosaicnet/modules.py
 """
 class FullDemosaicknet(nn.Module):
 
-  def __init__(self, depth=15, width=64, pretrained=True, pad=True):
+  def __init__(self, depth=15, width=64, pretrained=True, pad=True): 
     super(FullDemosaicknet, self).__init__()
 
     self.depth = depth
@@ -45,7 +46,32 @@ class FullDemosaicknet(nn.Module):
       ("output", nn.Conv2d(width, 3, 1)),
       ]))
 
-   
+    self.mask = th.ones((3, IMG_H, IMG_W))
+    self.mask[0,0::2,1::2] = 0
+
+    self.mask[1,0::2,0::2] = 0
+    self.mask[1,1::2,1::2] = 0
+
+    self.mask[2,1::2,0::2] = 0
+
+
+  def _initialize_parameters(self):
+    for l in self.main_processor:
+      print(l)
+      if hasattr(l, "weight"):
+        nn.init.xavier_normal_(l.weight)
+    nn.init.xavier_normal_(self.residual_predictor.weight)
+    nn.init.xavier_normal_(self.upsampler.weight)
+
+    for l in self.fullres_processor:
+      print(l)
+      if hasattr(l, "weight"):
+        print(l.__class__)
+        nn.init.xavier_normal_(l.weight)
+        
+  def to_gpu(self, gpu_id):
+    self.mask = self.mask.to(device=f"cuda:{gpu_id}")
+
   def forward(self, mosaic):
     """Demosaicks a Bayer image.
     Args:
@@ -64,8 +90,21 @@ class FullDemosaicknet(nn.Module):
 
     packed = th.cat([mosaic, upsampled], 1)  # skip connection
     output = self.fullres_processor(packed)
-    return output
 
+    rgb = output * self.mask + mosaic
+
+    return rgb
+
+  def compute_cost(self):
+    cost = bayer_packer_cost()
+    cost += main_processor_cost(self.depth, self.width)
+    cost += residual_pred_cost(self.width)
+    cost += upsampler_cost()
+
+    cost /= 4 # lowres 
+    final_out_c = 3
+    cost += fullres_processor_cost(self.width, final_out_c)
+    return cost 
 
 
 """
@@ -110,10 +149,6 @@ class GreenDemosaicknet(nn.Module):
     self.mask[0::2,1::2] = 1
     self.mask[1::2,0::2] = 1
 
-    # self.chroma_mask = th.zeros((IMG_H, IMG_W))
-    # self.chroma_mask[1::2,1::2] = 1
-    # self.chroma_mask[0::2,0::2] = 1
-
   def _initialize_parameters(self):
     for l in self.main_processor:
       print(l)
@@ -130,7 +165,6 @@ class GreenDemosaicknet(nn.Module):
 
   def to_gpu(self, gpu_id):
     self.mask = self.mask.to(device=f"cuda:{gpu_id}")
-    #self.chroma_mask = self.chroma_mask.to(device=f"cuda:{gpu_id}")
 
   def forward(self, mosaic):
     # 1/4 resolution features
@@ -144,11 +178,22 @@ class GreenDemosaicknet(nn.Module):
     packed = th.cat([mosaic, upsampled], 1)  # skip connection
     output = self.fullres_processor(packed)
 
-    bayer = th.sum(mosaic, dim=0, keepdim=True)
+    bayer = th.sum(mosaic, dim=1, keepdim=True)
     #green = output * self.mask + (self.chroma_mask*bayer[:,0,...]).unsqueeze(1)
     green = output * self.mask + bayer[:,0,...].unsqueeze(1)
 
-    return output
+    return green
+
+  def compute_cost(self):
+    cost = bayer_packer_cost()
+    cost += main_processor_cost(self.depth, self.width)
+    cost += residual_pred_cost(self.width)
+    cost += upsampler_cost()
+
+    cost /= 4 # lowres 
+    final_out_c = 1
+    cost += fullres_processor_cost(self.width, final_out_c)
+    return cost 
 
 def bayer_packer_cost():
   in_c = 3
@@ -160,7 +205,7 @@ def main_processor_cost(layers, width):
   k = 3
   in_c = 4
   cost = in_c * width * k * k * MUL_COST
-  for l in range(layers):
+  for l in range(layers-1):
     cost += width * width * k * k * MUL_COST
     cost += width * RELU_COST
   return cost
@@ -191,46 +236,7 @@ def fullres_processor_cost(width, final_out_c):
   in_c = width 
   out_c = final_out_c
   k = 1
-  cost += in_c * out_c * k * k * MUL_COST
+  cost += (in_c * out_c * k * k * MUL_COST)/2 # only need to compute final conv at two locations for green
   return cost 
-
-
-def compute_cost(main_processor_layers, width, final_out_c):
-  cost = main_processor_cost(main_processor_layers, width)
-  cost += residual_pred_cost(width)
-  cost += upsampler_cost()
-
-  cost /= 4 # lowres 
-  cost += fullres_processor_cost(width, final_out_c)
-  return cost 
-
-
-
-def _crop_like(src, tgt):
-  """Crop a source image to match the spatial dimensions of a target.
-  Args:
-      src (th.Tensor or np.ndarray): image to be cropped
-      tgt (th.Tensor or np.ndarray): reference image
-  """
-  src_sz = np.array(src.shape)
-  tgt_sz = np.array(tgt.shape)
-
-  # Assumes the spatial dimensions are the last two
-  crop = (src_sz[-2:]-tgt_sz[-2:])
-  crop_t = crop[0] // 2
-  crop_b = crop[0] - crop_t
-  crop_l = crop[1] // 2
-  crop_r = crop[1] - crop_l
-  crop //= 2
-  if (np.array([crop_t, crop_b, crop_r, crop_l])> 0).any():
-      return src[..., crop_t:src_sz[-2]-crop_b, crop_l:src_sz[-1]-crop_r]
-  else:
-      return src
-
-
-
-
-
-
 
 
