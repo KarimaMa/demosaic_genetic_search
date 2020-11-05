@@ -15,9 +15,8 @@ import numpy as np
 from demosaic_ast import *
 from dataset import GreenDataset
 from database import Database
-sys.path.append(sys.path[0].split("/")[0])
-from pareto import get_pareto_ranks
-
+from pareto_util import get_pareto_ranks
+from type_check import layout_type, Layout
 
 ADD_COST = 1
 MUL_COST = 1
@@ -290,6 +289,8 @@ class ModelEvaluator():
 		cost = 0
 		if isinstance(root, Input):
 			return cost
+		elif isinstance(root, QuadInput):
+			return cost
 		elif isinstance(root, Add) or isinstance(root, Sub):
 			cost += root.in_c[0] * ADD_COST
 			cost += self.compute_cost(root.lchild)
@@ -306,6 +307,14 @@ class ModelEvaluator():
 			cost += self.compute_cost(root.lchild)
 			cost += self.compute_cost(root.rchild) 
 		elif isinstance(root, ChromaExtractor):
+			cost += self.compute_cost(root.lchild)
+			cost += self.compute_cost(root.rchild)
+		elif isinstance(root, RGrExtractor) or isinstance(root, RGbExtractor) or isinstance(root, RBExtractor):
+			cost += self.compute_cost(root.child)
+		elif isinstance(root, RBQuadExtractor) or isinstance(root, RGB2QuadExtractor):
+			cost += self.compute_cost(root.lchild)
+			cost += self.compute_cost(root.rchild)
+		elif isinstance(root, RGBQuadExtractor):
 			cost += self.compute_cost(root.child1)
 			cost += self.compute_cost(root.child2)
 			cost += self.compute_cost(root.child3)
@@ -332,15 +341,25 @@ class ModelEvaluator():
 			cost += root.in_c * root.out_c * MUL_COST
 			cost += self.compute_cost(root.child)
 		elif isinstance(root, Conv1D):
-			cost += root.in_c * root.out_c * DIRECTIONS * KERNEL_W * MUL_COST
+			#cost += root.in_c * root.out_c * DIRECTIONS * KERNEL_W * MUL_COST
+			cost += root.in_c * root.out_c * DIRECTIONS * root.kwidth * MUL_COST
 			cost += self.compute_cost(root.child)
 		elif isinstance(root, Conv2D):
-			cost += root.in_c * root.out_c * KERNEL_W * KERNEL_W * MUL_COST
+			#cost += root.in_c * root.out_c * KERNEL_W * KERNEL_W * MUL_COST
+			cost += root.in_c * root.out_c * root.kwidth * root.kwidth * MUL_COST
 			cost += self.compute_cost(root.child)
 		elif isinstance(root, SumR):
 			cost += root.in_c * ADD_COST
 			cost += self.compute_cost(root.child)
 		else:
+			print(type(root))
 			assert False, "compute cost encountered unexpected node type"
+		
+		root_layout = layout_type(root)
+		if root.parent:
+			parent_layout = layout_type(root.parent)
+			if root_layout == Layout.QUAD and parent_layout == Layout.FLAT:
+				cost /= 4
+
 		return cost
 
