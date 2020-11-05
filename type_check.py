@@ -9,6 +9,11 @@ class Resolution(Enum):
   DOWNSAMPLED = 2
   INVALID = 3
 
+class Layout(Enum):
+  FLAT = 1
+  QUAD = 2
+  INVALID = 3
+
 """
 attempts to shrink down channel counts of nodes 
 as much as possible
@@ -29,19 +34,50 @@ def shrink_channels(node, target_c, out_c=None):
       node.out_c = out_c
     return node.out_c
   elif isinstance(node, BinopIII):
+    layout_t = layout_type(node)
+    if layout_t == Layout.QUAD:
+      broadcast_width = 4
+    else:
+      broadcast_width = 1
+
     if out_c is None:
       left_in_c = shrink_channels(node.lchild, target_c) 
       right_in_c = shrink_channels(node.rchild, target_c)
-      assert left_in_c == right_in_c or (left_in_c == 1) or (right_in_c == 1), \
+
+      assert left_in_c == right_in_c or (left_in_c == broadcast_width) or (right_in_c == broadcast_width), \
         f"Shrinking channels cannot make BinopIII left {left_in_c} match right {right_in_c} channels"
       node.out_c = left_in_c
       node.in_c = (left_in_c, right_in_c)
+      return node.out_c
     else:
-      shrink_channels(node.lchild, target_c, out_c=out_c)
-      shrink_channels(node.rchild, target_c, out_c=out_c)
-      node.in_c = (out_c, out_c)
-      node.out_c = out_c
-    return node.out_c
+      try: # trying (out_c, out_c)
+        shrink_channels(node.lchild, target_c, out_c=out_c)
+        shrink_channels(node.rchild, target_c, out_c=out_c)
+      except AssertionError:
+        pass
+      else:
+        node.in_c = (out_c, out_c)
+        node.out_c = out_c
+        return node.out_c
+      try: # trying (out_c, broadcast_c)
+        shrink_channels(node.lchild, target_c, out_c=out_c)
+        shrink_channels(node.rchild, target_c, out_c=broadcast_width)
+      except AssertionError:
+        pass
+      else:
+        node.in_c = (out_c, broadcast_width)
+        node.out_c = out_c
+        return node.out_c  
+      try: # trying (broadcast_c, out_c)
+        shrink_channels(node.lchild, target_c, out_c=broadcast_width)
+        shrink_channels(node.rchild, target_c, out_c=out_c)
+      except AssertionError:
+        assert False, f"Failed to make BinopIII output channels agree with {out_c}"
+      else:
+        node.in_c = (broadcast_width, out_c)
+        node.out_c = out_c
+        return node.out_c  
+  
   elif isinstance(node, BinopIcJcKc): # input and output channels are immutable
     if not out_c is None:
       assert out_c == node.Kc(), f"output channels of {node.__class__.__name__} cannot be set to {out_c}"
@@ -55,6 +91,11 @@ def shrink_channels(node, target_c, out_c=None):
     shrink_channels(node.child2, target_c, out_c=node.Ic())
     shrink_channels(node.child3, target_c, out_c=node.Jc()) 
     return node.out_c  
+  elif isinstance(node, UnopIcIc):
+    if not out_c is None:
+      assert out_c == node.Ic(), f"output channels of {node.__class__.__name__} cannot be set to {out_c}"
+    shrink_channels(node.child, target_c, out_c=node.Ic())
+    return node.out_c
   elif isinstance(node, UnopIJ):
     if out_c is None:
       node.out_c = min(node.out_c, target_c)
@@ -89,6 +130,49 @@ def shrink_channels(node, target_c, out_c=None):
 
 
 """
+returns the layout type of a subtree
+"""
+def layout_type(subtree):
+  typ = None
+  if isinstance(subtree, QuadExtractor):
+    typ = Layout.FLAT
+  elif isinstance(subtree, QuadInput):
+    typ = Layout.QUAD
+  elif isinstance(subtree, Input):
+    typ = Layout.FLAT
+
+  if subtree.num_children == 4:
+    assert False, "Layout type for node with 4 children unimplemented"
+  elif subtree.num_children == 3:
+    typ1 = layout_type(subtree.child1)
+    typ2 = layout_type(subtree.child2)
+    typ3 = layout_type(subtree.child3)
+    if typ1 != typ2 or typ1 != typ3:
+      return Layout.INVALID
+    child_typ = typ1
+  elif subtree.num_children == 2:
+    ltyp = layout_type(subtree.lchild)
+    rtyp = layout_type(subtree.rchild)
+    if ltyp != rtyp:
+      return Layout.INVALID
+    child_typ = ltyp
+  elif subtree.num_children == 1:
+    child_typ = layout_type(subtree.child)
+  else: # input node
+    child_typ = None
+  
+  if child_typ == Layout.INVALID:
+    return Layout.INVALID
+
+  if typ is None: # resolution obeys children 
+    return child_typ
+  else: # this node is either quad extractor or inut node, child cannot have same resolution
+    if typ == child_typ:
+      return Layout.INVALID
+    return typ
+
+
+"""
 returns the spatial resolution of a subtree
 """
 def spatial_resolution(subtree):
@@ -98,21 +182,34 @@ def spatial_resolution(subtree):
   elif isinstance(subtree, Downsample):
     res = Resolution.DOWNSAMPLED
 
-  if subtree.num_children == 3:
+  if subtree.num_children == 4:
+    res1 = spatial_resolution(subtree.child1)
+    res2 = spatial_resolution(subtree.child2)
+    res3 = spatial_resolution(subtree.child3)
+    res4 = spatial_resolution(subtree.child4)
+
+    if len(set([res1, res2, res3, res4])) != 1:
+      return Resolution.INVALID
+    child_res = res1
+
+  elif subtree.num_children == 3:
     res1 = spatial_resolution(subtree.child1)
     res2 = spatial_resolution(subtree.child2)
     res3 = spatial_resolution(subtree.child3)
     if res1 != res2 or res1 != res3:
       return Resolution.INVALID
     child_res = res1
+
   elif subtree.num_children == 2:
     lres = spatial_resolution(subtree.lchild)
     rres = spatial_resolution(subtree.rchild)
     if lres != rres :
       return Resolution.INVALID
     child_res = lres
+
   elif subtree.num_children == 1:
     child_res = spatial_resolution(subtree.child)
+
   else:
     return Resolution.FULL # Input nodes have full resolution
 
@@ -132,9 +229,15 @@ and returns output channels of the root node
 """
 def check_channel_count(node):
   if isinstance(node, BinopIII):
+    layout_t = layout_type(node)
+    if layout_t == Layout.QUAD:
+      broadcast_width = 4
+    else:
+      broadcast_width = 1
+
     lchild_c = check_channel_count(node.lchild)
     rchild_c = check_channel_count(node.rchild)
-    assert(lchild_c == rchild_c or rchild_c == 1 or lchild_c == 1) # allow broadcasting
+    assert(lchild_c == rchild_c or rchild_c == broadcast_width or lchild_c == broadcast_width) # allow broadcasting
     return max(rchild_c, lchild_c)
   elif isinstance(node, BinopIJK):
     lchild_c = check_channel_count(node.lchild)
@@ -152,6 +255,10 @@ def check_channel_count(node):
     child3_c = check_channel_count(node.child3)
     assert(child1_c == node.Hc() and child2_c == node.Ic() and child3_c == node.Jc())
     return node.Kc()
+  elif isinstance(node, UnopIcIc):
+    child_c = check_channel_count(node.child)
+    assert(child_c == node.Ic())
+    return node.Ic()
   elif isinstance(node, UnopII):
     child_c = check_channel_count(node.child)
     return child_c
@@ -184,6 +291,24 @@ def find_type(root, T, level, ignore_root=False):
     return [root], level
   elif isinstance(root, Const): # reached leaf node
     return [None], 1e10
+
+  elif root.num_children == 4:
+    found1, level1 = find_type(root.child1, T, level+1)
+    found2, level2 = find_type(root.child2, T, level+1)
+    found3, level3 = find_type(root.child3, T, level+1)
+    found4, level4 = find_type(root.child4, T, level+1)
+
+    found1 = list(filter(None, found1))
+    found2 = list(filter(None, found2))
+    found3 = list(filter(None, found3))
+    found4 = list(filter(None, found4))
+
+    found = [found1, found2, found3, found4]
+    level = np.array([level1, level2, level3, level4])
+
+    idx = np.argmin(level)
+    return found[idx], level[idx]
+
   elif root.num_children == 3:
     found1, level1 = find_type(root.child1, T, level+1)
     found2, level2 = find_type(root.child2, T, level+1)
@@ -239,19 +364,30 @@ def fix_channel_count_downwards(root, out_c, fixed_shared_children=None):
     return True
   else: # node is either not shared child or is being seen for the first time
     if isinstance(root, BinopIII):
+      layout_t = layout_type(node)
+      if layout_t == Layout.QUAD:
+        broadcast_width = 4
+      else:
+        broadcast_width = 1
+
+      lfixed = False
+      rfixed = False
+
       lfixed = fix_channel_count_downwards(root.lchild, out_c, fixed_shared_children)
-      if not lfixed:
-        lfixed = fix_channel_count_downwards(root.lchild, 1, fixed_shared_children)
-      if lfixed:
+      if not lfixed: # try to make left channels = 1 and right channels = out_c 
+        lfixed = fix_channel_count_downwards(root.lchild, broadcast_width, fixed_shared_children)
+        if lfixed:
+          rfixed = fix_channel_count_downwards(root.rchild, out_c, fixed_shared_children)
+      else: # left channels = out_c
         rfixed = fix_channel_count_downwards(root.rchild, out_c, fixed_shared_children)
         if not rfixed:
-          rfixed = fix_channel_count_downwards(root.rchild, 1, fixed_shared_children)
+          rfixed = fix_channel_count_downwards(root.rchild, broadcast_width, fixed_shared_children)
         
-        if rfixed and type(root.parent) is tuple:
-          fixed_shared_children[id(root)] = root
-        return rfixed
-      else:
-        return False
+      if rfixed and type(root.parent) is tuple:
+        fixed_shared_children[id(root)] = root
+      
+      return rfixed
+
     elif isinstance(root, BinopIJK):
       lchild_out_c = out_c // 2
       if out_c % 2 == 1:
@@ -282,7 +418,7 @@ def fix_channel_count_downwards(root, out_c, fixed_shared_children=None):
         if type(root.parent) is tuple:
           fixed_shared_children[id(root)] = root
         return True
-    elif isinstance(root, TernaryHcIcJcKc):
+    elif isinstance(root, TernaryHcIcJcKc) or isinstance(root, UnopIcIc):
       if root.out_c != out_c:
         return False
       return True
@@ -303,16 +439,23 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c):
   if parent is None:
     return True
   elif isinstance(parent, BinopIII):
-    if in_c == 1: # don't need to change other child, Binops can broadcast
+    layout_t = layout_type(node)
+    if layout_t == Layout.QUAD:
+      broadcast_width = 4
+    else:
+      broadcast_width = 1
+
+    if in_c == broadcast_width: # don't need to change other child, Binops can broadcast
       return True
+
     if cur_node is parent.lchild:
       child_fixed = fix_channel_count_downwards(parent.rchild, in_c)
       if not child_fixed: # allowed to broadcast so 1 is also a valid channel count
-        child_fixed = fix_channel_count_downwards(parent.rchild, 1)
+        child_fixed = fix_channel_count_downwards(parent.rchild, broadcast_width)
     else:
       child_fixed = fix_channel_count_downwards(parent.lchild, in_c)
       if not child_fixed: # allowed to broadcast so 1 is also a valid channel count
-        child_fixed = fix_channel_count_downwards(parent.lchild, 1)
+        child_fixed = fix_channel_count_downwards(parent.lchild, broadcast_width)
     if child_fixed:
       return fix_channel_count_upwards(parent, in_c)
     else:
@@ -337,6 +480,8 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c):
       return parent.in_c[1] == in_c
     else:
       return parent.in_c[2] == in_c
+  elif isinstance(parent, UnopIcIc):
+    return parent.in_c == in_c
   elif isinstance(parent, tuple):
     fixed = True
     for p in parent:
@@ -379,7 +524,12 @@ def check_linear_types(root):
       assert(isinstance(root.child, Linear) or isinstance(root.child, Special))
       check_linear_types(root.child)
   else:
-    if root.num_children == 3:
+    if root.num_children == 4:
+      check_linear_types(root.child1)
+      check_linear_types(root.child2)
+      check_linear_types(root.child3)
+      check_linear_types(root.child4)
+    elif root.num_children == 3:
       check_linear_types(root.child1)
       check_linear_types(root.child2)
       check_linear_types(root.child3)
@@ -398,7 +548,10 @@ def is_linear(tree):
   if tree_type is Input:
     return True
   if tree_type is Add or tree_type is Sub or isinstance(tree, Linear):
-    if tree.num_children == 3:
+    if tree.num_children == 4:
+      return isinstance(tree, Linear) and is_linear(tree.child1) and \
+              is_linear(tree.child2) and is_linear(tree.child3) and is_linear(tree.child4)
+    elif tree.num_children == 3:
       return isinstance(tree, Linear) and is_linear(tree.child1) and is_linear(tree.child2) and is_linear(tree.child3)
     elif tree.num_children == 2:
       return isinstance(tree, Linear) and is_linear(tree.lchild) and is_linear(tree.rchild)
@@ -410,7 +563,13 @@ def is_linear(tree):
 counts the number of convolutional layers in a tree
 """
 def count_parameterized_depth(tree):
-  if tree.num_children == 3:
+  if tree.num_children == 4:
+    child1_d = count_parameterized_depth(tree.child1)
+    child2_d = count_parameterized_depth(tree.child2)
+    child3_d = count_parameterized_depth(tree.child3)
+    child4_d = count_parameterized_depth(tree.child4)
+    depth = max([child1_d, child2_d, child3_d, child4_d])
+  elif tree.num_children == 3:
     child1_d = count_parameterized_depth(tree.child1)
     child2_d = count_parameterized_depth(tree.child2)
     chidl3_d = count_parameterized_depth(tree.child3)
