@@ -198,15 +198,15 @@ class GreenDemosaicknet(nn.Module):
 def bayer_packer_cost():
   in_c = 3
   out_c = 4
-  cost = in_c * out_c * 2 * 2 * MUL_COST
+  cost = in_c * out_c * 2 * 2 * MUL_COST + out_c
   return cost
 
 def main_processor_cost(layers, width):
   k = 3
   in_c = 4
-  cost = in_c * width * k * k * MUL_COST
+  cost = in_c * width * k * k * MUL_COST + width
   for l in range(layers-1):
-    cost += width * width * k * k * MUL_COST
+    cost += width * width * k * k * MUL_COST + width
     cost += width * RELU_COST
   return cost
 
@@ -214,7 +214,7 @@ def residual_pred_cost(width):
   k = 1
   in_c = width
   out_c = 12
-  cost = in_c * out_c * k * k * MUL_COST
+  cost = in_c * out_c * k * k * MUL_COST + out_c
   return cost 
 
 def upsampler_cost():
@@ -223,20 +223,20 @@ def upsampler_cost():
   k = 2
   groups = 3
 
-  cost = groups * (in_c // groups) * (out_c // groups) * k * k * MUL_COST
+  cost = groups * (in_c // groups) * (out_c // groups) * k * k * MUL_COST + out_c
   return cost
 
 def fullres_processor_cost(width, final_out_c):
   in_c = 6
   out_c = width
   k = 3
-  cost = in_c * out_c * k * k * MUL_COST
+  cost = in_c * out_c * k * k * MUL_COST + out_c
   cost += out_c * RELU_COST
 
   in_c = width 
   out_c = final_out_c
   k = 1
-  cost += (in_c * out_c * k * k * MUL_COST)/2 # only need to compute final conv at two locations for green
+  cost += (in_c * out_c * k * k * MUL_COST + out_c)/2 # only need to compute final conv at two locations for green
   return cost 
 
 
