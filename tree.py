@@ -6,6 +6,13 @@ import hashlib
 import numpy as np
 
 
+def make_tuple(x):
+  try:
+    iter(x)
+  except TypeError:
+    x = (x,)
+  return x
+
 def hash_combine(h, otherh):
   # from boost
   h = np.uint64(h)
@@ -81,20 +88,39 @@ class Node:
   def compute_input_output_channels(self):
     pass
 
-  def dump(self, indent="", printstr=""):
+  def dump(self, indent="", printstr="", nodeid=None):
+    if nodeid is None:
+      nodeid = 0
     tab = "   "
     if not hasattr(self, 'in_c'):
       self.compute_input_output_channels()
     printstr += "\n {} {} {} {}".format(indent, self.name, self.in_c, self.out_c)
+    if hasattr(self, "groups"):
+      printstr += f" g{self.groups}"
+    printstr += f"  [ID: {nodeid}] {id(self)}"
+
+    nodeid += 1
     if self.num_children == 3:
-      printstr = self.child1.dump(indent+tab, printstr)
-      printstr = self.child2.dump(indent+tab, printstr)
-      printstr = self.child3.dump(indent+tab, printstr)
+      printstr = self.child1.dump(indent+tab, printstr, nodeid)
+
+      child1size = self.child1.compute_size(set(), count_input_exprs=True)
+      nodeid += child1size
+      printstr = self.child2.dump(indent+tab, printstr, nodeid)
+
+      child2size = self.child2.compute_size(set(), count_input_exprs=True)
+      nodeid += child2size
+      printstr = self.child3.dump(indent+tab, printstr, nodeid)
+
     elif self.num_children == 2:
-      printstr = self.lchild.dump(indent+tab, printstr)
-      printstr = self.rchild.dump(indent+tab, printstr)
+      printstr = self.lchild.dump(indent+tab, printstr, nodeid)
+
+      lchildsize = self.lchild.compute_size(set(), count_input_exprs=True)
+      nodeid += lchildsize
+      printstr = self.rchild.dump(indent+tab, printstr, nodeid)
+
     elif self.num_children == 1:
-      printstr = self.child.dump(indent+tab, printstr)
+      printstr = self.child.dump(indent+tab, printstr, nodeid)
+
     return printstr
 
   """
@@ -102,54 +128,46 @@ class Node:
   used as Input to another tree
   """
   def compute_size(self, seen_inputs, count_all_inputs=False, count_input_exprs=False):
-    self.size = 0
+    preorder_nodes = self.preorder()
     if self.num_children == 3:
-      size1 = self.child1.compute_size(seen_inputs, count_all_inputs, count_input_exprs)
-      size2 = self.child2.compute_size(seen_inputs, count_all_inputs, count_input_exprs)
-      size3 = self.child3.compute_size(seen_inputs, count_all_inputs, count_input_exprs)
-      self.size += size1 + size2 + size3 + 1
+      children = [self.child1, self.child2, self.child3]
     elif self.num_children == 2:
-      lsize = self.lchild.compute_size(seen_inputs, count_all_inputs, count_input_exprs)
-      rsize = self.rchild.compute_size(seen_inputs, count_all_inputs, count_input_exprs)
-      self.size += lsize + rsize + 1
+      children = [self.lchild, self.rchild]
     elif self.num_children == 1:
-      self.size += self.child.compute_size(seen_inputs, count_all_inputs, count_input_exprs) + 1
-    elif self.num_children == 0: # is an Input, could be raw input or reuse of another subtree's output
-      if hasattr(self, 'node'):
-        if count_input_exprs:
-          self.size = self.node.compute_size(seen_inputs, count_all_inputs, count_input_exprs)
-        else:
-          self.size = 0 # node copies output from another node, don't count it's compute
-      elif (not self.name in seen_inputs) or count_all_inputs:
-        self.size = 1
-        seen_inputs.add(self.name)
-      else:
-        self.size = 0 # already counted this input node
-    else:
-      assert False, "Invalid number of children"
+      children = [self.child]
+    else: 
+      children = []
+    for c in children:
+      c.compute_size(seen_inputs, count_all_inputs, count_input_exprs)
+
+    self.size = len(preorder_nodes)
     return self.size
   
-  def preorder(self, nodes=None):
+  def preorder(self, nodes=None, seen=None):
+    if seen is None:
+      seen = set()
     if nodes is None:
       nodes = []
 
-    nodes += [self]
+    if not id(self) in seen:
+      nodes += [self]
+      seen.add(id(self))
 
     if self.num_children == 3:
-      self.child1.preorder(nodes)
-      self.child2.preorder(nodes)
-      self.child3.preorder(nodes)
+      self.child1.preorder(nodes, seen)
+      self.child2.preorder(nodes, seen)
+      self.child3.preorder(nodes, seen)
     elif self.num_children == 2:
-      self.lchild.preorder(nodes)
-      self.rchild.preorder(nodes)
+      self.lchild.preorder(nodes, seen)
+      self.rchild.preorder(nodes, seen)
     elif self.num_children == 1:
-      self.child.preorder(nodes)
+      self.child.preorder(nodes, seen)
     return nodes
 
   def get_preorder_id(self, node):
     preorder_nodes = self.preorder()
     for i,n in enumerate(preorder_nodes):
-      if node is n:
+      if id(node) == id(n):
         return i
         
   def get_inputs(self, nodes=None):
@@ -183,6 +201,7 @@ class Node:
         n.node.add_dependee(n)
 
 
+
   """
   assigns parents to all nodes in tree
   assumes parent field is None when called
@@ -190,28 +209,25 @@ class Node:
   """
   def assign_parents(self):
     if self.num_children == 3:
-      self.child1.parent = self
-      self.child2.parent = self
-      self.child3.parent = self
-      self.child1.assign_parents()
-      self.child2.assign_parents()
-      self.child3.assign_parents()
+      for child in [self.child1, self.child2, self.child3]:
+        if child.parent: # child has multiple parents
+          child.parent = make_tuple(child.parent) + (self,) 
+        else:
+          child.parent = self
+          child.assign_parents()
     elif self.num_children == 2:
-      if self.lchild.parent:
-        # child has multiple parents:
-        self.lchild.parent = (self.lchild.parent, self)
-      else:
-        self.lchild.parent = self
-      if self.rchild.parent:
-        # child has multiple parents:
-        self.rchild.parent = (self.rchild.parent, self)
-      else:
-        self.rchild.parent = self
-      self.lchild.assign_parents()
-      self.rchild.assign_parents()
+      for child in [self.lchild, self.rchild]:
+        if child.parent: # child has multiple parents
+          child.parent = make_tuple(child.parent) + (self,) 
+        else:
+          child.parent = self
+          child.assign_parents()
     elif self.num_children == 1:
-      self.child.parent = self
-      self.child.assign_parents()
+      if self.child.parent:
+        self.child.parent = make_tuple(self.child.parent) + (self,)
+      else:
+        self.child.parent = self
+        self.child.assign_parents()
 
   """
   returns whether or not two ASTs are the same
@@ -307,5 +323,21 @@ def has_loop(tree, seen=None):
     return has_loop(tree.child)
   return False
 
+
+def print_parents(tree):
+  parents = make_tuple(tree.parent)
+  parent_ids = ""
+  for p in parents:
+    parent_ids += f"{id(p)} "
+
+  print(f"{tree} {id(tree)} parents {parent_ids}")
+  if tree.num_children == 3:
+    for child in [tree.child1, tree.child2, tree.child3]:
+      print_parents(child)
+  elif tree.num_children == 2:
+    for child in [tree.lchild, tree.rchild]:
+      print_parents(child)
+  elif tree.num_children == 1:
+    print_parents(tree.child)
 
 

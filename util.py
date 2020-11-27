@@ -1,6 +1,8 @@
 import logging
 import torch
 import os
+from functools import reduce
+
 from demosaic_ast import load_ast
 import shutil
 import torch_model
@@ -8,7 +10,6 @@ import math
 import csv
 import logging
 
-logger = logging.getLogger("DebugLogger")
 
 
 # from a github gist by victorlei
@@ -26,6 +27,37 @@ def get_csv_writer(filename):
 def compute_psnr(loss):
   return 10*math.log(math.pow(255,2) / math.pow(math.sqrt(loss)*255, 2),10)
 
+def get_factors(n):    
+  factors = set(reduce(list.__add__, 
+    ([i, n//i] for i in range(1, int(n**0.5) + 1) if n % i == 0)))
+  if len(factors) > 1:
+    factors.remove(n)
+  return factors
+
+def get_closest_factor(factors, n):
+  factor_list = list(factors)
+  factor_list.sort()
+  smaller = None
+  larger = None
+  for f in factor_list:
+    if f < n:
+      continue
+    larger = f 
+    break
+  for f in reversed(factor_list):
+    if f > n: 
+      continue
+    smaller = f 
+    break
+
+  if smaller is None:
+    return larger
+  elif larger is None:
+    return smaller
+  else:
+    return larger 
+
+    
 class PerfStatTracker():
   def __init__(self):
     self.function_time_sums = {}
@@ -115,22 +147,8 @@ def load_model_from_file(model_file, model_version, gpu_id=None):
     pytorch_files = [l.strip() for l in f]
 
   model_ast = load_ast(ast_file)
-  logger.debug("\nloading model from files...")
-  logger.debug(model_ast.dump())
-
   model = model_ast.ast_to_model(gpu_id)
-  logger.debug("\nthe model parameters\n")
-  for n,p in model.named_parameters():
-    logger.debug(n)
-
-  logger.debug("\nthe model state dict parameters\n")
-  for k in model.state_dict():
-    logger.debug(k)
-
   state_dict = torch.load(pytorch_files[model_version])
-  logger.debug("\nparameters in loaded state dict\n")
-  for k in state_dict:
-    logger.debug(f"{k}")
   model.load_state_dict(torch.load(pytorch_files[model_version]))
 
   if gpu_id:
@@ -143,8 +161,6 @@ def load_ast_from_file(model_file):
     ast_file = f.readline().strip()
 
   model_ast = load_ast(ast_file)
-  logger.debug("\nloading model from files...")
-  logger.debug(model_ast.dump())
 
   return model_ast
 

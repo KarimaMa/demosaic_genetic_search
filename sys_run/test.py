@@ -40,6 +40,7 @@ import datetime
 from job_queue import ProcessQueue
 import mysql_db
 
+
 def build_model_database(args):
   fields = ["model_id", "id_str", "hash", "structural_hash", "generation", "occurrences", "best_init"]
   field_types = [int, str, int, int, int, int, int]
@@ -54,8 +55,8 @@ def build_model_database(args):
 
 def build_failure_database(args):
   fields = ["model_id", "hash", "mutation_type", "insert_ops", \
-            "insert_child_id", "delete_id"]
-  field_types = [int, int, int, str, str, int, int, int]
+            "insert_child_id", "delete_id", "node_id", "new_output_channels", "new_grouping"]
+  field_types = [int, int, int, str, str, int, int, int, int, int, int]
   failure_database = Database("FailureDatabase", fields, field_types, args.failure_database_dir)
   failure_database.cntr = 0
   return failure_database
@@ -205,23 +206,67 @@ class Searcher():
     os.environ['MASTER_PORT'] = '29500'
 
   def update_failure_database(self, model_id, model_ast):
-    for failure in self.mutator.failed_mutation_info:
+    for failure in self.mutator.failed_mutation_info:      
       failure_data = {"model_id" : model_id,
                     "hash" : hash(model_ast),
                     "mutation_type" : failure["mutation_type"]}
-      print(f"mutation type: {failure['mutation_type']}")
-      print(failure["mutation_type"] == MutationType.INSERTION.name)
-      print(failure)
       
       if failure["mutation_type"] == MutationType.INSERTION.name:
         failure_data["insert_ops"] = failure["insert_ops"]
         failure_data["insert_child_id"] = failure["insert_child_id"]
+
+        failure_data["delete_id"] = -1
+        failure_data["node_id"] = -1
+        failure_data["new_output_channels"] = -1
+        failure_data["new_grouping"] = -1
+      elif failure["mutation_type"] == MutationType.DECOUPLE.name:
+        if "node_id" in failure:
+          failure_data["node_id"] = failure["node_id"]
+        else:
+          failure_data["node_id"] = -1
+
+        failure_data["insert_ops"] = None
+        failure_data["insert_child_id"] = -1
+        failure_data["delete_id"] = -1
+        failure_data["new_output_channels"] = -1
+        failure_data["new_grouping"] = -1
+      elif failure["mutation_type"] == MutationType.CHANNEL_CHANGE.name:
+        if "node_id" in failure:
+          failure_data["node_id"] = failure["node_id"]
+        else:
+          failure_data["node_id"] = -1
+        if "new_output_channels" in failure:
+          failure_data["new_output_channels"] = failure["new_output_channels"]
+        else:
+          failure_data["new_output_channels"] = -1
+
+        failure_data["insert_ops"] = None
+        failure_data["insert_child_id"] = -1
+        failure_data["delete_id"] = -1
+        failure_data["new_grouping"] = -1
+
+      elif failure["mutation_type"] == MutationType.GROUP_CHANGE.name:
+        if "node_id" in failure:
+          failure_data["node_id"] = failure["node_id"]
+        else:
+          failure_data["node_id"] = -1
+        if "new_grouping" in failure:
+          failure_data["new_grouping"] = failure["new_grouping"]
+        else:
+          failure_data["new_grouping"] = -1
+
+        failure_data["new_output_channels"] = -1
+        failure_data["insert_ops"] = None
+        failure_data["insert_child_id"] = -1
         failure_data["delete_id"] = -1
       else:
-        failure_data["insert_ops"] = None
-        failure_data["insert_child_id"] = -1 
         failure_data["delete_id"] = failure["delete_id"]
-    
+        failure_data["insert_ops"] = None
+        failure_data["insert_child_id"] = -1
+        failure_data["node_id"] = -1
+        failure_data["new_output_channels"] = -1
+        failure_data["new_grouping"] = -1
+
       self.failure_database.add(self.failure_database.cntr, failure_data)
       self.failure_database.cntr += 1
 
@@ -264,7 +309,7 @@ class Searcher():
           model_inputs = set(("Input(Bayer)", "Input(Green)"))
         else: 
           model_inputs = set(("Input(Bayer)",))
-        new_model_ast, shash, mutation_stats = self.mutator.mutate(new_model_id, model_ast, model_inputs)
+        new_model_ast, shash, mutation_stats = self.mutator.mutate(parent_id, new_model_id, model_ast, model_inputs)
         generation_stats.update(mutation_stats)
 
         if new_model_ast is None: 
@@ -473,11 +518,10 @@ class Searcher():
     seed_ast.compute_input_output_channels()
     self.model_manager.save_model([seed_model], seed_ast, seed_model_dir)
 
-    seed_ast.compute_input_output_channels()
-    self.search_logger.info(f"using seed model:\n{seed_ast.dump()}")
-
     compute_cost = self.evaluator.compute_cost(seed_ast)
     model_accuracy = self.args.seed_model_psnr
+
+    self.search_logger.info(f"using seed model:\n{seed_ast.dump()}\nwith cost {compute_cost} and PSNR {model_accuracy}")
 
     cost_tiers.add(self.model_manager.SEED_ID, compute_cost, model_accuracy)
     
@@ -546,7 +590,9 @@ class Searcher():
         gpu_ids = mp.Array(ctypes.c_int, [-1]*len(model_ids))
 
         for task_id, model_id in enumerate(model_ids):
+          self.debug_logger.debug(f"--- loading model {model_id} ---")
           model_ast = self.load_model(model_id)
+
           if model_ast is None:
             continue
 
@@ -557,6 +603,7 @@ class Searcher():
                 
           pytorch_models = self.lower_model(new_model_id, new_model_ast)
           if pytorch_models is None:
+            print(f"FAILED TO LOWER MODEL {new_model_id}")
             continue
 
           compute_cost = self.evaluator.compute_cost(new_model_ast)
@@ -630,12 +677,6 @@ class Searcher():
       print(f"seen_rejections {generation_stats.seen_rejections} prune_rejections {generation_stats.pruned_mutations}" 
             + f" structural_rejections {generation_stats.structural_rejections} failed_mutations {generation_stats.failed_mutations}")
 
-  
-    print(self.model_database.table[10])
-    # try re-loading model database
-    self.model_database.load(self.model_database.database_path)
-    print("--- re-loaded database ---")
-    print(self.model_database.table[10])
     return cost_tiers
 
   """
@@ -657,7 +698,8 @@ def parse_cost_tiers(s):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
-  parser.add_argument('--default_channels', type=int, default=16, help='num of output channels for conv layers')
+
+  parser.add_argument('--max_channels', type=int, default=32, help='max number of channels in any op')
   parser.add_argument('--max_nodes', type=int, default=35, help='max number of nodes in a tree')
   parser.add_argument('--min_subtree_size', type=int, default=1, help='minimum size of subtree in insertion')
   parser.add_argument('--max_subtree_size', type=int, default=12, help='maximum size of subtree in insertion')
@@ -676,9 +718,9 @@ if __name__ == "__main__":
   parser.add_argument('--seed', type=int, default=1, help='random seed')
 
   # seed models 
-  parser.add_argument('--green_seed_model_file', type=str, default='DATADUMP/BASIC_GREEN_SEED_5NEG3_LR/models/seed/model_info', help='')
+  parser.add_argument('--green_seed_model_file', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_info', help='')
   parser.add_argument('--green_seed_model_version', type=int, default=0)
-  parser.add_argument('--green_seed_model_psnr', type=float, default=31.38)
+  parser.add_argument('--green_seed_model_psnr', type=float, default=32.53)
 
   parser.add_argument('--chroma_seed_model_file', type=str, default='DATADUMP/SIMPLE_GREEN_INPUT_CHROMA_MODEL/models/seed/model_info', help='')
   parser.add_argument('--chroma_seed_model_version', type=int, default=0)
@@ -746,11 +788,13 @@ if __name__ == "__main__":
     args.seed_model_version = args.chroma_seed_model_version
     args.seed_model_psnr = args.chroma_seed_model_psnr
     args.tablename = "chroma"
+    args.task_out_c = 6
   else:
     args.seed_model_file = args.green_seed_model_file
     args.seed_model_version = args.green_seed_model_version
     args.seed_model_psnr = args.green_seed_model_psnr
     args.tablename = "green"
+    args.task_out_c = 2
 
   args.cost_tiers = parse_cost_tiers(args.cost_tiers)
   util.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))

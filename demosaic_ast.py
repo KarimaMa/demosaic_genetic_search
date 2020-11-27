@@ -14,7 +14,6 @@ def extclass(cls):
   return lambda f: (setattr(cls,f.__name__,f) or f)
 """ ----------------------------------------------"""
 
-
 class Binop(ABC):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
@@ -33,7 +32,7 @@ class BinopIcJcKc(Binop):
   @property
   @abstractmethod
   def Ic(self):
-    pass
+      pass
   @property
   @abstractmethod
   def Jc(self):
@@ -42,7 +41,6 @@ class BinopIcJcKc(Binop):
   @abstractmethod
   def Kc(self):
     pass
-
 
 class Ternary(ABC):
   def __init__(self):
@@ -79,8 +77,8 @@ class UnopII(Unop):
 class UnopIJ(Unop):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
-      
-class UnopI1(Unop):
+
+class UnopIIdiv(Unop):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
 
@@ -99,6 +97,7 @@ class Linear(ABC):
 class Special(ABC):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
+
 
 """----------------------------------------------------------------------"""
 
@@ -170,27 +169,36 @@ class Stack(BinopIJK, Special, Node):
     self.lchild = lchild
     self.rchild = rchild
     self.out_c = None
-    self.in_c = None
+    self.in_c = None 
     
-class ChromaExtractor(TernaryHcIcJcKc, Special, Node):
+
+# Takes BayerQuad, 4 channel green prediction, and 6 channel Chroma prediction
+# spits out full RGB image at full resolution 
+class RGBExtractor(TernaryHcIcJcKc, Special, Node):
   def __init__(self, child1, child2, child3, name=None):
     if name is None:
-      name = "ChromaExtractor"
+      name = "RGBExtractor"
     Node.__init__(self, name, 3)
     self.child1 = child1
     self.child2 = child2
     self.child3 = child3
-    self.in_c = (3, 1, 1) # CH, CV, CQ, Bayer, Green
+    self.in_c = (4, 4, 6) # bayer, green, missing chroma
     self.out_c = 3
+
   def Hc(self):
-    return 3 # ch chv, cq
+    return 4 # bayer
   def Ic(self):
-    return 1 # bayer
+    return 4 # green
   def Jc(self):
-    return 1 # green
-  def Kc(self):
+    return 6 # missing chroma
+  def Kc(self): 
     return 3
 
+
+"""
+Takes BayerQuad and 2 channel green prediction 
+Spits out full Green image at full resolution  
+"""
 class GreenExtractor(BinopIcJcKc, Special, Node):
   def __init__(self, lchild, rchild, name=None):
     if name is None:
@@ -198,12 +206,12 @@ class GreenExtractor(BinopIcJcKc, Special, Node):
     Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
-    self.in_c = (1, 1) # G and Bayer
-    self.out_c = 1
+    self.in_c = (4, 2) # bayer, missing green
+    self.out_c = 1 # output G channel
   def Ic(self):
-    return 1
+    return 4
   def Jc(self):
-    return 1
+    return 2
   def Kc(self):
     return 1
 
@@ -272,16 +280,17 @@ class FastUpsample(UnopII, Special, Node):
     self.in_c = None
 
 class Conv1x1(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int, name=None):
+  def __init__(self, child, out_c: int, groups=1, name=None):
     if name is None:
       name = "Conv1x1"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = out_c
     self.in_c = None
+    self.groups = groups
 
 class Conv1D(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int, name=None, kwidth=5):
+  def __init__(self, child, out_c: int, groups=1, name=None, kwidth=3):
     if name is None:
       name = "Conv1D"
     Node.__init__(self, name, 1)
@@ -289,9 +298,10 @@ class Conv1D(UnopIJ, Linear, Node):
     self.out_c = out_c
     self.kwidth = kwidth
     self.in_c = None
+    self.groups = groups
 
 class Conv2D(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int, name=None, kwidth=5):
+  def __init__(self, child, out_c: int, groups=1, name=None, kwidth=3):
     if name is None:
       name = "Conv2D"
     Node.__init__(self, name, 1)
@@ -299,14 +309,24 @@ class Conv2D(UnopIJ, Linear, Node):
     self.out_c = out_c
     self.kwidth = kwidth
     self.in_c = None
+    self.groups = groups
 
-class SumR(UnopI1, Special, Node):
-  def __init__(self, child, name=None):
+class InterleavedSum(UnopIIdiv, Special, Node):
+  def __init__(self, child, out_c: int, name=None):
     if name is None:
-      name = "SumR"
+      name = "InterleavedSum"
     Node.__init__(self, name, 1)
     self.child = child
-    self.out_c = 1
+    self.out_c = out_c
+    self.in_c = None
+
+class GroupedSum(UnopIIdiv, Special, Node):
+  def __init__(self, child, out_c: int, name=None):
+    if name is None:
+      name = "GroupedSum"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.out_c = out_c
     self.in_c = None
 
 
@@ -362,7 +382,7 @@ def compute_input_output_channels(self):
   self.out_c = lout_c + rout_c
   return self.in_c, self.out_c
 
-@extclass(ChromaExtractor)
+@extclass(RGBExtractor)
 def compute_input_output_channels(self):
   self.child1.compute_input_output_channels()
   self.child2.compute_input_output_channels()
@@ -442,14 +462,21 @@ def compute_input_output_channels(self):
   self.in_c = child_out_c
   return self.in_c, self.out_c
 
-@extclass(SumR)
+@extclass(InterleavedSum)
 def compute_input_output_channels(self):
   _, child_out_c = self.child.compute_input_output_channels()
   self.in_c = child_out_c
+  assert self.in_c % self.out_c == 0, f"InterleavedSum {self.dump()} must have input channels {self.in_c} divisible by output channels {self.out_c}"
+  return self.in_c, self.out_c
+
+@extclass(GroupedSum)
+def compute_input_output_channels(self):
+  _, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
+  assert self.in_c % self.out_c == 0, f"GroupedSum {self.dump()} must have input channels {self.in_c} divisible by output channels {self.out_c}"
   return self.in_c, self.out_c
 
 """
-
 Converts AST structure to array format
 """
 @extclass(Node)
@@ -473,22 +500,26 @@ def structure_to_array(self):
       node_info["partner_set"] = partner_ids
 
     parents = []
+    seen_parents = set()
     if type(n.parent) is tuple:
       for node_parent in n.parent:
-        for j in range(0, i):
-          if preorder[j] is node_parent:
+        for j in range(0, len(preorder)):
+          if preorder[j] is node_parent and not preorder[j] in seen_parents:
             parents += [j]
+            seen_parents.add(preorder[j])
     else:
       for j in range(0, i):
-        if preorder[j] is n.parent:
+        if preorder[j] is n.parent and not preorder[j] in seen_parents:
           parents += [j]
+          seen_parents.add(preorder[j])
+
     node_info["parent"] = parents
 
     if n.num_children == 3:
       child1_id = None
       child2_id = None
       child3_id = None
-      for j in range(i, len(preorder)):
+      for j in range(0, len(preorder)):
         if preorder[j] is n.child1:
           child1_id = j
         elif preorder[j] is n.child2:
@@ -499,10 +530,10 @@ def structure_to_array(self):
           break
       node_info["children"] = [child1_id, child2_id, child3_id]
 
-    if n.num_children == 2:
+    elif n.num_children == 2:
       lchild_id = None
       rchild_id = None
-      for j in range(i, len(preorder)):
+      for j in range(0, len(preorder)):
         if preorder[j] is n.lchild:
           lchild_id = j
         elif preorder[j] is n.rchild:
@@ -513,20 +544,19 @@ def structure_to_array(self):
 
     elif n.num_children == 1:
       child_id = None
-      for j in range(i, len(preorder)):
+      for j in range(0, len(preorder)):
         if preorder[j] is n.child:
           child_id = j
           break
       node_info["children"] = [child_id]
   
     if hasattr(n, 'name'):
-      node_info["name"] = n.name.lstrip("Input(").rstrip(")")
+      node_info["name"] = n.name.replace("Input(",'').rstrip(")")
 
     if hasattr(n, 'kwidth'):
       node_info["kwidth"] = n.kwidth
 
     array.append(node_info)
-
   return array
 
 """
@@ -548,33 +578,30 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None):
   node_name = node_info["name"]
   if "children" in node_info:
     children_ids = node_info["children"]
-    if len(children_ids) == 3:
-      child1_node = build_tree_from_data(children_ids[0], preorder_nodes, shared_children)
-      child2_node = build_tree_from_data(children_ids[1], preorder_nodes, shared_children)
-      child3_node = build_tree_from_data(children_ids[2], preorder_nodes, shared_children)
-      new_node = node_class(child1_node, child2_node, child3_node, name=node_name)
-    elif len(children_ids) == 2:
-      lchild_node = build_tree_from_data(children_ids[0], preorder_nodes, shared_children)
-      rchild_info = preorder_nodes[children_ids[1]]
-      if len(rchild_info["parent"]) == 2:
-        if children_ids[1] in shared_children:
-          rchild_node = shared_children[children_ids[1]]
-        else:
-          rchild_node = build_tree_from_data(children_ids[1], preorder_nodes, shared_children)
-          shared_children[children_ids[1]] = rchild_node
-      else:
-        rchild_node = build_tree_from_data(children_ids[1], preorder_nodes, shared_children)
+    # for i in range(len(children_ids)):
+    #   print(f"i {i} children_ids {children_ids}")
+    children_info = [preorder_nodes[children_ids[i]] for i in range(len(children_ids))]
+    child_nodes = []
+    for i, child_info in enumerate(children_info):
 
-      new_node = node_class(lchild_node, rchild_node, name=node_name)
-    else:
-      child_node = build_tree_from_data(children_ids[0], preorder_nodes, shared_children)
-      if issubclass(node_class, UnopIJ):
-        if "kwidth" in node_info:
-          new_node = node_class(child_node, node_info["out_c"], name=node_name, kwidth=node_info["kwidth"])
+      if len(child_info["parent"]) > 1:
+        if children_ids[i] in shared_children:
+          child_node = shared_children[children_ids[i]]
         else:
-          new_node = node_class(child_node, node_info["out_c"], name=node_name)
+          child_node = build_tree_from_data(children_ids[i], preorder_nodes, shared_children)
+          shared_children[children_ids[i]] = child_node
       else:
-        new_node = node_class(child_node, name=node_name)
+        child_node = build_tree_from_data(children_ids[i], preorder_nodes, shared_children)
+      child_nodes.append(child_node)
+
+    if issubclass(node_class, UnopIJ) or issubclass(node_class, UnopIIdiv):
+      if "kwidth" in node_info:
+        new_node = node_class(*child_nodes, node_info["out_c"], name=node_name, kwidth=node_info["kwidth"])
+      else:
+        new_node = node_class(*child_nodes, node_info["out_c"], name=node_name)
+    else:
+      new_node = node_class(*child_nodes, name=node_name)
+
   else: # is input node
     new_node = node_class(node_info["in_c"], name=node_name)
   
@@ -617,7 +644,7 @@ def structural_hash(tree):
     if isinstance(n, Binop):
       h += 1 << i
 
-  op_list = [Conv1x1, Conv1D, Conv2D, Softmax, Relu, Mul, Add, Sub, AddExp, LogSub, Stack, Upsample, Downsample, SumR]
+  op_list = [Conv1x1, Conv1D, Conv2D, Softmax, Relu, Mul, Add, Sub, AddExp, LogSub, Stack, Upsample, Downsample, InterleavedSum, GroupedSum]
   ops_used = set([type(n) for n in nodes])
   op_coverage = 0
   for i,o in enumerate(op_list):
@@ -633,60 +660,54 @@ returns a deep copy of the subtree at root but does NOT
 make a deep copy of ancestors. and deletes original references 
 to the parent tree
 """
-"""
-if hasattr(root, "partner")
-  if id(partner) in dic
-    dic[id(partner)]["new_partner2"] = new_root
-    new_root.partner = dic[id(partner)]["new_partner1"]
-  else:
-    dic[id(root)] = {"new_partner1": new_root}
-    # call copy on children
-    new_root.partner = dic[id(root)]["new_partner2"]
+def copy_subtree_helper(root, seen_children=None):
+  if seen_children is None:
+    seen_children = {}
 
-partner adds self ot dictionary     
-"""
-def copy_subtree_helper(root, shared_children=None):
-  if shared_children is None:
-    shared_children = {}
+  if id(root) in seen_children:
+    return seen_children[id(root)]
+
   new_root = copy.copy(root)
-  if new_root.num_children == 3:
-    c1copy = copy_subtree_helper(root.child1, shared_children)
-    c2copy = copy_subtree_helper(root.child2, shared_children)
-    c3copy = copy_subtree_helper(root.child3, shared_children)
-    
-    c1copy.parent = new_root
-    c2copy.parent = new_root
-    c3copy.parent = new_root
+  new_root.parent = None
 
-    new_root.child1 = c1copy
-    new_root.child2 = c2copy
-    new_root.child3 = c3copy
+  children_copies = []
+
+  def copy_children():
+    for c in children:
+      child_copy = copy_subtree_helper(c, seen_children)
+      if child_copy.parent:
+        if type(child_copy.parent) is tuple:
+          child_copy.parent = child_copy.parent + tuple([new_root])
+        else:
+          child_copy.parent = (child_copy.parent, new_root) 
+      else:
+        child_copy.parent = new_root
+      children_copies.append(child_copy)
+
+  if new_root.num_children == 3:
+    children = [root.child1, root.child2, root.child3]
+    copy_children()
+
+    new_root.child1 = children_copies[0]
+    new_root.child2 = children_copies[1]
+    new_root.child3 = children_copies[2]
 
   elif new_root.num_children == 2:
-    lcopy = copy_subtree_helper(root.lchild, shared_children)
-    if "LogSub" in root.name or "AddExp" in root.name:    
-      if root.rchild in shared_children:
-        rcopy = shared_children[root.rchild]
-        rcopy.parent = (rcopy.parent, new_root)
-      else:
-        rcopy = copy_subtree_helper(root.rchild, shared_children)
-        shared_children[root.rchild] = rcopy
-        rcopy.parent = new_root
-    else:
-      rcopy = copy_subtree_helper(root.rchild, shared_children)
-      rcopy.parent = new_root
+    children = [root.lchild, root.rchild]
+    copy_children()
 
-    new_root.lchild = lcopy
-    new_root.rchild = rcopy
-    lcopy.parent = new_root
+    new_root.lchild = children_copies[0]
+    new_root.rchild = children_copies[1]
     
   elif new_root.num_children == 1:
-    child_copy = copy_subtree_helper(root.child, shared_children)
-    new_root.child = child_copy
-    child_copy.parent = new_root
+    children = [root.child]
+    copy_children()
 
-  new_root.parent = None
+    new_root.child = children_copies[0]
+
+  seen_children[id(root)] = new_root
   return new_root
+
 
 def redirect_to_new_partners(old_tree, new_tree):
   old_tree_preorder = old_tree.preorder()
@@ -742,6 +763,9 @@ def copy_subtree(old_tree):
   new_tree = copy_subtree_helper(old_tree)
   redirect_to_new_partners(old_tree, new_tree)
   return new_tree
+
+
+
 
 """
 def find_old_partners(tree, partner_dic={}):
@@ -860,11 +884,11 @@ def find_closest_children(node, OpClasses):
     found2 = find_closest_children(node.child2, OpClasses)
     found3 = find_closest_children(node.child3, OpClasses)
     return found1.union(found2).union(found3)
-  if node.num_children == 2:
+  elif node.num_children == 2:
     lfound = find_closest_children(node.lchild, OpClasses)
     rfound = find_closest_children(node.rchild, OpClasses)
     return lfound.union(rfound)
-  if node.num_children == 1:
+  elif node.num_children == 1:
     return find_closest_children(node.child, OpClasses)
   return set()
 
@@ -872,7 +896,8 @@ def find_closest_children(node, OpClasses):
 # ops to choose from for insertion
 linear_insert_ops = set((Conv1x1, Conv1D, Conv2D))
 nonlinear_insert_ops = set((Relu,)) # only allow Softmax to be used with Mul insertion 
-special_insert_ops = set((Mul, Add, Sub, Stack, Downsample, SumR, LogSub))
+#special_insert_ops = set((Mul, Add, Sub, Stack, Downsample, SumR, LogSub))
+special_insert_ops = set((Mul, Add, Sub, Stack, Downsample, InterleavedSum, GroupedSum))
 
 nl_sp_insert_ops = nonlinear_insert_ops.union(special_insert_ops)
 l_sp_insert_ops = linear_insert_ops.union(special_insert_ops)
@@ -881,57 +906,24 @@ all_insert_ops = nl_sp_insert_ops.union(l_sp_insert_ops)
 
 linear_ops = set((Conv1x1, Conv1D, Conv2D))
 nonlinear_ops = set((Softmax, Relu)) 
-special_ops = set((Mul, Add, Sub, AddExp, LogSub, Stack, Upsample, Downsample, SumR))
+special_ops = set((Mul, Add, Sub, Stack, Upsample, Downsample, InterleavedSum, GroupedSum))
 
+"""
+special_ops = set((Mul, Add, Sub, AddExp, LogSub, Stack, Upsample, Downsample, SumR))
 sandwich_ops = set((LogSub, AddExp, Downsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
 sandwich_pairs = {
   LogSub: AddExp,
   Downsample: Upsample
 }
+"""
+sandwich_ops = set((Downsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
 
-border_ops = set((ChromaExtractor, GreenExtractor, Input))
+sandwich_pairs = {
+  Downsample: Upsample
+}
+
+border_ops = set((RGBExtractor, GreenExtractor, Input))
 nl_and_sp = nonlinear_ops.union(special_ops)
 l_and_sp = linear_ops.union(special_ops)
 all_ops = nl_and_sp.union(l_and_sp)
 
-
-# if __name__ == "__main__":
-#   from model_lib import multires_green_model
-#   import argparse
-#   import random
-#   import numpy as np
-#   from mutate import Mutator
-
-#   parser = argparse.ArgumentParser("Demosaic")
-#   parser.add_argument('--default_channels', type=int, default=16, help='num of output channels for conv layers')
-#   parser.add_argument('--max_nodes', type=int, default=33, help='max number of nodes in a tree')
-#   parser.add_argument('--min_subtree_size', type=int, default=2, help='minimum size of subtree in insertion')
-#   parser.add_argument('--max_subtree_size', type=int, default=11, help='maximum size of subtree in insertion')
-#   parser.add_argument('--structural_sim_reject', type=float, default=0.66, help='rejection probability threshold for structurally similar trees')
-#   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
-#   parser.add_argument('--model_database_dir', type=str, default='model_database', help='path to save model statistics')
-#   parser.add_argument('--database_save_freq', type=int, default=5, help='model database save frequency')
-#   parser.add_argument('--save', type=str, default='SEARCH_MODELS', help='experiment name')
-#   parser.add_argument('--seed', type=int, default=2, help='random seed')
-#   parser.add_argument('--generations', type=int, default=20, help='model search generations')
-#   parser.add_argument('--seed_model_file', type=str, help='')
-#   parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
-#   parser.add_argument('--tier_size', type=int, default=20, help='how many models to keep per tier')
-#   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
-#   parser.add_argument('--mutation_failure_threshold', type=int, default=500, help='max number of tries to mutate a tree')
-#   parser.add_argument('--delete_failure_threshold', type=int, default=25, help='max number of tries to find a node to delete')
-#   args = parser.parse_args()
-#   random.seed(args.seed)
-#   np.random.seed(args.seed)
-
-#   mutator = Mutator(args, None)
-#   model = multires_green_model()
-#   copy_model = copy_subtree(model)
-#   preorder = copy_model.preorder()
-#   print(copy_model.dump())
-#   for i, n in enumerate(preorder):
-#     print(f"node {i} {n.__class__.__name__}")
-  
-#   model_inputs = set(("Input(Bayer)",))
-#   mutated_tree = mutator.insert_mutation(copy_model, model_inputs, insert_above_node_id=8, insert_op=list(special_ops)[0])
-#   print(mutated_tree.dump())

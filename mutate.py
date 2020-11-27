@@ -21,17 +21,18 @@ from demosaic_ast import *
 from type_check import *
 from tree import *
 from restrictions import *
-from util import extclass
+from util import extclass, get_factors
 from enum import Enum
 
 
-CHANNELS = set((1,4,8,12))
-CHANNELS = set((8,))
+channel_options = [8, 10, 12, 16, 20, 24, 28, 32]
 
 class MutationType(Enum):
   DELETION = 1
   INSERTION = 2
-
+  DECOUPLE = 3
+  CHANNEL_CHANGE = 4
+  GROUP_CHANGE = 5
 
 class MutationStats():
   def __init__(self, failures, prune_rejections, structural_rejections, seen_rejections):
@@ -79,7 +80,8 @@ class Mutator():
       mutation_type = random.choice(list(MutationType))
     return mutation_type
 
-  def mutate(self, model_id, tree, input_set):
+  def mutate(self, parent_id, model_id, tree, input_set):
+    self.debug_logger.debug(f"---- ENTERING MUTATION of {parent_id} ----")
     failures = 0
     prune_rejections = 0
     structural_rejections = 0
@@ -88,9 +90,6 @@ class Mutator():
     self.failed_mutation_info = []
 
     while True: # loop to keep trying over assertion errors
-      # if self.give_up(structural_rejections, prune_rejections, seen_rejections, failures):
-      #   stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections)
-      #   return None, None, stats
       try:
         while True: # loop to keep trying over tree pruning 
           mutation_type = self.pick_mutation_type(tree)
@@ -104,43 +103,63 @@ class Mutator():
           self.current_mutation_info = {}
           self.current_mutation_info["mutation_type"] = mutation_type.name
 
+          #self.debug_logger.debug(f"the tree before mutation:\n{tree_copy.dump()}")
           if mutation_type is MutationType.INSERTION:  
+            self.debug_logger.debug(f"attempting insertion")
             new_tree = self.insert_mutation(tree_copy, input_set)
-          else:
+          elif mutation_type is MutationType.DELETION:
+            self.debug_logger.debug(f"attempting deletion")
             new_tree = self.delete_mutation(tree_copy)
-    
+          elif mutation_type is MutationType.DECOUPLE:
+            self.debug_logger.debug(f"attempting decouple")
+            new_tree = self.decouple_mutation(tree_copy)
+          elif mutation_type is MutationType.CHANNEL_CHANGE:
+            self.debug_logger.debug(f"attempting channel change")
+            new_tree = self.channel_mutation(tree_copy)
+          else:
+            self.debug_logger.debug(f"attempting group mutation")
+            new_tree = self.group_mutation(tree_copy)
+
+          self.debug_logger.debug(f"finished mutation")
+
           if self.accept_tree(new_tree):
             break
-
+          
+          # tree was pruned
+          self.failed_mutation_info.append(self.current_mutation_info.copy())
           prune_rejections += 1
+
           if self.give_up(structural_rejections, prune_rejections, seen_rejections, failures):
             stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections)
-            self.failed_mutation_info.append(self.current_mutation_info.copy())
+            self.debug_logger.debug(f"giving up mutation to produce model {model_id}")
             return None, None, stats
 
-      except (AssertionError, AttributeError) as e:
+      # mutation failed
+      except (AssertionError, AttributeError) as e: 
         if mutation_type is MutationType.INSERTION:
-          self.debug_logger.debug(f'insertion mutation failed on model {model_id}')
+          self.debug_logger.debug(f'insertion mutation failed on parent model {parent_id}')
+        elif mutation_type is MutationType.DELETION:
+          self.debug_logger.debug(f'deletion mutation failed on parent model {parent_id}')
+        elif mutation_type is MutationType.DECOUPLE:
+          self.debug_logger.debug(f'decouple mutation failed on parent model {parent_id}')
+        elif mutation_type is MutationType.CHANNEL_CHANGE:
+          self.debug_logger.debug(f'channel change mutation failed on model {parent_id}')
         else:
-          self.debug_logger.debug(f'deletion mutation failed on model {model_id}')
+          self.debug_logger.debug(f'group mutation failed on model {parent_id}')
+
         self.failed_mutation_info.append(self.current_mutation_info.copy())
         failures += 1
         continue
       else: # successfully mutated tree
-        # try to shrink channel counts - nodes like Stack can cause channel counts to blow up
+        # try to shrink channel counts that are too large - Stack can cause channel counts to blow up
+        saved_copy = copy_subtree(new_tree)
         try:
-          saved_copy = copy_subtree(new_tree)
+          shrink_channels(new_tree, self.args.max_channels, self.args.task_out_c)
         except AssertionError:
-          self.debug_logger.debug(f"failed to copy model {model_id}")
-          self.failed_mutation_info.append(self.current_mutation_info.copy())
-          failures += 1
-          continue
-        try:
-          shrink_channels(new_tree, self.args.default_channels, out_c=1)
-        except AssertionError:
-          self.debug_logger.debug("unable to shrink channels")
+          #self.debug_logger.debug("Unable to shrink channels")
           new_tree = saved_copy
 
+        #print(new_tree.dump())
         new_tree.compute_input_output_channels()
 
         # TODO: THESE SHOULD NEVER FIRE BUT THEY DO... FIGURE OUT BUGS!!!
@@ -181,26 +200,252 @@ class Mutator():
 
 
 """
+randomly chooses a node with multiple parents and splits it 
+off from the shared computation, making its child the new
+root of the shared computation
+"""
+@extclass(Mutator)
+def decouple_mutation(self, tree, chosen_node_id=None):
+  preorder_nodes = tree.preorder()
+  if chosen_node_id:
+    chosen_node = preorder_nodes[chosen_node_id]
+  else:
+    shared = list(filter(lambda x: type(x.parent) is tuple and not type(x) in set((LogSub, AddExp)), preorder_nodes))
+    if len(shared) == 0:
+      self.debug_logger.debug("cannot perform decouple mutation on a tree with no shared computation")
+      assert False, "cannot perform decouple mutation on a tree with no shared computation"
+    chosen_node = random.sample(shared, 1)[0]
+
+    for i, n in enumerate(preorder_nodes):
+      if n is chosen_node:
+        chosen_node_id = i
+        break
+  self.current_mutation_info["node_id"] = chosen_node_id
+
+  copies = [copy.copy(chosen_node) for p in chosen_node.parent]
+  if chosen_node.num_children == 3:
+    children = [chosen_node.child1, chosen_node.child2, chosen_node.child3]
+  elif chosen_node.num_children == 2:
+    children = [chosen_node.lchild, chosen_node.rchild]
+  else:
+    children = [chosen_node.child]
+
+  for child in children:
+    if type(child.parent) is tuple:
+      # remove the chosen node from list of parents and replace it with its copies
+      new_parent_tuple = tuple(filter(lambda x: id(x) != id(chosen_node), child.parent)) 
+      new_parent_tuple = new_parent_tuple + tuple(copies)
+      child.parent = new_parent_tuple
+    else:
+      child.parent = tuple(copies)
+  
+  # update copies of the node to each point to one of the parents separately
+  # update each of those parents to only point to the one copy it was assigned
+  chosen_node_parents = chosen_node.parent
+  for i, p in enumerate(chosen_node_parents):
+    copies[i].parent = p 
+    if p.num_children == 3:
+      if chosen_node is p.child1:
+        p.child1 = copies[i]
+      elif chosen_node is p.child2:
+        p.child2 = copies[i]
+      else:
+        p.child3 = copies[i]
+    elif p.num_children == 2:
+      if chosen_node is p.lchild:
+        p.lchild = copies[i]
+      else:
+        p.rchild = copies[i]
+    else:
+      p.child = copies[i]
+
+  # remove chosen node from its partners' partner sets 
+  # for each partner's partner set, replace the chosen node with the copies that are downstream of it
+  if hasattr(chosen_node, "partner_set"):
+    for copy_id, copied_node in enumerate(copies):
+      assigned_parent = chosen_node_parents[copy_id]
+
+      partners_upstream = find_partners_upstream(chosen_node.partner_set, assigned_parent)
+      for partner in partners_upstream:
+        if in_partner_set(partner.partner_set, chosen_node): # may be already removed by another copy that also feeds this partner
+          remove_partner_from_set(partner.partner_set, chosen_node)
+        partner.partner_set.add((copied_node, id(copied_node))) 
+
+    update_partners_downstream_with_copies(chosen_node.partner_set, chosen_node, chosen_node, copies)
+
+  return tree
+
+def in_partner_set(partner_set, node):
+  for p, pid in partner_set:
+    if id(node) == pid:
+      return True
+  return False
+
+def remove_partner_from_set(partner_set, node):
+  for p, pid in partner_set:
+    if id(node) == pid:
+      partner_set.remove((p, pid))
+      return
+  assert False, "Could not find node to remove from partner set"
+
+"""
+given a set of partners and a starting node, traverses the 
+branch up to the root node and returns all encountered partners
+"""
+def find_partners_upstream(partner_set, node):
+  found_partners = set()
+  while not node is None:
+    if in_partner_set(partner_set, node):
+      found_partners.add(node)
+    node = node.parent
+  return found_partners
+
+"""
+finds all downstream partners of node and replaces it in its
+partners' partner sets with the copies of the node
+"""
+def update_partners_downstream_with_copies(partner_set, root, node, node_copies):
+  if in_partner_set(partner_set, root):
+    if in_partner_set(root.partner_set, node):
+      remove_partner_from_set(root.partner_set, node)
+    root.partner_set = root.partner_set.union( set([(n, id(n)) for n in node_copies]) )
+  if root.num_children == 0:
+    return 
+
+  if root.num_children == 3:
+    children = [root.child1, root.child2, root.child3]
+  elif root.num_children == 2:
+    children = [root.lchild, root.rchild]
+  else:
+    children = [root.child]
+
+  for child in children:
+    update_partners_downstream_with_copies(partner_set, root.child, node, node_copies)
+
+"""
+randomly chooses to go up or down to the channel 
+option closest to the given output channel 
+"""
+def perturb_channel(out_c):
+  decrease_c = None
+  increase_c = None
+  for i, option in enumerate(channel_options):
+    if option > out_c:
+      increase_c = channel_options[i]
+      break
+  for i, option in enumerate(reversed(channel_options)):
+    if option < out_c:
+      decrease_c = channel_options[len(channel_options)-i-1]
+
+  if decrease_c is None:
+    return increase_c
+  elif increase_c is None:
+    return decrease_c
+  else:
+    go_down = random.randint(0,1)
+    if go_down:
+      return decrease_c
+    else:
+      return increase_c
+
+"""
+channel count mutation 
+changes channel count of randomly chosen conv 
+"""
+@extclass(Mutator)
+def channel_mutation(self, tree, chosen_conv_id=None):
+  preorder_nodes = tree.preorder()
+
+  if chosen_conv_id:
+    chosen_conv = preorder_nodes[chosen_conv_id]
+  else:
+    convs = list(filter(lambda x: type(x) in linear_ops, preorder_nodes))
+    if len(convs) == 0:
+      self.debug_logger.debug("cannot perform channel mutation on tree with no convs")
+      assert False, "cannot perform channel mutation on tree with no convs"
+    chosen_conv = random.sample(convs, 1)[0]
+
+    for i, n in enumerate(preorder_nodes):
+      if n is chosen_conv:
+        chosen_conv_id = i
+        break
+
+  new_out_c = perturb_channel(chosen_conv.out_c)
+
+  self.current_mutation_info["node_id"] = chosen_conv_id
+  self.current_mutation_info["new_output_channels"] = new_out_c
+
+  fixed = fix_channel_count_upwards(chosen_conv, new_out_c)
+  if fixed:
+    chosen_conv.out_c = new_out_c
+    #print(f"changed channel count of {chosen_conv.dump()} to {new_out_c} full tree {tree.dump()}")
+    return tree
+  else:
+    self.debug_logger.debug(f"Unable to perturb output channel of {chosen_conv} from {chosen_conv.out_c} to {new_out_c}")
+    assert False, "Unable to perturb channel counts of conv"
+
+
+"""
+grouped conv mutation 
+changes grouping factor of randomly chosen conv
+"""
+@extclass(Mutator)
+def group_mutation(self, tree):
+  preorder_nodes = tree.preorder()
+  convs = list(filter(lambda x: type(x) in linear_ops, preorder_nodes)) 
+  if len(convs) == 0:
+    self.debug_logger.debug("cannot perform grouped conv mutation on tree with no convs")
+    assert False, "cannot perform grouped conv mutation on tree with no convs"
+
+  chosen_conv = random.sample(convs, 1)[0]
+  for i, n in enumerate(preorder_nodes):
+    if n is chosen_conv:
+      chosen_conv_id = i
+      break
+  self.current_mutation_info["node_id"] = chosen_conv_id
+
+  in_c_factors = get_factors(chosen_conv.out_c)
+  out_c_factors = get_factors(chosen_conv.in_c)
+  factors = in_c_factors.intersection(out_c_factors)
+  factors.remove(chosen_conv.groups)
+  if len(factors) == 0:
+    self.debug_logger.debug("No possible grouping factors for grouped conv mutation")
+    assert False, "No possible grouping factors for grouped conv mutation"
+  # randomly pick a factor to use as the group 
+  new_grouping = random.sample(factors, 1)[0]
+  
+  self.current_mutation_info["new_grouping"] = new_grouping
+
+  chosen_conv.groups = new_grouping # input and output channels remain unchanged 
+  return tree
+  
+
+"""
 returns whether parent and child linearity type sequence is allowed
 """
 @extclass(Mutator)
 def legal_parent_child_linearity(self, parent, child):
   if type(parent) is tuple:
-    if not (type(parent[0]) is type(parent[1])):
-      self.debug_logger.debug("Node with multiple parents cannot have parents of different types")
-      assert False, "If a node has multiple parents they must have same type"
-    parent_type = type(parent[0])
+    parents = list(parent)
   else:
-    parent_type = type(parent)
-  child_type = type(child)
-  return parent_type in border_ops \
-      or child_type in border_ops \
-      or (parent_type in nl_and_sp and child_type in l_and_sp) \
-      or (parent_type in l_and_sp and child_type in nl_and_sp)
+    parents = [parent]
   
+  child_type = type(child)
+
+  illegal_parents = []
+  for p in parents:
+    parent_type = type(p)
+    self.debug_logger.debug(f"parent type {p.name} {parent_type} child_type {child.name} {child_type}")
+    parent_child_ok = (parent_type in border_ops or child_type in border_ops \
+          or (parent_type in nl_and_sp and child_type in l_and_sp) \
+          or (parent_type in l_and_sp and child_type in nl_and_sp))
+    if not parent_child_ok: 
+      illegal_parents += [p]
+
+  return illegal_parents
 
 """
-adds partner node to give node's set of partner nodes
+adds partner node to node's set of partner nodes
 """
 def add_partner(node, node_partner):
   if hasattr(node, "partner_set"):
@@ -209,32 +454,46 @@ def add_partner(node, node_partner):
     node.partner_set = set([(node_partner, id(node_partner))])
 
 """
-given set of nodes, return all of their partner nodes
+given a dictionary of node ids to node references, return all of their partner nodes
 """  
-def get_partner_nodes(nodes_and_ids):
-  partner_nodes = set()
-  for n, nid in nodes_and_ids:
+def get_partner_nodes(id2node_map):
+  partner_nodes = {}
+  for nid, n in id2node_map.items():
     if hasattr(n, "partner_set"):
-      new_set = set()
-      for item in n.partner_set: 
-        # nodes may have been modified since insertion into partner set
-        # so we need to reproduce the set by rehashing the nodes
-        new_set.add(item)
-      partner_nodes = partner_nodes.union(new_set)
+      for partner_node, partner_id in n.partner_set: 
+        partner_nodes[partner_id] = partner_node      
   return partner_nodes
 
+
 """
-given a set of nodes that are partners of (nodes, ids) that have just been deleted, 
-remove their connections to their deleted partners
+returns whether a node still exists in the tree
 """
-def remove_deleted_partner_connections(partners_of_deleted, deleted):
-  for n, nid in partners_of_deleted:
+def is_in_tree(tree, node):
+  preorder_nodes = tree.preorder()
+  for n in preorder_nodes:
+    if id(n) == id(node):
+      return True
+  return False
+
+"""
+partners_of_deleted: dictionary of ids to nodes 
+deleted: dictionary of ids to nodes
+
+remove connections from nodes in partners_of_deleted to nodes in deleted
+ONLY IF there is no longer a path from the partner to the deleted node 
+because with DAGs, a partner can reference the same deleted node through 
+multiple paths, and if only one path to the deleted node is removed, the 
+deleted node still exists in the DAG
+"""
+def remove_deleted_partner_connections(tree, partners_of_deleted, deleted):
+  for nid, n in partners_of_deleted.items():
     new_set = set()
-    for item in n.partner_set: 
+    for partner, partner_id in n.partner_set: 
       # nodes may have been modified since insertion into partner set
       # so we need to reproduce the set by rehashing the nodes
-      new_set.add(item)
-    n.partner_set = new_set - deleted
+      if not partner_id in deleted or is_in_tree(tree, partner): # don't think you need the first condiion
+        new_set.add((partner, partner_id))
+    n.partner_set = new_set 
     if len(n.partner_set) == 0:
       delattr(n, "partner_set")
 
@@ -264,37 +523,10 @@ fixes channel counts after deleting nodes
 """
 @extclass(Mutator)
 def fix_channels_after_deletion(self, tree, deletion_parent, deletion_child):
-
   if deletion_parent is None:
     return 
-  # check that channel counts are ok
-  if deletion_parent.num_children == 3:
-    if deletion_child is deletion_parent.child1:
-      out_c = deletion_parent.in_c[0]
-    elif deletion_child is deletion_parent.child2:
-      out_c = deletion_parent.in_c[1]
-    else:
-      out_c = deletion_parent.in_c[2]
-  elif deletion_parent.num_children == 2:
-    if deletion_child is deletion_parent.lchild:
-      out_c = deletion_parent.in_c[0]
-    else:
-      out_c = deletion_parent.in_c[1]
-  else:
-    out_c = deletion_parent.in_c
 
-  # try to fix channels from child down
-  # make a copy in case fixing fails and we need to try fixing upwards
-  in_out_channels = deletion_child.get_input_output_channels()
-  fixed = fix_channel_count_downwards(deletion_child, out_c)
-
-  if fixed:
-    deletion_child.compute_input_output_channels()
-    check_channel_count(tree)
-  else:
-    # reset input output channels
-    deletion_child.set_input_output_channels(in_out_channels)
-    # try to fix channels from parent up
+  if type(deletion_parent) is tuple: # must fix upwards if deletion child has mulitple parents
     deletion_child.compute_input_output_channels()
     fixed = fix_channel_count_upwards(deletion_child, deletion_child.out_c)
     if fixed:
@@ -303,6 +535,41 @@ def fix_channels_after_deletion(self, tree, deletion_parent, deletion_child):
     else:
       self.debug_logger.debug("Could not make channel counts agree after deleting ops")
       assert False, "Could not make channel counts agree after deleting ops"
+  else: # deletion child only has one parent
+    if deletion_parent.num_children == 3:
+      if id(deletion_child) == id(deletion_parent.child1):
+        out_c = deletion_parent.in_c[0]
+      elif id(deletion_child) == id(deletion_parent.child2):
+        out_c = deletion_parent.in_c[1]
+      else:
+        out_c = deletion_parent.in_c[2]
+    elif deletion_parent.num_children == 2:
+      if id(deletion_child) == id(deletion_parent.lchild):
+        out_c = deletion_parent.in_c[0]
+      else:
+        out_c = deletion_parent.in_c[1]
+    else:
+      out_c = deletion_parent.in_c
+
+    # try to fix channels downwards, keep track of original input output channels 
+    # so we can reset them and try fixing upwards if fixing downwards fails
+    in_out_channels = deletion_child.get_input_output_channels()
+    fixed = fix_channel_count_downwards(deletion_child, deletion_parent, out_c)
+    if fixed:
+      deletion_child.compute_input_output_channels()
+      check_channel_count(tree)
+    else:
+      # reset input output channels
+      deletion_child.set_input_output_channels(in_out_channels)
+      # try to fix channels from parent up
+      deletion_child.compute_input_output_channels()
+      fixed = fix_channel_count_upwards(deletion_child, deletion_child.out_c)
+      if fixed:
+        tree.compute_input_output_channels()
+        check_channel_count(tree)
+      else:
+        self.debug_logger.debug("Could not make channel counts agree after deleting ops")
+        assert False, "Could not make channel counts agree after deleting ops"
 
 
 """
@@ -317,70 +584,63 @@ def delete_nodes(self, tree, node, already_deleted=None):
     already_deleted = {}
 
   parent = node.parent
-  cur_node = node
-  deleted_nodes = set()
+  deleted_nodes = {}
 
-  while True:
-    deleted_nodes.add((cur_node, id(cur_node)))
-    if isinstance(cur_node, Binop):
-      # if op is LogSub or AddExp always keep left child
-      if type(cur_node) is LogSub or type(cur_node) is AddExp:
-        keep_left = True
-      else:
-        # decide if you're going to keep left or right child
-        keep_left = random.randint(0,1)
-      if keep_left: 
-        child = cur_node.lchild
-        deleted_nodes = deleted_nodes.union(set([(dn, id(dn)) for dn in cur_node.rchild.preorder()]))
-      else:
-        child = cur_node.rchild
-        deleted_nodes = deleted_nodes.union(set([(dn, id(dn)) for dn in cur_node.lchild.preorder()]))
+  self.debug_logger.debug(f"deleting {id(node)} {node.name}")
+  deleted_nodes[id(node)] = node
 
-    else: # deleting a Unop
-       child = cur_node.child
-
-    if parent is None:
-      break
-
-    if type(parent) is tuple:
-      for p in parent:
-        remove_node(p, cur_node, child)
+  if isinstance(node, Binop):
+    # if op is LogSub or AddExp always keep left child
+    if type(node) is LogSub or type(node) is AddExp:
+      keep_left = True
+    else: # decide if you're going to keep left or right child
+      keep_left = random.randint(0,1)
+    if keep_left: 
+      child = node.lchild
+      for dn in node.rchild.preorder():
+        deleted_nodes[id(dn)] = dn 
     else:
-      remove_node(parent, cur_node, child)
+      child = node.rchild
+      for dn in node.lchild.preorder():
+        deleted_nodes[id(dn)] = dn
 
-    if self.legal_parent_child_linearity(parent, child):
-      break
+  else: # deleting a Unop
+     child = node.child
 
-    # deletion caused illegal linearity, move up the tree to delete next node
-    if type(parent) is tuple: 
-      # parents are LogSub and AddExp - one of which will be deleted in next loop iteration
-      # the other parent will be deleted by the code below that handles deleting partners
-      cur_node = cur_node.parent[0]
-    else:
-      cur_node = cur_node.parent
+  if type(parent) is tuple:
+    for p in parent:
+      remove_node(p, node, child)
+  else:
+    remove_node(parent, node, child)
 
-    parent = cur_node.parent
+  self.fix_channels_after_deletion(tree, parent, child)
 
-  # delete partner if we deleted a sandwich node
+  illegal_parents = self.legal_parent_child_linearity(parent, child)
+  if len(illegal_parents) > 0:
+    # deletion caused illegal linearity, move up the tree to delete all illegal parents
+    self.debug_logger.debug("illegal parent child linearity")
+
+  # add newly deleted node to already_deleted
+  for deleted_id, deleted_n in deleted_nodes.items():
+    already_deleted[deleted_id] = deleted_n
+
+  # delete partners if we deleted a sandwich node
   partners_of_deleted = get_partner_nodes(deleted_nodes)
 
-  partners_of_deleted = partners_of_deleted - deleted_nodes # don't need to delete partners already deleted
-
-  # add newly deleted nodes to already_deleted
-  for dn in deleted_nodes:
-    already_deleted[id(dn)] = dn
-
-  filtered_partners_of_deleted = set()
-  for p in partners_of_deleted:
-    if not id(p) in already_deleted:
-      filtered_partners_of_deleted.add(p)
+  # filter out any partners that have already been deleted
+  filtered_partners_of_deleted = {}
+  for pid, p in partners_of_deleted.items():
+    if not pid in already_deleted or is_in_tree(tree, p):
+      filtered_partners_of_deleted[pid] = p
 
   # must remove partner connections that refer back to deleted_nodes - else infinite recursion deletion
-  remove_deleted_partner_connections(filtered_partners_of_deleted, deleted_nodes)
-  for n, nid in filtered_partners_of_deleted:
+  remove_deleted_partner_connections(tree, filtered_partners_of_deleted, deleted_nodes)
+
+  for nid, n in filtered_partners_of_deleted.items():
     tree = self.delete_nodes(tree, n, already_deleted)
   
-  self.fix_channels_after_deletion(tree, parent, child)
+  for n in illegal_parents:
+    tree = self.delete_nodes(tree, n, already_deleted)
 
   return tree
 
@@ -397,6 +657,7 @@ def select_node_to_delete(self, tree):
   preorder_nodes = tree.preorder()
   n = len(preorder_nodes)
   tree.compute_size(set(), count_all_inputs=True)
+  self.debug_logger.debug(f"finished computing size {tree.size}")
   # rejections = 0
  
   while True:
@@ -432,6 +693,7 @@ def delete_mutation(self, tree, node=None):
   if node is None:
     return None
 
+  self.debug_logger.debug(f"the chosen delete node {node} id {tree.get_preorder_id(node)}")
   self.current_mutation_info["delete_id"] = tree.get_preorder_id(node)
   tree = self.delete_nodes(tree, node)
   tree.compute_input_output_channels()
@@ -464,7 +726,7 @@ def get_insert_types(self, parent, child):
     parent = parent[0]
   if isinstance(parent, Linear):
     if isinstance(child, NonLinear):
-      flip = random.randint(0,9)
+      flip = random.randint(0,10)
       if flip < 7:
         return [special_insert_ops]
       else:
@@ -476,7 +738,7 @@ def get_insert_types(self, parent, child):
       assert False, "Linear parent cannot have Linear child"
   elif isinstance(parent, NonLinear):
     if isinstance(child, Linear):
-      flip = random.randint(0,9)
+      flip = random.randint(0,10)
       if flip < 7:
         return [special_insert_ops]
       else:
@@ -497,8 +759,8 @@ def get_insert_types(self, parent, child):
 """
 connects insertion parent node to newly created child
 insert_child: the node above which the insertion occured
-insert_parent: the original parent of insert_child
-node: the node inserted directly below insert_parent
+insert_parent: the original parent (or one of the original parents) of insert_child
+node: the node that was inserted between the child and the parent 
 """
 @extclass(Mutator)
 def link_insertion_parent_to_new_child(self, insert_parent, insert_child, node):
@@ -521,35 +783,32 @@ def link_insertion_parent_to_new_child(self, insert_parent, insert_child, node):
     assert False, "Should not be inserting after an input node"
 
 @extclass(Mutator)
-def insert_binop(self, tree, input_set, insert_op, insert_child):
+def insert_binop(self, tree, input_set, insert_op, insert_parent, insert_child, make_copy=False):
   OpClass, use_child, use_right = insert_op
   if not hasattr(tree, "size"):
     tree.compute_size(set(), count_all_inputs=True)
 
   #### pick a subtree ####
   if issubclass(OpClass, BinopIII):
-    # make subtree's output channels match other child's output channels
+    # make subtree's output channels and spatial resolution match other child's output channels
     if use_child is None:
       if tree.size < self.args.min_subtree_size + 2:
         self.debug_logger.debug(f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}")
         assert False, f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}"
-      subtree = self.pick_subtree(tree, input_set, target_out_c=insert_child.out_c, resolution=spatial_resolution(insert_child))
-      subtree.compute_input_output_channels()         
+      subtree = self.pick_subtree(tree, input_set, insert_child, target_out_c=insert_child.out_c, resolution=spatial_resolution(insert_child), make_copy=make_copy)
     else:
       subtree = use_child
-      # make channel count of insert_child agree with required use_child
-      fixed = fix_channel_count_downwards(insert_child, use_child.out_c)
+      # make channel count of insert_child agree with required use_child since we cannot change the required child
+      fixed = fix_channel_count_downwards(insert_child, insert_parent, use_child.out_c)
       if not fixed:
         self.debug_logger.debug(f"Could not make channel counts of insert_child agree with required child")
         assert False, f"Could not make channel counts of insert_child agree with required child"
-  else: # Op is BinopIJK - keep the output channels of the chosen subtree
-    # subtree = self.pick_subtree(tree, input_set, root_id=6)
+  else: # Op is BinopIJK - keep output channels of the chosen subtree unchanged but make spatial resolution match insert child's
     if tree.size < self.args.min_subtree_size + 2:
       self.debug_logger.debug(f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}")
       assert False, f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}"
-    subtree = self.pick_subtree(tree, input_set, resolution=spatial_resolution(insert_child))
+    subtree = self.pick_subtree(tree, input_set, insert_child, resolution=spatial_resolution(insert_child), make_copy=make_copy)
   
-
   # check spatial resolutions of subtree and insert_child match 
   subtree_res = spatial_resolution(subtree)
   insert_child_res = spatial_resolution(insert_child)
@@ -576,28 +835,59 @@ def insert_binop(self, tree, input_set, insert_op, insert_child):
   else:
     new_node = OpClass(subtree, insert_child)
 
-  if use_child: # add a second parent if we're given a child to use
-    subtree.parent = (subtree.parent, new_node)
+  # parent is not none when inserting a required right child OR not making a copy of the chosen subtree
+  if subtree.parent: 
+    if type(subtree.parent) is tuple: 
+      subtree.parent = subtree.parent + tuple([new_node])
+    else:
+      subtree.parent = (subtree.parent, new_node)
   else:
     subtree.parent = new_node
-  
-  insert_child.parent = new_node
+
+  if type(insert_child.parent) is tuple:
+    parents = list(insert_child.parent)
+    for p in insert_child.parent:
+      if id(p) == id(insert_parent):
+        parents.remove(p)
+        parents += [new_node]
+    insert_child.parent = tuple(parents)
+  else:
+    insert_child.parent = new_node  
 
   return new_node
 
+"""
+Inserts a unary op
+resets insert_child's parent to point to newly created node
+new node points to insert_child as its child
+INSERT PARENT IS NOT MODIFIED TO POINT TO THE NEW NODE
+"""
 @extclass(Mutator)
-def insert_unary_op(self, OpClass, insert_child):
+def insert_unary_op(self, OpClass, insert_parent, insert_child):
   params = list(signature(OpClass).parameters.items())
-  if len(params) == 3 or len(params) == 4: # child, out_c, name, kwidth
-    out_c = self.args.default_channels #insert_child.out_c 
+  if len(params) >= 3 and len(params) <= 5: # must be a conv, possible params: child, out_c, name, groups, kwidth
+    if issubclass(OpClass, UnopIIdiv):
+      in_c_factors = get_factors(insert_child.out_c)
+      out_c = random.sample(in_c_factors, 1)[0]
+    else:
+      out_c = self.args.default_channels
     new_node = OpClass(insert_child, out_c)
   elif len(params) == 2:
     new_node = OpClass(insert_child)
   else:
     self.debug_logger.debug("Invalid number of parameters for Unary op")
     assert False, "Invalid number of parameters for Unary op"
+  
+  if type(insert_child.parent) is tuple:
+    parents = list(insert_child.parent)
+    for p in insert_child.parent:
+      if id(p) == id(insert_parent):
+        parents.remove(p)
+        parents += [new_node]
+    insert_child.parent = tuple(parents)
+  else:
+    insert_child.parent = new_node  
 
-  insert_child.parent = new_node
   return new_node
 
 """
@@ -665,10 +955,11 @@ inserts an activation function under a Mul node if necessary
 def insert_activation_under_mul(self, tree, input_set, mul_node):
   relu_or_softmax = set((Relu, Softmax))
   childtypes = set((type(mul_node.lchild), type(mul_node.rchild)))
+  insert_nodes = None
   if len(relu_or_softmax.intersection(childtypes)) == 0:
     insert_op, insert_child = choose_activation_under_mul(mul_node)
-    insert_nodes = self.insert(tree, insert_op, insert_child, input_set)
-  return 
+    insert_nodes, tree = self.insert(tree, insert_op, mul_node, insert_child, input_set)
+  return insert_nodes, tree
 
 """
 chooses were to insert sandwich op's partner
@@ -710,7 +1001,12 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
   else:
     insert_ops = [(partner_op_class, None, None)]
 
-  return insert_ops, insert_child
+  insert_parent = insert_child.parent
+  if type(insert_parent) is tuple:
+    parent_types = [type(p) for p in insert_parent]
+    if not LogSub in parent_types and not AddExp in parent_types:
+      insert_parent = random.sample(insert_parent, 1)[0]
+  return insert_ops, insert_parent, insert_child
 
 
 """
@@ -720,19 +1016,18 @@ Upsample when upsample is inserted above a Binop
 @extclass(Mutator)
 def fix_res(self, tree, input_set, curr_node):
   if isinstance(curr_node, Upsample) or isinstance(curr_node, Input):
-    self.insert(tree, [(Downsample, None, None)], curr_node, input_set)
-    return
+    # insert downsample between curr_node and all curr_node's parents
+    return self.insert(tree, [(Downsample, None, None)], curr_node.parent, curr_node, input_set)
   elif isinstance(curr_node, Unop):
-    self.fix_res(tree, input_set, curr_node.child)
-    return
+    return self.fix_res(tree, input_set, curr_node.child)
   elif isinstance(curr_node, Binop):
     lres = spatial_resolution(curr_node.lchild)
     rres = spatial_resolution(curr_node.rchild)
     if lres == Resolution.FULL:
-      self.fix_res(tree, input_set, curr_node.lchild)
+      return self.fix_res(tree, input_set, curr_node.lchild)
     if rres == Resolution.FULL:
-      self.fix_res(tree, input_set, curr_node.rchild)
-    return
+      return self.fix_res(tree, input_set, curr_node.rchild)
+
 
 """
 inserts the partner op of the given op_node with class op_class
@@ -741,12 +1036,12 @@ inserts the partner op of the given op_node with class op_class
 def insert_partner_op(self, tree, input_set, op_class, op_node):
   op_partner_class = sandwich_pairs[op_class]  
   try:
-    insert_op, insert_child = self.choose_partner_op_loc(op_node, op_class, op_partner_class)
+    insert_op, insert_parent, insert_child = self.choose_partner_op_loc(op_node, op_class, op_partner_class)
   except AssertionError:
     self.debug_logger.debug(f"failed to find insertion location for partner of {op_node}")
     assert False, f"failed to find insertion location for partner of {op_node}"
   
-  insert_nodes = self.insert(tree, insert_op, insert_child, input_set)
+  insert_nodes, tree = self.insert(tree, insert_op, insert_parent, insert_child, input_set)
   partner_node = insert_nodes[0]
 
   if op_partner_class is Upsample:
@@ -754,20 +1049,37 @@ def insert_partner_op(self, tree, input_set, op_class, op_node):
     if find_type_between(partner_node, op_node, Binop):
       self.fix_res(tree, input_set, partner_node.child) 
 
+  # NOT GOING TO DEAL WITH THIS FOR NOW BECAUSE WE'RE NOT INSERTING LOGSUB OR ADDEXP
   # manually fix linear / nonlinearity by inserting an additional node
-  if issubclass(op_partner_class, NonLinear):
-    if isinstance(partner_node.parent, NonLinear):
-      insert_ops = [(random.sample(linear_ops, 1)[0], None, None)] 
-      insert_nodes = insert(tree, insert_ops, partner_node, input_set)
-    elif isinstance(insert_child, NonLinear):
-      insert_ops = [(random.sample(linear_ops, 1)[0], None, None)] 
-      insert_nodes = insert(tree, insert_ops, insert_child, input_set)
+  # if issubclass(op_partner_class, NonLinear):
+  #   if isinstance(partner_node.parent, NonLinear):
+  #     insert_ops = [(random.sample(linear_ops, 1)[0], None, None)] 
+  #     insert_nodes = insert(tree, insert_ops, partner_node, input_set)
+  #   elif isinstance(insert_child, NonLinear):
+  #     insert_ops = [(random.sample(linear_ops, 1)[0], None, None)] 
+  #     insert_nodes = insert(tree, insert_ops, insert_child, input_set)
 
   # assign pointers to partner nodes
   add_partner(op_node, partner_node)
   add_partner(partner_node, op_node)
 
-  return 
+  return insert_nodes, tree
+
+
+def get_out_c_from_parent(child, parent):
+  if parent.num_children == 3:
+    children = [parent.child1, parent.child2, parent.child3]
+    out_c = [parent.in_c[0], parent.in_c[1], parent.in_c[2]]
+  elif parent.num_children == 2:
+    children = [parent.lchild, parent.rchild]
+    out_c = [parent.in_c[0], parent.in_c[1]]
+  else:
+    children = [parent.child]
+    out_c = [parent.in_c]
+  for i, c in enumerate(children):
+    if id(c) == id(child):
+      return out_c[i]
+
 
 """
 Inserts nodes of the given insert ops above the insert child
@@ -782,28 +1094,28 @@ input_set: the inputs that the resulting subtree is allowed to use
 returns the new nodes in the same order as their corresponding insert_ops
 """
 @extclass(Mutator)
-def insert(self, tree, insert_ops, insert_child, input_set):
-  self.debug_logger.debug(f"inserting {insert_ops} the tree before insertion {tree.dump()}")
-  insert_parent = insert_child.parent
+def insert(self, tree, insert_ops, insert_parent, insert_child, input_set):
   cur_child = insert_child
   new_nodes = [] 
 
   for i, (OpClass, use_child, use_right) in enumerate(reversed(insert_ops)):
     cur_child.compute_input_output_channels()
+
     if issubclass(OpClass, Binop):
       params = list(signature(OpClass).parameters.items())
       assert len(params) == 3, f"Invalid number of parameters {len(params)} for Binary op"
-      new_node = self.insert_binop(tree, input_set, (OpClass, use_child, use_right), cur_child)
+      new_node = self.insert_binop(tree, input_set, (OpClass, use_child, use_right), insert_parent, cur_child)
      
     elif issubclass(OpClass, Unop):
-      new_node = self.insert_unary_op(OpClass, cur_child)
+      new_node = self.insert_unary_op(OpClass, insert_parent, cur_child)
       
     new_nodes = [new_node] + new_nodes
     cur_child = new_node
 
-  cur_child.parent = insert_parent
+    cur_child.parent = insert_parent  
 
-  if type(insert_parent) is tuple:
+  # insert parent is tuple when parents are LogSub / AddExp
+  if type(insert_parent) is tuple: 
     for p in insert_parent:
       self.link_insertion_parent_to_new_child(p, insert_child, cur_child)
   else:
@@ -811,16 +1123,26 @@ def insert(self, tree, insert_ops, insert_child, input_set):
 
   # make sure output channels of inserted nodes agree with parent
   cur_child.compute_input_output_channels()
-  self.debug_logger.debug(f"the tree right before fixing channels {tree.dump()}")
+  cur_child_id = tree.get_preorder_id(cur_child)
+  new_node_copies = [tree.get_preorder_id(n) for n in new_nodes]
+  tree_copy = copy_subtree(tree) # make a copy in case fixing upwards fails, we can try fixing down
+
   fixed = fix_channel_count_upwards(cur_child, cur_child.out_c)
   if not fixed:
-    self.debug_logger.debug("unable to make inserted nodes channel counts agree with tree")
-    assert False, "Could not make channel counts agree with inserted ops"
+    output_c = get_out_c_from_parent(cur_child, insert_parent)
+    cur_child_in_copy = tree_copy.preorder()[cur_child_id]
+    fixed = fix_channel_count_downwards(cur_child_in_copy, insert_parent, output_c)
+    if fixed:
+      tree = tree_copy
+      new_nodes = new_node_copies
+    else:
+      self.debug_logger.debug("unable to make inserted nodes channel counts agree with tree")
+      assert False, "Could not make channel counts agree with inserted ops"
 
   tree.compute_input_output_channels()
   check_channel_count(tree)
 
-  return new_nodes
+  return new_nodes, tree
 
 
 """
@@ -837,6 +1159,11 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
       insert_above_node_id = random.randint(1, len(preorder_nodes)-1)
     insert_child = preorder_nodes[insert_above_node_id]
     insert_parent = insert_child.parent
+
+    if type(insert_parent) is tuple:
+      parent_types = [type(p) for p in insert_parent]
+      if not LogSub in parent_types and not AddExp in parent_types:
+        insert_parent = random.sample(insert_parent, 1)[0]
 
     # pick op(s) to insert
     insert_types = self.get_insert_types(insert_parent, insert_child)
@@ -862,9 +1189,9 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
   self.current_mutation_info["insert_child_id"] = insert_above_node_id
 
   try:
-    new_nodes = self.insert(tree, new_ops, insert_child, input_set)
+    new_nodes, tree = self.insert(tree, new_ops, insert_parent, insert_child, input_set)
   except AssertionError:
-    self.debug_logger.debug(f"failed to insert {new_ops} into tree\n{tree.dump()}\nwith insert child\n{insert_child.dump()}")
+    self.debug_logger.debug(f"failed to insert {new_ops}")
     assert False, "insertion mutation failed"
     
   # if we inserted a sandwich op, we must insert its partner node as well
@@ -874,16 +1201,16 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
   """
   for (OpClass,_,_), new_node in zip(new_ops, new_nodes):
     if OpClass is Mul:
-      self.insert_activation_under_mul(tree, input_set, new_node)
+      _, tree = self.insert_activation_under_mul(tree, input_set, new_node)
     if OpClass in sandwich_ops:
-      self.insert_partner_op(tree, input_set, OpClass, new_node)
+      _, tree = self.insert_partner_op(tree, input_set, OpClass, new_node)
   return tree
 
 
 def has_downsample(tree):
   if isinstance(tree, Downsample):
     return True
-  elif tree.num_children == 3:
+  if tree.num_children == 3:
     c1_has = has_downsample(tree.child1)
     c2_has = has_downsample(tree.child2)
     c3_has = has_downsample(tree.child3)
@@ -900,7 +1227,7 @@ def has_downsample(tree):
 def has_upsample(tree):
   if isinstance(tree, Upsample):
     return True
-  elif tree.num_children == 3:
+  if tree.num_children == 3:
     c1_has = has_upsample(tree.child1)
     c2_has = has_upsample(tree.child2)
     c3_has = has_upsample(tree.child3)
@@ -936,7 +1263,6 @@ def splits_sandwich_ops_helper(tree, partner_pool=None):
   if hasattr(tree, "partner_set") and not \
   (isinstance(tree, Downsample) or isinstance(tree, Upsample)):
     partner_pool = partner_pool.union(tree.partner_set)
-
   if tree.num_children == 3:
     child1_pool = splits_sandwich_ops_helper(tree.child1, partner_pool)
     child2_pool = splits_sandwich_ops_helper(tree.child2, child1_pool)
@@ -950,13 +1276,39 @@ def splits_sandwich_ops_helper(tree, partner_pool=None):
 
 
 """
+returns whether or not the chosen subtree will induce a loop
+"""
+def induces_loop(insert_child, subtree):
+  if id(insert_child) == id(subtree):
+    return True
+  if insert_child.parent is None:
+    return False 
+  parent = insert_child.parent
+  if type(parent) is tuple:
+    for p in parent:
+      if id(p) == id(subtree):
+        return True
+      if induces_loop(p, subtree):
+        return True
+  else:
+    if id(parent) == id(subtree):
+      return True
+    return induces_loop(parent, subtree)
+  return False
+
+
+"""
 checks whether subtree obeys the restricted input set and can be modified 
 to agree with given target output channels.
 if resolution is given, checks spatial resolution of subtree matches
 Returns a copy of the subtree with channels appropriately modified if necessary
 """
 @extclass(Mutator)
-def allow_subtree(self, root, input_set, target_out_c=None, resolution=None):
+def allow_subtree(self, root, input_set, insert_child, target_out_c=None, resolution=None, make_copy=False):
+  if id(insert_child) == id(root):
+    self.debug_logger.debug(f"chosen subtree cannot be the same tree as other child of binop")
+    assert False, f"chosen subtree cannot be the same tree as other child of binop "
+
   subtree_resolution = spatial_resolution(root)
   if subtree_resolution != resolution:
     self.debug_logger.debug(f"subtree with resolution {subtree_resolution} does not match required resolution {resolution}")
@@ -978,19 +1330,28 @@ def allow_subtree(self, root, input_set, target_out_c=None, resolution=None):
   splits = splits_sandwich_ops(root)
   assert (not splits), f"rejecting subtree: splits sandwich_ops"
   
-  root_copy = copy_subtree(root)
-  
-  # reject trees that can't be made to aggree with desired output channels
+  # have to make copy if chosen subtree induces a loop
+  # loops occur when chosen subtree is a parent of the insert child
+  if induces_loop(insert_child, root):
+    self.debug_logger.debug("CHOSEN SUBTREE INDUCES LOOP")
+
+  self.debug_logger.debug(f"the subtree: {root.dump()}")
+  self.debug_logger.debug(f"the subtree parents {root.parent}")
+
+  if make_copy or induces_loop(insert_child, root):
+    root = copy_subtree(root)
+    root.parent = None
+  # reject trees that can't be made to agree with desired output channels
   if target_out_c:
-    in_c, out_c = root_copy.compute_input_output_channels()
+    in_c, out_c = root.compute_input_output_channels()
     if out_c != target_out_c: 
-      fixed = fix_channel_count_downwards(root_copy, target_out_c)
+      fixed = fix_channel_count_downwards(root, None, target_out_c)
       if fixed:
-        root_copy.compute_input_output_channels()
+        root.compute_input_output_channels()
       else:
         self.debug_logger.debug(f"rejecting subtree: cannot make output channels {out_c} match {target_out_c}")
         assert False, f"rejecting subtree: cannot make output channels {out_c} match {target_out_c}"
-  return root_copy
+  return root
   
 
 """
@@ -998,7 +1359,8 @@ selects a subtree from the given tree at root.
 Returns a copy of that subtree without any pointers to its parent tree
 """
 @extclass(Mutator)
-def pick_subtree(self, root, input_set, target_out_c=None, resolution=None, root_id=None):
+def pick_subtree(self, root, input_set, insert_child, target_out_c=None, resolution=None, root_id=None, make_copy=False):
+  self.debug_logger.debug(f"The tree {root.dump()}")
   preorder = root.preorder()
   failures = 0
   while True:
@@ -1007,19 +1369,19 @@ def pick_subtree(self, root, input_set, target_out_c=None, resolution=None, root
     else:
       subtree_id = random.randint(1, len(preorder)-1)
     subtree = preorder[subtree_id]
-    in_c, out_c = subtree.compute_input_output_channels()
+    subtree.compute_input_output_channels()
     try: 
-      subtree_copy = self.allow_subtree(subtree, input_set, target_out_c, resolution)
+      chosen_subtree = self.allow_subtree(subtree, input_set, insert_child, target_out_c, resolution, make_copy)
     except AssertionError:
       failures += 1
       self.debug_logger.debug("selected subtree is invalid")
       if failures > self.args.subtree_selection_tries:
-        self.debug_logger.debug(f"TOO MANY TRIES TO FIND SUBTREE with resolution {resolution} from:")
-        self.debug_logger.debug(root.dump())
+        self.debug_logger.debug(f"TOO MANY TRIES TO FIND SUBTREE with resolution {resolution}")
         assert False, f"Too many tries to find subtree with resolution {resolution}"
     else:
-      subtree_copy.parent = None
-      return subtree_copy
+      if make_copy:
+        chosen_subtree.parent = None
+      return chosen_subtree
 
 
 """
@@ -1033,26 +1395,15 @@ def accept_tree(self, tree):
 
   if spatial_resolution(tree) == Resolution.INVALID:
     return False
-
+    
   tree_type = type(tree) 
 
-  if tree_type is SumR: 
+  if tree_type is InterleavedSum or tree_type is GroupedSum: 
     # don't sum reduce over one channel
     if tree.child.out_c == 1:
-      self.debug_logger.debug("rejecting SumR over one channel")
+      self.debug_logger.debug("rejecting sum over one channel")
       return False
-    # don't use sum reduce if model immediately expands channel count again afterwards
-    parent = tree.parent
-    banned_parents = set((Conv1x1, Conv1D, Conv2D, Softmax))
-    while parent:
-      # make sure the first parent seen is not a conv or a softmax - ignoring relus as parents
-      if type(parent) in banned_parents:
-        self.debug_logger.debug("Rejecting SumR with parent Conv / Softmax")
-        return False
-      elif (not type(parent) is Relu) and (not type(parent) in banned_parents):
-        break
-      parent = parent.parent
-
+   
   # Conv1D must have output channels % 4 == 0
   if tree_type is Conv1D and tree.out_c % 4 != 0:
     return False
@@ -1087,7 +1438,7 @@ def accept_tree(self, tree):
   if tree_type is Softmax and tree.out_c == 1:
     return False
 
-  # don't allow nested upsample / downsample and don't allow two softmaxes in same branch
+  # don't allow two upsamples / downsamples or two softmaxes in same branch
   if tree_type is Upsample or tree_type is Softmax:
     ancestors_from_binop_to_node = find_closest_ancestor(tree, set((Binop,)))
     instances = sum([1 for n in ancestors_from_binop_to_node if type(n) is tree_type])
@@ -1120,7 +1471,7 @@ def accept_tree(self, tree):
   # Mul must have either Softmax or Relu as one of its children
   # and do not allow two Mul in a row
   if tree_type is Mul:
-    if type(tree.rchild) is tree_type or type(tree.lchild) is tree_type:
+    if type(tree.rchild) is Mul or type(tree.lchild) is Mul:
       self.debug_logger.debug("rejecting two consecutive Mul")
       return False
     relu_or_softmax = set((Relu, Softmax))
@@ -1137,5 +1488,4 @@ def accept_tree(self, tree):
     return self.accept_tree(tree.child)
   elif tree.num_children == 3:
     return self.accept_tree(tree.child1) and self.accept_tree(tree.child2) and self.accept_tree(tree.child3)
-
-        
+ 

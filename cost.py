@@ -16,17 +16,18 @@ from demosaic_ast import *
 from dataset import GreenDataset
 from database import Database
 from pareto_util import get_pareto_ranks
-from type_check import layout_type, Layout
 
 ADD_COST = 1
 MUL_COST = 1
 DIV_COST = 10
 LOGEXP_COST = 10
 RELU_COST = 1
-DOWNSAMPLE_FACTOR_SQ = 9
-DIRECTIONS = 4
-KERNEL_W = 5
+DOWNSAMPLE_FACTOR_SQ = 4
+DIRECTIONS = 2
+KERNEL_W = 3
 
+SCALE_FACTOR = 2
+BILINEAR_COST = 3
 
 """
 probabilistically picks models to reproduce according to their PSNR
@@ -286,80 +287,65 @@ class ModelEvaluator():
 
 
 	def compute_cost(self, root):
+		return self.compute_cost_helper(root) / 4 
+		
+	def compute_cost_helper(self, root):
 		cost = 0
 		if isinstance(root, Input):
 			return cost
-		elif isinstance(root, QuadInput):
-			return cost
 		elif isinstance(root, Add) or isinstance(root, Sub):
 			cost += root.in_c[0] * ADD_COST
-			cost += self.compute_cost(root.lchild)
-			cost += self.compute_cost(root.rchild)
+			cost += self.compute_cost_helper(root.lchild)
+			cost += self.compute_cost_helper(root.rchild)
 		elif isinstance(root, Mul):
 			cost += root.in_c[0] * MUL_COST
-			cost += self.compute_cost(root.lchild)
-			cost += self.compute_cost(root.rchild) 
+			cost += self.compute_cost_helper(root.lchild)
+			cost += self.compute_cost_helper(root.rchild) 
 		elif isinstance(root, LogSub) or isinstance(root, AddExp):
 			cost += root.in_c[0] * (2*LOGEXP_COST + ADD_COST)
-			cost += self.compute_cost(root.lchild)
-			cost += self.compute_cost(root.rchild) 
+			cost += self.compute_cost_helper(root.lchild)
+			cost += self.compute_cost_helper(root.rchild) 
 		elif isinstance(root, Stack):
-			cost += self.compute_cost(root.lchild)
-			cost += self.compute_cost(root.rchild) 
-		elif isinstance(root, ChromaExtractor):
-			cost += self.compute_cost(root.lchild)
-			cost += self.compute_cost(root.rchild)
-		elif isinstance(root, RGrExtractor) or isinstance(root, RGbExtractor) or isinstance(root, RBExtractor):
-			cost += self.compute_cost(root.child)
-		elif isinstance(root, RBQuadExtractor) or isinstance(root, RGB2QuadExtractor):
-			cost += self.compute_cost(root.lchild)
-			cost += self.compute_cost(root.rchild)
-		elif isinstance(root, RGBQuadExtractor):
-			cost += self.compute_cost(root.child1)
-			cost += self.compute_cost(root.child2)
-			cost += self.compute_cost(root.child3)
+			cost += self.compute_cost_helper(root.lchild)
+			cost += self.compute_cost_helper(root.rchild) 
+		elif isinstance(root, RGBExtractor):
+			cost += self.compute_cost_helper(root.child1)
+			cost += self.compute_cost_helper(root.child2)
+			cost += self.compute_cost_helper(root.child3)
 		elif isinstance(root, GreenExtractor):
-			cost += self.compute_cost(root.lchild)
-			cost += self.compute_cost(root.rchild) 
+			cost += self.compute_cost_helper(root.lchild)
+			cost += self.compute_cost_helper(root.rchild) 
 		elif isinstance(root, Softmax):
 			cost += root.in_c * (LOGEXP_COST + DIV_COST + ADD_COST)
-			cost += self.compute_cost(root.child)
+			cost += self.compute_cost_helper(root.child)
 		elif isinstance(root, Relu):
 			cost += root.in_c * RELU_COST
-			cost += self.compute_cost(root.child)
+			cost += self.compute_cost_helper(root.child)
 		elif isinstance(root, Log) or isinstance(root, Exp):
 			cost += root.in_c * LOGEXP_COST	
-			cost += self.compute_cost(root.child)
+			cost += self.compute_cost_helper(root.child)
 		elif isinstance(root, Downsample):
-			cost += root.in_c * ADD_COST 
-			cost += self.compute_cost(root.child) 
-			cost *= DOWNSAMPLE_FACTOR_SQ
+			downsample_k = SCALE_FACTOR * 2
+			cost += root.in_c * root.out_c * downsample_k * downsample_k * MUL_COST
+			cost += self.compute_cost_helper(root.child) 
 		elif isinstance(root, Upsample):
-			cost += root.in_c * ADD_COST
-			cost += self.compute_cost(root.child) / DOWNSAMPLE_FACTOR_SQ
+			cost += root.in_c * BILINEAR_COST
+			cost += self.compute_cost_helper(root.child) / (SCALE_FACTOR**2)
 		elif isinstance(root, Conv1x1):
-			cost += root.in_c * root.out_c * MUL_COST
-			cost += self.compute_cost(root.child)
+			cost += root.groups * ((root.in_c // root.groups) * (root.out_c // root.groups) * MUL_COST)
+			cost += self.compute_cost_helper(root.child)
 		elif isinstance(root, Conv1D):
-			#cost += root.in_c * root.out_c * DIRECTIONS * KERNEL_W * MUL_COST
-			cost += root.in_c * root.out_c * DIRECTIONS * root.kwidth * MUL_COST
-			cost += self.compute_cost(root.child)
+			cost += root.groups * ((root.in_c // root.groups) * (root.out_c // root.groups) * DIRECTIONS * root.kwidth * MUL_COST)
+			cost += self.compute_cost_helper(root.child)
 		elif isinstance(root, Conv2D):
-			#cost += root.in_c * root.out_c * KERNEL_W * KERNEL_W * MUL_COST
-			cost += root.in_c * root.out_c * root.kwidth * root.kwidth * MUL_COST
-			cost += self.compute_cost(root.child)
-		elif isinstance(root, SumR):
-			cost += root.in_c * ADD_COST
-			cost += self.compute_cost(root.child)
+			cost += root.groups * ((root.in_c // root.groups) * (root.out_c // root.groups) * root.kwidth**2 * MUL_COST)
+			cost += self.compute_cost_helper(root.child)
+		elif isinstance(root, InterleavedSum) or isinstance(root, GroupedSum):
+			cost += ((root.in_c / root.out_c) - 1) * root.out_c * ADD_COST
+			cost += self.compute_cost_helper(root.child)
 		else:
 			print(type(root))
 			assert False, "compute cost encountered unexpected node type"
-		
-		root_layout = layout_type(root)
-		if root.parent:
-			parent_layout = layout_type(root.parent)
-			if root_layout == Layout.QUAD and parent_layout == Layout.FLAT:
-				cost /= 4
 
 		return cost
 

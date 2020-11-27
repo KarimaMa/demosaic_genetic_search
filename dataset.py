@@ -72,44 +72,10 @@ def bayer(im, return_mask=False):
 
   return im*mask
 
-"""
-def bayer(im, return_mask=False):
-  # Bayer mosaic.
-  # The patterned assumed is::
-  # G r
-  # b G
-
-  # Args:
-  # im (np.array): image to mosaic. Dimensions are [c, h, w]
-  # return_mask (bool): if true return the binary mosaic mask, instead of the mosaic image.
-
-  # Returns:
-  # np.array: mosaicked image (if return_mask==False), or binary mask if (return_mask==True)
-  
-
-  mask = np.ones_like(im)
-
-  if return_mask:
-    return mask
-
-  # green
-  mask[1, ::2, 0::2] = 0
-  mask[1, 1::2, :] = 0
-
-  # red
-  mask[0, ::2, 1::2] = 0
-  mask[0, 1::2, ::2] = 0
-
-  # blue
-  mask[2, 0::2, :] = 0
-  mask[2, 1::2, 1::2] = 0
-
-  return im*mask
-"""
-
 
 def ids_from_file(filename):
   ids = [l.strip() for l in open(filename, "r")]
+  random.shuffle(ids)
   return ids
 
 
@@ -593,22 +559,24 @@ class QuadDataset(data.Dataset):
               return_index=False, \
               green_file=None, green_filenames=None, \
               green_input=False, green_pred_input=False):
+
     if data_file:
       self.list_IDs = ids_from_file(data_file) # patch filenames
     else:
       self.list_IDs = data_filenames
 
     self.green_pred_input = green_pred_input
+    self.green_input = green_input
 
-    if self.green_pred_input:
-      assert(not (green_file is None and green_filenames is None)), "missing precomputed green data"
-      if green_file:
-        self.green_list_IDs = ids_from_file(green_file)
-      else:
-        self.green_list_IDs = green_filenames
+    if green_input:
+      if self.green_pred_input:
+        assert(not (green_file is None and green_filenames is None)), "missing precomputed green data"
+        if green_file:
+          self.green_list_IDs = ids_from_file(green_file)
+        else:
+          self.green_list_IDs = green_filenames
 
     self.return_index = return_index
-    self.green_input = green_input
 
   def __len__(self):
     return len(self.list_IDs)
@@ -646,7 +614,7 @@ class QuadDataset(data.Dataset):
     bayer_quad[3,:,:] = mosaic[0,1::2,1::2]
 
     if self.green_input:
-      input = green_quad, bayer_quad
+      input = (green_quad, bayer_quad)
     else:
       input = bayer_quad
 
@@ -654,7 +622,7 @@ class QuadDataset(data.Dataset):
 
     if self.return_index:
       return (index, input, target)
-  
+
     return (input, target) 
  
 
