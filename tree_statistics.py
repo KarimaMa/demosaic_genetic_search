@@ -165,6 +165,22 @@ def missing_neighbor_pairs(tree, missing_op_pairs):
 		missing_neighbor_pairs(child, missing_op_pairs)
 
 
+def find_missing_ops(tree, missing_ops):
+	node_op = type(tree)
+	if node_op in missing_ops:
+		missing_ops.remove(node_op)
+
+	if tree.num_children == 3:
+		children = [tree.child1, tree.child2, tree.child3]
+	elif tree.num_children == 2:
+		children = [tree.lchild, tree.rchild]
+	elif tree.num_children == 1:
+		children = [tree.child]
+	else:
+		children = []
+	
+	for c in children:
+		find_missing_ops(c, missing_ops)
 
 import argparse
 
@@ -187,6 +203,16 @@ for model_id in os.listdir(args.model_dir):
 print(f"number of missing pairs after: {len(missing_pairs)}")
 for mp in missing_pairs:
 	print(mp)
+
+missing_ops = all_ops
+print(f"number of missing ops initially: {len(missing_ops)}")
+for model_id in os.listdir(args.model_dir):
+	model_manager = util.ModelManager(args.model_dir, 0)
+	try:	
+		model = model_manager.load_model_ast(model_id)
+	except:
+		continue
+	find_missing_ops(model, missing_ops)
 
 
 
