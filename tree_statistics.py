@@ -135,20 +135,15 @@ def missing_neighbor_pairs(tree, missing_op_pairs):
 	node_op = type(tree)
 
 	if tree.parent:
-		print(tree.parent)
 		if type(tree.parent) is tuple:
 			for p in tree.parent:
 				parent_op = type(p)
 			
 				if (parent_op, node_op) in missing_op_pairs:
-					print("REMOVING")
-					exit()
 					missing_op_pairs.remove((parent_op, node_op))
 		else:
 			parent_op = type(tree.parent)
 			if (parent_op, node_op) in missing_op_pairs:
-				print(f"REMOVING {(parent_op, node_op)}")
-				exit()
 				missing_op_pairs.remove((parent_op, node_op))			
 	
 	if tree.num_children == 3:
@@ -167,7 +162,7 @@ def missing_neighbor_pairs(tree, missing_op_pairs):
 			missing_op_pairs.remove((node_op, child_op))
 
 	for child in children:
-		missing_neighbor_helper(child, missing_op_pairs)
+		missing_neighbor_pairs(child, missing_op_pairs)
 
 
 
@@ -180,13 +175,16 @@ args = parser.parse_args()
 
 
 missing_pairs = get_possible_op_pairs(all_ops)
-
+print(f"number of missing pairs initially: {len(missing_pairs)}")
 for model_id in os.listdir(args.model_dir):
 	model_manager = util.ModelManager(args.model_dir, 0)
-	model = model_manager.load_model_ast(args.model_id)
-
+	try:	
+		model = model_manager.load_model_ast(model_id)
+	except:
+		continue
 	missing_neighbor_pairs(model, missing_pairs)
 
+print(f"number of missing pairs after: {len(missing_pairs)}")
 for mp in missing_pairs:
 	print(mp)
 
