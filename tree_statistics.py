@@ -182,6 +182,53 @@ def find_missing_ops(tree, missing_ops):
 	for c in children:
 		find_missing_ops(c, missing_ops)
 
+
+def get_all_neighbors(tree, parents=None, children=None):
+	if parents is None:
+		parents = {}
+	if children is None:
+		children = {}
+
+	preorder_nodes = tree.preorder()
+
+	for n in preorder_nodes:
+		node_type = type(n)
+		if not node_type in parents:
+			parents[node_type] = set()
+
+		if tree.parent:
+			if type(tree.parent) is tuple:
+				for p in tree.parent:
+					parent_op = type(p)
+					parents[node_type].add(parent_op)				
+			else:
+				parent_op = type(tree.parent)
+				parents[node_type].add(parent_op)
+		
+		if tree.num_children == 3:
+			children = [tree.child1, tree.child2, tree.child3]
+		elif tree.num_children == 2:
+			children = [tree.lchild, tree.rchild]
+		elif tree.num_children == 1:
+			children = [tree.child]
+		else:
+			children = []
+		
+		children_ops = [type(c) for c in children]
+		
+		if not node_type in children:
+			children[node_type] = set()
+
+		for child_op in children_ops:
+			children[node_type].add(child_op)
+
+		for c in children:
+			get_all_neighbors(c, parents, children)
+
+	return parents, children
+
+
+
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -213,7 +260,18 @@ for model_id in os.listdir(args.model_dir):
 	except:
 		continue
 	find_missing_ops(model, missing_ops)
+print(f"number of missing ops after: {len(missing_ops)}")
+for mo in missing_ops:
+	print(mo)
+
+print(f"---- op neighbors ----")
+parents, children = get_all_neighbors(tree)
+for node in parents:
+	print(f"node {node} has parents {parents[node]}")
+	print(f"node {node} has children {children[node]}")
 
 
 
-		
+
+
+
