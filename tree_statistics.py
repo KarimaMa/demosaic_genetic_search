@@ -183,38 +183,38 @@ def find_missing_ops(tree, missing_ops):
 		find_missing_ops(c, missing_ops)
 
 
-def get_all_neighbors(tree, parents=None, children=None):
-	if parents is None:
-		parents = {}
-	if children is None:
-		children = {}
-
-	preorder_nodes = tree.preorder()
-
+def get_all_neighbors(root, parents, children, seen=None):
+	if seen is None:
+		seen = set()
+	preorder_nodes = root.preorder()
 	for n in preorder_nodes:
+		if id(n) in seen:
+			continue
+		else:
+			seen.add(id(n))
 		node_type = type(n)
 		if not node_type in parents:
 			parents[node_type] = set()
 
-		if tree.parent:
-			if type(tree.parent) is tuple:
-				for p in tree.parent:
+		if root.parent:
+			if type(root.parent) is tuple:
+				for p in root.parent:
 					parent_op = type(p)
 					parents[node_type].add(parent_op)				
 			else:
-				parent_op = type(tree.parent)
+				parent_op = type(root.parent)
 				parents[node_type].add(parent_op)
 		
-		if tree.num_children == 3:
-			children = [tree.child1, tree.child2, tree.child3]
-		elif tree.num_children == 2:
-			children = [tree.lchild, tree.rchild]
-		elif tree.num_children == 1:
-			children = [tree.child]
+		if root.num_children == 3:
+			node_children = [root.child1, root.child2, root.child3]
+		elif root.num_children == 2:
+			node_children = [root.lchild, root.rchild]
+		elif root.num_children == 1:
+			node_children = [root.child]
 		else:
-			children = []
+			node_children = []
 		
-		children_ops = [type(c) for c in children]
+		children_ops = [type(c) for c in node_children]
 		
 		if not node_type in children:
 			children[node_type] = set()
@@ -222,8 +222,8 @@ def get_all_neighbors(tree, parents=None, children=None):
 		for child_op in children_ops:
 			children[node_type].add(child_op)
 
-		for c in children:
-			get_all_neighbors(c, parents, children)
+		for c in node_children:
+			get_all_neighbors(c, parents, children, seen)
 
 	return parents, children
 
@@ -265,10 +265,24 @@ for mo in missing_ops:
 	print(mo)
 
 print(f"---- op neighbors ----")
-parents, children = get_all_neighbors(tree)
+parents = {}
+children = {}
+for model_id in os.listdir(args.model_dir):
+	model_manager = util.ModelManager(args.model_dir, 0)
+	try:	
+		model = model_manager.load_model_ast(model_id)
+	except:
+		continue
+
+	get_all_neighbors(model, parents, children)
+
 for node in parents:
-	print(f"node {node} has parents {parents[node]}")
-	print(f"node {node} has children {children[node]}")
+	print(f"node {node} has parents:")
+	for p in parents[node]:
+		print(p)
+	print(f"node {node} has children:")
+	for c in children[node]:
+		print(c)
 
 
 
