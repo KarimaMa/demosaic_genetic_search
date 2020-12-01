@@ -90,7 +90,7 @@ class Trainer():
     self.args = args  
     self.model_evaluator = ModelEvaluator(args)
 
-    mp.set_start_method("spawn")
+    mp.set_start_method("spawn", force=True)
 
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '29500'

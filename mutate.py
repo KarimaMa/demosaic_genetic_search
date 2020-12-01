@@ -1391,13 +1391,14 @@ rejects stupid trees
 @extclass(Mutator)
 def accept_tree(self, tree):
   if len(tree.preorder()) > self.args.max_nodes:
+    self.debug_logger.debug(f"rejecting tree with size {len(tree.preorder())} larger than max tree size")
     return False
 
   if spatial_resolution(tree) == Resolution.INVALID:
+    self.debug_logger.debug("rejecting invalid spatial resolution")
     return False
     
   tree_type = type(tree) 
-
   if tree_type is InterleavedSum or tree_type is GroupedSum: 
     # don't sum reduce over one channel
     if tree.child.out_c == 1:

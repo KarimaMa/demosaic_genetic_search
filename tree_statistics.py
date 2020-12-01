@@ -287,22 +287,26 @@ for node in parents:
 		print(c)
 
 
-print(f"--- enumerating different subtrees of size 4")
-seen_subtrees = {}
-for model_id in os.listdir(args.model_dir):
-	model_manager = util.ModelManager(args.model_dir, 0)
-	try:	
-		model = model_manager.load_model_ast(model_id)
-	except:
-		continue
+for tree_size in [4,5,6]:
+	print(f"--- enumerating different subtrees of size {tree_size}")
+	seen_subtrees = {}
+	for model_id in os.listdir(args.model_dir):
+		model_manager = util.ModelManager(args.model_dir, 0)
+		try:	
+			model = model_manager.load_model_ast(model_id)
+		except:
+			continue
 
-	preorder_nodes = model.preorder()
-	for node in preorder_nodes:
-		enumerate_subtrees(node, 0, 4, seen_subtrees)
-		
-	for s in seen_subtrees:
-		print(seen_subtrees[s].dump())
-	exit()
+		preorder_nodes = model.preorder()
+		for node in preorder_nodes:
+			enumerate_subtrees(node, 0, tree_size, seen_subtrees)
+	filtered_subtrees = {}			
+	for s, subtree in seen_subtrees.items():
+		subtree_preorder = subtree.preorder()
+		if len(subtree_preorder) == tree_size:
+			filtered_subtrees[s] = subtree
+
+	print(f"number of different subtrees of size {tree_size}: {len(filtered_subtrees)}")
 
 
 

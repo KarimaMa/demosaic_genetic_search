@@ -102,7 +102,8 @@ if __name__ == "__main__":
 
 	new_tree.compute_input_output_channels()
 	type_check.check_channel_count(new_tree)
-	mutator.accept_tree(new_tree)
+	accepted = mutator.accept_tree(new_tree)
+	print(f"is tree accepted {accepted}")
 	type_check.check_linear_types(new_tree)
 
 
