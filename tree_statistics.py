@@ -252,6 +252,7 @@ for mp in missing_pairs:
 	print(mp)
 
 missing_ops = all_ops
+
 print(f"number of missing ops initially: {len(missing_ops)}")
 for model_id in os.listdir(args.model_dir):
 	model_manager = util.ModelManager(args.model_dir, 0)
@@ -260,6 +261,7 @@ for model_id in os.listdir(args.model_dir):
 	except:
 		continue
 	find_missing_ops(model, missing_ops)
+
 print(f"number of missing ops after: {len(missing_ops)}")
 for mo in missing_ops:
 	print(mo)
@@ -285,7 +287,22 @@ for node in parents:
 		print(c)
 
 
+print(f"--- enumerating different subtrees of size 4")
+seen_subtrees = {}
+for model_id in os.listdir(args.model_dir):
+	model_manager = util.ModelManager(args.model_dir, 0)
+	try:	
+		model = model_manager.load_model_ast(model_id)
+	except:
+		continue
 
+	preorder_nodes = model.preorder()
+	for node in preorder_nodes:
+		enumerate_subtrees(node, 0, 4, seen_subtrees)
+		
+	for s in seen_subtrees:
+		print(seen_subtrees[s].dump())
+	exit()
 
 
 
