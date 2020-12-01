@@ -17,6 +17,7 @@ class Args():
 		self.max_subtree_size = 12
 		self.subtree_selection_tries = 10
 		self.default_channels = 16
+		self.max_nodes = 35
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
