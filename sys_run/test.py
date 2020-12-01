@@ -700,6 +700,7 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
 
   parser.add_argument('--max_channels', type=int, default=32, help='max number of channels in any op')
+  parser.add_argument('--default_channels', type=int, default=12, help='initial channel count for Convs')
   parser.add_argument('--max_nodes', type=int, default=35, help='max number of nodes in a tree')
   parser.add_argument('--min_subtree_size', type=int, default=1, help='minimum size of subtree in insertion')
   parser.add_argument('--max_subtree_size', type=int, default=12, help='maximum size of subtree in insertion')
