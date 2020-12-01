@@ -287,62 +287,67 @@ class ModelEvaluator():
 
 
 	def compute_cost(self, root):
-		return self.compute_cost_helper(root) / 4 
+		return self.compute_cost_helper(root, set()) / 4 
 		
-	def compute_cost_helper(self, root):
+	def compute_cost_helper(self, root, seen):
 		cost = 0
+		if id(root) in seen:
+			return cost
+		else:
+			seen.add(id(root))
+
 		if isinstance(root, Input):
 			return cost
 		elif isinstance(root, Add) or isinstance(root, Sub):
 			cost += root.in_c[0] * ADD_COST
-			cost += self.compute_cost_helper(root.lchild)
-			cost += self.compute_cost_helper(root.rchild)
+			cost += self.compute_cost_helper(root.lchild, seen)
+			cost += self.compute_cost_helper(root.rchild, seen)
 		elif isinstance(root, Mul):
 			cost += root.in_c[0] * MUL_COST
-			cost += self.compute_cost_helper(root.lchild)
-			cost += self.compute_cost_helper(root.rchild) 
+			cost += self.compute_cost_helper(root.lchild, seen)
+			cost += self.compute_cost_helper(root.rchild, seen) 
 		elif isinstance(root, LogSub) or isinstance(root, AddExp):
 			cost += root.in_c[0] * (2*LOGEXP_COST + ADD_COST)
-			cost += self.compute_cost_helper(root.lchild)
-			cost += self.compute_cost_helper(root.rchild) 
+			cost += self.compute_cost_helper(root.lchild, seen)
+			cost += self.compute_cost_helper(root.rchild, seen) 
 		elif isinstance(root, Stack):
-			cost += self.compute_cost_helper(root.lchild)
-			cost += self.compute_cost_helper(root.rchild) 
+			cost += self.compute_cost_helper(root.lchild, seen)
+			cost += self.compute_cost_helper(root.rchild, seen) 
 		elif isinstance(root, RGBExtractor):
-			cost += self.compute_cost_helper(root.child1)
-			cost += self.compute_cost_helper(root.child2)
-			cost += self.compute_cost_helper(root.child3)
+			cost += self.compute_cost_helper(root.child1, seen)
+			cost += self.compute_cost_helper(root.child2, seen)
+			cost += self.compute_cost_helper(root.child3, seen)
 		elif isinstance(root, GreenExtractor):
-			cost += self.compute_cost_helper(root.lchild)
-			cost += self.compute_cost_helper(root.rchild) 
+			cost += self.compute_cost_helper(root.lchild, seen)
+			cost += self.compute_cost_helper(root.rchild, seen) 
 		elif isinstance(root, Softmax):
 			cost += root.in_c * (LOGEXP_COST + DIV_COST + ADD_COST)
-			cost += self.compute_cost_helper(root.child)
+			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Relu):
 			cost += root.in_c * RELU_COST
-			cost += self.compute_cost_helper(root.child)
+			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Log) or isinstance(root, Exp):
 			cost += root.in_c * LOGEXP_COST	
-			cost += self.compute_cost_helper(root.child)
+			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Downsample):
 			downsample_k = SCALE_FACTOR * 2
 			cost += root.in_c * root.out_c * downsample_k * downsample_k * MUL_COST
-			cost += self.compute_cost_helper(root.child) 
+			cost += self.compute_cost_helper(root.child, seen) 
 		elif isinstance(root, Upsample):
 			cost += root.in_c * BILINEAR_COST
-			cost += self.compute_cost_helper(root.child) / (SCALE_FACTOR**2)
+			cost += self.compute_cost_helper(root.child, seen) / (SCALE_FACTOR**2)
 		elif isinstance(root, Conv1x1):
 			cost += root.groups * ((root.in_c // root.groups) * (root.out_c // root.groups) * MUL_COST)
-			cost += self.compute_cost_helper(root.child)
+			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Conv1D):
 			cost += root.groups * ((root.in_c // root.groups) * (root.out_c // root.groups) * DIRECTIONS * root.kwidth * MUL_COST)
-			cost += self.compute_cost_helper(root.child)
+			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Conv2D):
 			cost += root.groups * ((root.in_c // root.groups) * (root.out_c // root.groups) * root.kwidth**2 * MUL_COST)
-			cost += self.compute_cost_helper(root.child)
+			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, InterleavedSum) or isinstance(root, GroupedSum):
 			cost += ((root.in_c / root.out_c) - 1) * root.out_c * ADD_COST
-			cost += self.compute_cost_helper(root.child)
+			cost += self.compute_cost_helper(root.child, seen)
 		else:
 			print(type(root))
 			assert False, "compute cost encountered unexpected node type"
