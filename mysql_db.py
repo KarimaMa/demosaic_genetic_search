@@ -104,8 +104,8 @@ def create_table(password, tablename):
 
   if tablename == "green":
     table = GreenTrees
-    model = basic1D_green_model()
-    psnr = 31.38
+    model = MultiresQuadGreenModel(2,10)
+    psnr = 32.53
   else:
     table = ChromaTrees
     model = simple_full_model_green_input()
@@ -479,9 +479,7 @@ if __name__ == "__main__":
   import logging
   log_format = '%(asctime)s %(levelname)s %(message)s'
   logger = util.create_logger(f'mysql_logger', logging.INFO, log_format, f'mysql_log')
-  #mysql_delete_all(args.password, args.table)
-  
-  #mysql_delete(args.password, args.table, 0, 9999)
+  #mysql_delete(args.password, args.table, 0, 7999)
   drop_table(args.password, args.table)
   create_table(args.password, args.table)
   #select_range(args.password, args.table, 1332, 1999)
