@@ -1390,7 +1390,7 @@ rejects stupid trees
 """
 @extclass(Mutator)
 def accept_tree(self, tree):
-  if len(tree.preorder()) > MAX_SIZE:
+  if len(tree.preorder()) > self.args.max_nodes:
     return False
 
   if spatial_resolution(tree) == Resolution.INVALID:
