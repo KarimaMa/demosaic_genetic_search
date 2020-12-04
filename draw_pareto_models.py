@@ -8,7 +8,11 @@ from graph_viz import *
 import argparse
 import demosaic_ast
 from cost import ModelEvaluator
-import util
+
+
+def compute_psnr(loss):
+  return 10*math.log(math.pow(255,2) / math.pow(math.sqrt(loss)*255, 2),10)
+
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
@@ -42,7 +46,7 @@ if __name__ == "__main__":
 					psnrs = []
 					for l in open(loss_file, "r"):
 						loss = float(l.split(' ')[-1].strip())
-						retrain_psnr = util.compute_psnr(loss)
+						retrain_psnr = compute_psnr(loss)
 						psnrs.append(retrain_psnr)
 
 					if len(psnrs) == 0:
