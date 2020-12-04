@@ -20,11 +20,11 @@ if __name__ == "__main__":
 	parser.add_argument("--pareto_ids", type=str, help="file with list of pareto model ids")
 	parser.add_argument("--visfolder", type=str, help="where to save graph drawings")
 	parser.add_argument("--model_inits", type=int )
-	parser.add_argument("--num_models", type=int, help="number of pareto models")
+	parser.add_argument("--table_w", type=int)
+	parser.add_argument("--table_h", type=int)
 	args = parser.parse_args()
 
-	w = math.ceil(math.sqrt(args.num_models))
-	f, axarr = plt.subplots(w, w)
+	f, axarr = plt.subplots(args.table_h, args.table_w)
 
 	cost_evaluator = ModelEvaluator(None)
 
@@ -66,8 +66,8 @@ if __name__ == "__main__":
 			vispng = visname + ".png"
 			graph.render(visname)
 
-			xloc = i % w
-			yloc = i // w 
+			xloc = i % args.table_w
+			yloc = i // args.table_h 
 			axarr[yloc, xloc].imshow(plt.imread(vispng))
 	
 
