@@ -106,4 +106,3 @@ if __name__ == "__main__":
 			plt.show()
 			plt.savefig(os.path.join(args.visfolder, "table_{i}"))
 			plt.clf()
-

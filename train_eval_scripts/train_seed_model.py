@@ -49,7 +49,7 @@ def train(args, models, model_id, model_dir):
       m.parameters(),
       args.learning_rate) for m in models]
 
-  if not args.multiresquadgreen:
+  if not args.multiresquadgreen and not args.demosaicnet:
     if args.full_model:
       train_data = Dataset(data_file=args.training_file,
                         green_input=args.use_green_input, 
@@ -267,7 +267,7 @@ if __name__ == "__main__":
     model = model_lib.fast_multires_green_model()
   elif args.demosaicnet:
     logger.info("TRAINING DEMOSAICNET GREEN")
-    model = model_lib.mini_demosaicnet()
+    model = model_lib.GreenDemosaicknet(3, 8)
   elif args.ahd:
     logger.info(f"TRAINING AHD GREEN")
     model = model_lib.ahd1D_green_model()

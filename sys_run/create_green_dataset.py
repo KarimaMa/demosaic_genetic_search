@@ -54,11 +54,7 @@ def precompute_training_green(args, gpu_id, model):
 
       for i,idx in enumerate(index):
         input_filename = used_filenames[idx]
-        if args.satori:
-          subpath = ('/').join(input_filename.split('/')[-2:])
-        else:
-          subpath = ('/').join(input_filename.split('/')[-4:])
-    
+        subpath = ('/').join(input_filename.split('/')[-4:])   
         subpath = subpath.strip('png')
         subpath += "npy"
         subdir = os.path.join(args.green_data_dir, ("/").join(subpath.split("/")[0:-1]))
@@ -97,11 +93,7 @@ def precompute_validation_green(args, gpu_id, model):
 
       for i, idx in enumerate(index):
         input_filename = used_filenames[idx]
-        if args.satori:
-          subpath = ('/').join(input_filename.split('/')[-2:])
-        else:
-          subpath = ('/').join(input_filename.split('/')[-4:])
-
+        subpath = ('/').join(input_filename.split('/')[-4:])
         subpath = subpath.strip('png')
         subpath += "npy"
         
@@ -143,12 +135,10 @@ def run(args, gpu_id):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
-  parser.add_argument('--model_path', type=str, default='models', help='where to save training results')
   parser.add_argument('--green_model_ast_file', type=str, help='ast file for green model')
   parser.add_argument('--green_model_weight_file', type=str, help='torch file with greem model weights')
   #parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--green_data_dir', type=str, help='where to save green precomputed predictions')
-  parser.add_argument('--satori', action='store_true')
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--train_portion', type=int, default=1e5, help='portion of training data to use')

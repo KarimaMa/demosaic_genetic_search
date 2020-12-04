@@ -514,38 +514,48 @@ class Searcher():
     if self.args.model_db_snapshot is not None:
       self.model_database.load(self.args.model_db_snapshot)
 
-    seed_model, seed_ast = util.load_model_from_file(self.args.seed_model_file, self.args.seed_model_version, 0)
-    seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)
-    util.create_dir(seed_model_dir)
-    seed_ast.compute_input_output_channels()
-    self.model_manager.save_model([seed_model], seed_ast, seed_model_dir)
+    # load all seed models
+    seed_model_id = self.model_manager.SEED_ID
+    seed_model_files = [x.strip() for x in self.args.seed_model_files.split(',')]
+    seed_model_psnrs = [float(x) for x in self.args.seed_model_psnrs.strip().split(',')]
 
-    seed_ast.compute_input_output_channels()
-    self.search_logger.info(f"using seed model:\n{seed_ast.dump()}")
+    for seed_model_i, seed_model_file in enumerate(seed_model_files):
+      model_version = 0 # doesn't matter which one we use
+      seed_model, seed_ast = util.load_model_from_file(seed_model_file, model_version, 0)
 
-    compute_cost = self.evaluator.compute_cost(seed_ast)
-    model_accuracy = self.args.seed_model_psnr
+      seed_model_dir = self.model_manager.model_dir(seed_model_id)
+      util.create_dir(seed_model_dir)
+      seed_ast.compute_input_output_channels()
+      self.model_manager.save_model([seed_model], seed_ast, seed_model_dir)
 
-    cost_tiers.add(self.model_manager.SEED_ID, compute_cost, model_accuracy)
-    
-    self.model_database.add(self.model_manager.SEED_ID,\
-            {'model_id': self.model_manager.SEED_ID,
-             'id_str' : seed_ast.id_string(),
-             'hash': hash(seed_ast),
-             'structural_hash': structural_hash(seed_ast),
-             'occurrences': 1,
-             'generation': -1,
-             'best_init': 0,
-             'psnr_0': model_accuracy,
-             'psnr_1': -1,
-             'psnr_2': -1,
-             'compute_cost': compute_cost,
-             'parent_id': -1,
-             'failed_births': 0,
-             'failed_mutations': 0,
-             'prune_rejections': 0,
-             'structural_rejections': 0,
-             'seen_rejections': 0})
+      seed_ast.compute_input_output_channels()
+
+      compute_cost = self.evaluator.compute_cost(seed_ast)
+      model_accuracy = seed_model_psnrs[seed_model_i]
+      
+      self.search_logger.info(f"seed model {seed_model_i}\ncost: {compute_cost}\npsnr: {model_accuracy}\n{seed_ast.dump()}")
+
+      cost_tiers.add(seed_model_id, compute_cost, model_accuracy)
+      seed_model_id = self.model_manager.get_next_model_id()
+
+      self.model_database.add(seed_model_id,\
+              {'model_id': seed_model_id,
+               'id_str' : seed_ast.id_string(),
+               'hash': hash(seed_ast),
+               'structural_hash': structural_hash(seed_ast),
+               'occurrences': 1,
+               'generation': -1,
+               'best_init': 0,
+               'psnr_0': model_accuracy,
+               'psnr_1': -1,
+               'psnr_2': -1,
+               'compute_cost': compute_cost,
+               'parent_id': -1,
+               'failed_births': 0,
+               'failed_mutations': 0,
+               'prune_rejections': 0,
+               'structural_rejections': 0,
+               'seen_rejections': 0})
 
     # CHANGE TO NOT BE FIXED - SHOULD BE INFERED FROM TASK
     if self.args.restart_generation is None:
@@ -733,9 +743,8 @@ if __name__ == "__main__":
   parser.add_argument('--seed', type=int, default=1, help='random seed')
 
   # seed models 
-  parser.add_argument('--green_seed_model_file', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_info', help='')
-  parser.add_argument('--green_seed_model_version', type=int, default=0)
-  parser.add_argument('--green_seed_model_psnr', type=float, default=32.53)
+  parser.add_argument('--green_seed_model_files', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_info,DATADUMP/GREEN_DEMOSAICNET_D3W8_SEED//models/seed/model_info')
+  parser.add_argument('--green_seed_model_psnrs', type=str, default='31.4,31.75')
 
   parser.add_argument('--chroma_seed_model_file', type=str, default='DATADUMP/SIMPLE_GREEN_INPUT_CHROMA_MODEL/models/seed/model_info', help='')
   parser.add_argument('--chroma_seed_model_version', type=int, default=0)
@@ -808,9 +817,8 @@ if __name__ == "__main__":
     args.tablename = "chroma"
     args.task_out_c = 6
   else:
-    args.seed_model_file = args.green_seed_model_file
-    args.seed_model_version = args.green_seed_model_version
-    args.seed_model_psnr = args.green_seed_model_psnr
+    args.seed_model_files = args.green_seed_model_files
+    args.seed_model_psnrs = args.green_seed_model_psnrs
     args.tablename = "green"
     args.task_out_c = 2
 

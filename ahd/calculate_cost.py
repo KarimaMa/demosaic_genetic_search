@@ -26,6 +26,7 @@ NUM_PIXELS = 128*128
 
 COUNT_MBALL = False
 
+
 def median_cost(n):
 	return n * MEDIAN_FILTER_COST
 
