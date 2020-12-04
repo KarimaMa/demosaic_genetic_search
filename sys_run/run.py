@@ -743,7 +743,7 @@ if __name__ == "__main__":
   parser.add_argument('--seed', type=int, default=1, help='random seed')
 
   # seed models 
-  parser.add_argument('--green_seed_model_files', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_info,DATADUMP/GREEN_DEMOSAICNET_D3W8_SEED//models/seed/model_info')
+  parser.add_argument('--green_seed_model_files', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_info,DATADUMP/GREEN_DEMOSAICNET_D3W8_SEED/models/seed/model_info')
   parser.add_argument('--green_seed_model_psnrs', type=str, default='31.4,31.75')
 
   parser.add_argument('--chroma_seed_model_file', type=str, default='DATADUMP/SIMPLE_GREEN_INPUT_CHROMA_MODEL/models/seed/model_info', help='')
