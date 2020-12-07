@@ -1,10 +1,5 @@
 import csv
 import argparse
-import os
-import sys
-from paretoset import paretoset
-import pandas as pd 
-import matplotlib.pyplot as plt 
 import numpy as np
 import math
 import random
@@ -73,27 +68,14 @@ sampled_models = {}
 
 # sample models from each tier
 for tid, tier_info in models_by_tier.items():
-	sampled_indices = random.sample([idx for idx in range(len(tier_info["model_ids"]))])
-	model_ids = tier_info["model_ids"][sampled_indices]
-	psnrs = tier_info["psnrs"][sampled_indices]
-	costs = tier_info["costs"][sampled_indices]
-	generations = tier_info["generations"][sampled_indices]
+	sampled_indices = random.sample([idx for idx in range(len(tier_info["model_ids"]))], args.samples)
+	model_ids = np.array(tier_info["model_ids"])[sampled_indices]
+	psnrs = np.array(tier_info["psnrs"])[sampled_indices]
+	costs = np.array(tier_info["costs"])[sampled_indices]
+	generations = np.array(tier_info["generations"])[sampled_indices]
 	sampled_models[tid] = {"model_ids": model_ids, "costs": costs, "psnrs": psnrs, "generations": generations}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+write_pareto_model_csv(args.sample_csvfile, args.sample_model_ids_files, sampled_models)
 
 
 
