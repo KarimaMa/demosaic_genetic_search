@@ -104,6 +104,6 @@ if __name__ == "__main__":
 
 		if i % (n_cells) == n_cells-1  or i == len(model_info) - 1:
 			plt.show()
-			plt.savefig(os.path.join(args.visfolder, "table_{i}"))
+			plt.savefig(os.path.join(args.visfolder, f"table_{i}"))
 			plt.clf()
 
