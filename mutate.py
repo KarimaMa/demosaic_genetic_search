@@ -1379,6 +1379,7 @@ def pick_subtree(self, root, input_set, insert_child, target_out_c=None, resolut
         self.debug_logger.debug(f"TOO MANY TRIES TO FIND SUBTREE with resolution {resolution}")
         assert False, f"Too many tries to find subtree with resolution {resolution}"
     else:
+      print(f"the chosen subtree {chosen_subtree.dump()}")
       if make_copy:
         chosen_subtree.parent = None
       return chosen_subtree
