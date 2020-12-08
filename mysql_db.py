@@ -104,8 +104,8 @@ def create_table(password, tablename):
 
   if tablename == "green":
     table = GreenTrees
-    model = MultiresQuadGreenModel(2,10)
-    psnr = 32.53
+    models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
+    psnrs = [31.4, 31.75]
   else:
     table = ChromaTrees
     model = simple_full_model_green_input()
@@ -116,14 +116,14 @@ def create_table(password, tablename):
   tables = db.get_tables()
   print(tables)
 
-  key = 0
-  tree_hash = str(hash(model)).zfill(30)
-
-  seed_record = table.create(model_id=key, tree_hash=tree_hash, machine="tefnut", \
-                            experiment_dir="seed", tree_id_str=model.id_string(), psnr_0=psnr, psnr_1=-1, psnr_2=-1)
-  seed_record.save()
+  for i,model in enumerate(models):  
+    key = i
+    tree_hash = str(hash(model)).zfill(30)
+    seed_record = table.create(model_id=key, tree_hash=tree_hash, machine="tefnut", \
+                            experiment_dir="seed", tree_id_str=model.id_string(), psnr_0=psnrs[i], psnr_1=-1, psnr_2=-1)
+    seed_record.save()
+  
   query = table.select()
-
   for t in query:
     print(t.model_id, t.add_date, t.tree_hash, t.tree_id_str, t.machine, t.experiment_dir, t.psnr_0)
 
@@ -479,7 +479,7 @@ if __name__ == "__main__":
   import logging
   log_format = '%(asctime)s %(levelname)s %(message)s'
   logger = util.create_logger(f'mysql_logger', logging.INFO, log_format, f'mysql_log')
-  #mysql_delete(args.password, args.table, 0, 7999)
+  #mysql_delete(args.password, args.table, 2627, 3000)
   drop_table(args.password, args.table)
   create_table(args.password, args.table)
   #select_range(args.password, args.table, 1332, 1999)
@@ -487,10 +487,6 @@ if __name__ == "__main__":
   select(args.password, args.table)
   #idstr = "GreenExtractor-1-1,1-SumR-1-16-Mul-16-16,16-Conv1D-16-1-Input-1-1---Softmax-16-16-Conv1x1-16-16-Relu-16-16-Conv1x1-16-16-Relu-16-16-Conv1D-16-1-Input-1-1----------Input-1-1--"
   #find("trisan4th", "000000000000338642508656442816", idstr, logger)
-
-
-
-
 
 
 

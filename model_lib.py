@@ -785,7 +785,6 @@ def MultiresQuadGreenModel(depth, width):
   downsampled_bayer.partner_set = set( [(lowres_interp, id(lowres_interp))] )
   lowres_interp.partner_set = set( [(downsampled_bayer, id(downsampled_bayer))] )
 
-
   bayer = Input(4, "Bayer")
   fullres_conv1 = Conv2D(bayer, width, kwidth=3)
   fullres_relu1 = Relu(fullres_conv1)
@@ -815,9 +814,34 @@ def MultiresQuadGreenModel(depth, width):
   green.assign_parents()
   green.compute_input_output_channels()
 
-
   return green 
 
  
+def GreenDemosaicknet(depth, width):
+  bayer = Input(4, "Bayer")
+  for i in range(depth):
+    if i == 0:
+      conv = Conv2D(bayer, width, kwidth=3)
+    else:
+      conv = Conv2D(relu, width, kwidth=3)
+    relu = Relu(conv)
+
+  residual_prediction = Conv1x1(relu, 12)
+
+  stacked = Stack(bayer, residual_prediction) 
+
+  post_conv = Conv2D(stacked, width, kwidth=3)
+  post_relu = Relu(post_conv)
+  green_rb = Conv1x1(post_relu, 2)
+
+  bayer = Input(4, "Bayer")
+  green = GreenExtractor(bayer, green_rb)
+  green.assign_parents()
+  green.compute_input_output_channels()
+
+  return green
+
+
+
 
 

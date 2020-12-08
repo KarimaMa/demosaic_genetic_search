@@ -9,6 +9,7 @@ import numpy as np
 
 from demosaic_ast import *
 from pareto_util import get_pareto_ranks
+from database import Database
 
 ADD_COST = 1
 MUL_COST = 1
