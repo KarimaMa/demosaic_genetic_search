@@ -54,7 +54,7 @@ class Database():
 					continue
 				key = int(string_data[0])
 				string_data = string_data[1:]
-				data = dict([(self.fields[i], self.field_types[i](string_data[i])) for i in range(len(self.fields))])
+				data = dict([(self.fields[j], self.field_types[j](string_data[j])) for j in range(len(self.fields))])
 				self.table[key] = data
 
 
