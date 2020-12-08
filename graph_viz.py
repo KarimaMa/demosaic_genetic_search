@@ -1,4 +1,6 @@
 from graphviz import Digraph
+from demosaic_ast import *
+import argparse
 
 
 def vis_ast(root, name):
@@ -15,7 +17,13 @@ def vis_ast_helper(root, graph, node_id, seen=None):
 	else:
 		root_id = node_id
 		seen[id(root)] = root_id
-		graph.node(str(node_id), root.name)
+		if issubclass(type(root), Linear) or issubclass(type(root), UnopIIdiv):
+			in_c = root.in_c
+			out_c = root.out_c
+			node_label = f"{root.name} {in_c} {out_c}"
+		else:
+			node_label = root.name
+		graph.node(str(node_id), node_label)
 		node_id += 1
 
 		if root.num_children == 2:
@@ -46,10 +54,14 @@ def vis_ast_helper(root, graph, node_id, seen=None):
 	return node_id
 
 if __name__ == "__main__":
-	import model_lib
-	model = model_lib.DecoupleExampleModel(2,10)
+	parser = argparse.ArgumentParser()
+	parser.add_argument("--model_ast", type=str)
+	parser.add_argument("--outfile", type=str)
+	args = parser.parse_args()
 
-	graph = vis_ast(model, 'seed_model')
+	model = load_ast(args.model_ast)
+
+	graph = vis_ast(model, args.outfile)
 	model.compute_size(set(), count_all_inputs=True)
 	print(model.size)
 	graph.render()
