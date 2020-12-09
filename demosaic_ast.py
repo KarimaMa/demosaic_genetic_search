@@ -513,17 +513,18 @@ def structure_to_array(self):
           seen_parents.add(preorder[j])
 
     node_info["parent"] = parents
-
     if n.num_children == 3:
       child1_id = None
       child2_id = None
       child3_id = None
+      # NOTE that with DAG structures it is now possible for
+      # a node to have children use the same node 
       for j in range(0, len(preorder)):
         if id(preorder[j]) == id(n.child1):
           child1_id = j
-        elif id(preorder[j]) == id(n.child2):
+        if id(preorder[j]) == id(n.child2):
           child2_id = j
-        elif id(preorder[j]) == id(n.child3):
+        if id(preorder[j]) == id(n.child3):
           child3_id = j
         if not any([c is None for c in [child1_id, child2_id, child3_id]]):
           break
@@ -535,7 +536,7 @@ def structure_to_array(self):
       for j in range(0, len(preorder)):
         if id(preorder[j]) == id(n.lchild):
           lchild_id = j
-        elif id(preorder[j]) == id(n.rchild):
+        if id(preorder[j]) == id(n.rchild):
           rchild_id = j
         if not lchild_id is None and not rchild_id is None:
           break

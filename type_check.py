@@ -310,16 +310,17 @@ def fix_channel_count_downwards(root, parent, out_c, fixed_nodes=None):
           root.out_c = out_c 
     elif isinstance(root, TernaryHcIcJcKc) or isinstance(root, BinopIcJcKc) or isinstance(root, Const):
       fixed = (root.out_c == out_c) 
-    else: # is type UnopII
+    elif isinstance(root, UnopII): # is type UnopII
       fixed = fix_channel_count_downwards(root.child, root, out_c, fixed_nodes)
-    
+    else:
+      assert False, "Unknown root type in fix channels downwards"
     # if fixed:
     #   fixed_nodes[id(root)] = root
 
-      if type(root.parent) is tuple:
-        for p in root.parent:
-          if not id(p) == id(parent):
-            fixed = fixed and fix_channel_count_upwards_helper(root, p, out_c, fixed_nodes)
+    if type(root.parent) is tuple:
+      for p in root.parent:
+        if not id(p) == id(parent):
+          fixed = fixed and fix_channel_count_upwards_helper(root, p, out_c, fixed_nodes)
 
     return fixed
 
@@ -365,6 +366,7 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c, fixed_nodes=None):
 
   if isinstance(parent, BinopIII):
     if cur_node is parent.lchild:
+      parent.in_c = (in_c, in_c)
       # need to call fix upwards for all parents of child we fix downwards from 
       # in case we fix down a child with other parents than the one we are calling fix down from
       child_fixed = fix_channel_count_downwards(parent.rchild, parent, in_c, fixed_nodes)
@@ -421,8 +423,8 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c, fixed_nodes=None):
   elif isinstance(parent, tuple):
     assert False, "PARENT SHOULD NEVER BE TUPLE WHEN CALLING FIX UPWARDS HELPER"
   else: # type is UnopII
+    parent.in_c = in_c
     fixed = fix_channel_count_upwards(parent, in_c, fixed_nodes)
-  
   return fixed
 
 

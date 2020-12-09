@@ -515,7 +515,23 @@ def remove_node(parent, deletion_node, new_child):
       parent.rchild = new_child 
   else:
     parent.child = new_child
-  new_child.parent = parent
+
+  if type(new_child.parent) is tuple:
+    new_child_parents = list(new_child.parent)
+  else:
+    new_child_parents = [new_child.parent]
+
+  updated_new_child_parents = []
+  for new_child_parent in new_child_parents:
+    if not id(new_child_parent) == id(deletion_node):
+      updated_new_child_parents += [new_child_parent] # keep all parents of new child that are not the deleted node
+
+  updated_new_child_parents += [parent] # add the parent of the deleted node to the new child's list of parents
+  if len(updated_new_child_parents) > 1:
+    new_child.parent = tuple(updated_new_child_parents)
+  else:
+    new_child.parent = updated_new_child_parents[0]
+
 
 
 """
