@@ -639,6 +639,8 @@ class Searcher():
             self.save_model_ast(new_model_ast, task_info.model_id, task_info.model_dir)
 
             best_psnr = max(seen_psnrs)
+            if math.isnan(best_psnr) or best_psnr < 0:
+              continue # don't add model to tier
             compute_cost = task_info.database_entry["compute_cost"]
             new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
           else:
@@ -668,7 +670,7 @@ class Searcher():
 
           # if model weights and ast were successfully saved, add model to cost tiers
           best_psnr = max(model_psnrs)
-          if math.isnan(best_psnr):
+          if math.isnan(best_psnr) or best_psnr < 0:
             continue # don't add model to tier 
 
           self.search_logger.info(f"adding model {task_info.model_id} with psnrs {model_psnrs} to db")
