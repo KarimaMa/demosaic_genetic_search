@@ -603,6 +603,7 @@ class Searcher():
         gpu_ids = mp.Array(ctypes.c_int, [-1]*len(model_ids))
 
         for task_id, model_id in enumerate(model_ids):
+          self.search_logger.info(f"loading model {model_id}")
           model_ast = self.load_model(model_id)
           if model_ast is None:
             continue

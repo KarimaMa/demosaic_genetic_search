@@ -25,7 +25,7 @@ import sys
 sys.path.append(sys.path[0].split("/")[0])
 from tree import has_loop
 import cost
-import pareto
+import pareto_util
 from cost import ModelEvaluator, CostTiers
 from demosaic_ast import structural_hash, Downsample
 from mutate import Mutator, has_downsample, MutationType
@@ -200,7 +200,7 @@ class Searcher():
     self.mutation_batch_size = args.num_gpus
     self.mutation_batches_per_generation = int(math.ceil(args.mutations_per_generation / self.mutation_batch_size))
 
-    mp.set_start_method("spawn")
+    mp.set_start_method("spawn", force="True")
 
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '29500'
@@ -571,7 +571,7 @@ class Searcher():
           continue
 
         if self.args.pareto_sampling:
-          tier_sampler = pareto.Sampler(tier, self.args.pareto_factor)
+          tier_sampler = pareto_util.Sampler(tier, self.args.pareto_factor)
         else:
           tier_sampler = cost.Sampler(tier)
 

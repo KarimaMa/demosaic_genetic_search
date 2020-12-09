@@ -42,69 +42,73 @@ if __name__ == "__main__":
 	mutator = mutate.Mutator(mutator_args, debug_logger, mysql_logger)
 
 	model_manager = util.ModelManager(args.model_dir, 0)
-	tree = model_manager.load_model_ast(args.model_id)
+	while True:
+		tree = model_manager.load_model_ast(args.model_id)
 
-	print("the original tree")
-	print(tree.dump())
-	old_tree = demosaic_ast.copy_subtree(tree)
+		print("the original tree")
+		print(tree.dump())
+		old_tree = demosaic_ast.copy_subtree(tree)
 
-	preorder_nodes = tree.preorder()
-	print("nodes with multiple parents")
-	for n in preorder_nodes:
-		if type(n.parent) is tuple:
-			print(n.dump())
-	print("------------")
-
-	print("partners in original tree:")
-	for n in preorder_nodes:
-		if hasattr(n, "partner_set"):
-			print(f"node {n.name} partners:")
-			for p, pid in n.partner_set:
-				print(f"{p.name} {id(p)}")
-	print("===========")
-
-	if args.mutation_type == "insert":
-		demosaic_ast = importlib.import_module("demosaic_ast")
-		insert_op = getattr(demosaic_ast, args.insert_op)
-		input_set = set(("Input(Bayer)",))
-		new_tree = mutator.insert_mutation(tree, input_set, insert_above_node_id=args.insert_child_id, insert_op=insert_op)
-	elif args.mutation_type == "delete":
 		preorder_nodes = tree.preorder()
-		print(f"attempting to delete\n{preorder_nodes[args.delete_id].dump()}")
-		new_tree = mutator.delete_mutation(tree, preorder_nodes[args.delete_id])
-	elif args.mutation_type == "decouple":
-		print("decouple mutation")
-		new_tree = mutator.decouple_mutation(tree, chosen_node_id=args.decouple_node_id)
-	elif args.mutation_type == "channel_change":
-		new_tree = mutator.channel_mutation(tree, chosen_conv_id=args.chosen_conv_id)
-	else:
-		new_tree = mutator.group_mutation(tree)
+		print("nodes with multiple parents")
+		for n in preorder_nodes:
+			if type(n.parent) is tuple:
+				print(n.dump())
+		print("------------")
 
-	print("the new tree")
-	print(new_tree.dump())
-	print("the old tree")
-	print(old_tree.dump())
+		print("partners in original tree:")
+		for n in preorder_nodes:
+			if hasattr(n, "partner_set"):
+				print(f"node {n.name} partners:")
+				for p, pid in n.partner_set:
+					print(f"{p.name} {id(p)}")
+		print("===========")
 
-	preorder_nodes = new_tree.preorder()
-	print("In new tree nodes with multiple parents")
-	for n in preorder_nodes:
-		if type(n.parent) is tuple:
-			print(n.dump())
-	print("------------")
+		if args.mutation_type == "insert":
+			demosaic_ast = importlib.import_module("demosaic_ast")
+			insert_op = getattr(demosaic_ast, args.insert_op)
+			input_set = set(("Input(Bayer)",))
+			new_tree = mutator.insert_mutation(tree, input_set, insert_above_node_id=args.insert_child_id, insert_op=insert_op)
+		elif args.mutation_type == "delete":
+			preorder_nodes = tree.preorder()
+			print(f"attempting to delete\n{preorder_nodes[args.delete_id].dump()}")
+			new_tree = mutator.delete_mutation(tree, preorder_nodes[args.delete_id])
+		elif args.mutation_type == "decouple":
+			print("decouple mutation")
+			new_tree = mutator.decouple_mutation(tree, chosen_node_id=args.decouple_node_id)
+		elif args.mutation_type == "channel_change":
+			new_tree = mutator.channel_mutation(tree, chosen_conv_id=args.chosen_conv_id)
+		else:
+			new_tree = mutator.group_mutation(tree)
 
-	print("partners in new tree:")
-	for n in preorder_nodes:
-		if hasattr(n, "partner_set"):
-			print(f"node {n.name} with id {id(n)} partners:")
-			for p, pid in n.partner_set:
-				print(f"{p.name} {id(p)}")
-			print("-----")
-	print("===========")
+		print("the new tree")
+		print(new_tree.dump())
+		print("the old tree")
+		print(old_tree.dump())
 
-	new_tree.compute_input_output_channels()
-	type_check.check_channel_count(new_tree)
-	accepted = mutator.accept_tree(new_tree)
-	print(f"is tree accepted {accepted}")
-	type_check.check_linear_types(new_tree)
+		preorder_nodes = new_tree.preorder()
+		print("In new tree nodes with multiple parents")
+		for n in preorder_nodes:
+			if type(n.parent) is tuple:
+				print(n.dump())
+		print("------------")
 
+		print("partners in new tree:")
+		for n in preorder_nodes:
+			if hasattr(n, "partner_set"):
+				print(f"node {n.name} with id {id(n)} partners:")
+				for p, pid in n.partner_set:
+					print(f"{p.name} {id(p)}")
+				print("-----")
+		print("===========")
 
+		new_tree.compute_input_output_channels()
+		type_check.check_channel_count(new_tree)
+		accepted = mutator.accept_tree(new_tree)
+		print(f"is tree accepted {accepted}")
+		type_check.check_linear_types(new_tree)
+
+		new_tree.save_ast("test-ast")
+		reloaded = demosaic_ast.load_ast("test-ast")
+		print("reloaded new tree")
+		print(reloaded.dump())
