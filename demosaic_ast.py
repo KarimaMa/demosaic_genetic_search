@@ -271,7 +271,6 @@ class Upsample(UnopII, Special, Node):
 
 class FastUpsample(UnopII, Special, Node):
   def __init__(self, child, name=None):
-    print("USING FAST UPSAMPLE")
     if name is None:
       name = "FastUpsample"
     Node.__init__(self, name, 1)
@@ -520,11 +519,11 @@ def structure_to_array(self):
       child2_id = None
       child3_id = None
       for j in range(0, len(preorder)):
-        if id(preorder[j]) is id(n.child1):
+        if id(preorder[j]) == id(n.child1):
           child1_id = j
-        elif id(preorder[j]) is id(n.child2):
+        elif id(preorder[j]) == id(n.child2):
           child2_id = j
-        elif id(preorder[j]) is id(n.child3):
+        elif id(preorder[j]) == id(n.child3):
           child3_id = j
         if not any([c is None for c in [child1_id, child2_id, child3_id]]):
           break
@@ -534,9 +533,9 @@ def structure_to_array(self):
       lchild_id = None
       rchild_id = None
       for j in range(0, len(preorder)):
-        if id(preorder[j]) is id(n.lchild):
+        if id(preorder[j]) == id(n.lchild):
           lchild_id = j
-        elif id(preorder[j]) is id(n.rchild):
+        elif id(preorder[j]) == id(n.rchild):
           rchild_id = j
         if not lchild_id is None and not rchild_id is None:
           break
@@ -545,7 +544,7 @@ def structure_to_array(self):
     elif n.num_children == 1:
       child_id = None
       for j in range(0, len(preorder)):
-        if id(preorder[j]) is id(n.child):
+        if id(preorder[j]) == id(n.child):
           child_id = j
           break
       node_info["children"] = [child_id]
@@ -581,7 +580,6 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None):
     children_info = [preorder_nodes[children_ids[i]] for i in range(len(children_ids))]
     child_nodes = []
     for i, child_info in enumerate(children_info):
-
       if len(child_info["parent"]) > 1:
         if children_ids[i] in shared_children:
           child_node = shared_children[children_ids[i]]
