@@ -25,6 +25,17 @@ def drop_table(password, tablename):
     class Meta:
       database = db
 
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class GreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -47,15 +58,16 @@ def drop_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  if tablename == "green":
+  if tablename == "testgreen":
+    table_to_drop = TestGreenTrees
+  elif tablename == "green":
     table_to_drop = GreenTrees
   else:
     table_to_drop = ChromaTrees
 
   db.drop_tables((table_to_drop,))
-
-  print("tables remaining after drop")
   tables = db.get_tables()
+  print("tables remaining after drop")
   print(tables)
 
 
@@ -102,7 +114,23 @@ def create_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  if tablename == "green":
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
+
+  if tablename == "testgreen":
+    table = TestGreenTrees
+    models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
+    psnrs = [31.4, 31.75]
+  elif tablename == "green":
     table = GreenTrees
     models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
     psnrs = [31.4, 31.75]
@@ -148,6 +176,17 @@ def select(password, tablename):
     class Meta:
       database = db
 
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class GreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -170,7 +209,9 @@ def select(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  if tablename == "green":
+  if tablename == "testgreen":
+    table = TestGreenTrees
+  elif tablename == "green":
     table = GreenTrees
   else:
     table = ChromaTrees
@@ -201,6 +242,17 @@ def select_range(password, tablename, id_min, id_max):
     class Meta:
       database = db
 
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class GreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -223,7 +275,9 @@ def select_range(password, tablename, id_min, id_max):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  if tablename == "green":
+  if tablename == "testgreen":
+    table = TestGreenTrees
+  elif tablename == "green":
     table = GreenTrees
   else:
     table = ChromaTrees
@@ -256,6 +310,17 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     class Meta:
       database = db
 
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class GreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -278,7 +343,9 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  if tablename == "green":
+  if tablename == "testgreen":
+    table = TestGreenTrees
+  elif tablename == "green":
     table = GreenTrees
   else:
     table = ChromaTrees
@@ -322,6 +389,17 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     class Meta:
       database = db
 
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class GreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -344,7 +422,9 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  if tablename == "green":
+  if tablename == "testgreen":
+    table = TestGreenTrees
+  elif tablename == "green":
     table = GreenTrees
   else:
     table = ChromaTrees
@@ -404,7 +484,21 @@ def mysql_delete_all(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  if tablename == "green":
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
+
+  if tablename == "testgreen":
+    table = TestGreenTrees
+  elif tablename == "green":
     table = GreenTrees
   else:
     table = ChromaTrees
@@ -456,7 +550,20 @@ def mysql_delete(password, tablename, id_min, id_max):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  if tablename == "green":
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
+  if tablename == "testgreen":
+    table = TestGreenTrees
+  elif tablename == "green":
     table = GreenTrees
   else:
     table = ChromaTrees
@@ -472,22 +579,24 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument("--password", type=str)
   parser.add_argument("--table", type=str)
+  parser.add_argument("--create", action='store_true')
+  parser.add_argument("--delete", action='store_true')
+  parser.add_argument("--delete_range", type=str, help="ids to delete from table")
 
   args = parser.parse_args()
 
-  import util 
-  import logging
-  log_format = '%(asctime)s %(levelname)s %(message)s'
-  logger = util.create_logger(f'mysql_logger', logging.INFO, log_format, f'mysql_log')
-  #mysql_delete(args.password, args.table, 2627, 3000)
-  drop_table(args.password, args.table)
-  create_table(args.password, args.table)
-  #select_range(args.password, args.table, 1332, 1999)
-  print("checking insertion worked...")
+  if args.delete:
+    delete_range = [int(x.strip()) for x in args.delete_range.split(",")]
+    print(f"deleting ids between {delete_range}")
+    mysql_delete(args.password, args.table, delete_range[0], delete_range[1])
+  if args.create:
+    drop_table(args.password, args.table)
+    create_table(args.password, args.table)
+
+  print("checking database action worked...")
   select(args.password, args.table)
-  #idstr = "GreenExtractor-1-1,1-SumR-1-16-Mul-16-16,16-Conv1D-16-1-Input-1-1---Softmax-16-16-Conv1x1-16-16-Relu-16-16-Conv1x1-16-16-Relu-16-16-Conv1D-16-1-Input-1-1----------Input-1-1--"
-  #find("trisan4th", "000000000000338642508656442816", idstr, logger)
 
 
 
 
+  
