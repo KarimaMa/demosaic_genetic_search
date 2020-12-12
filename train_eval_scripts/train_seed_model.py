@@ -49,7 +49,7 @@ def train(args, models, model_id, model_dir):
       m.parameters(),
       args.learning_rate) for m in models]
 
-  if not args.multiresquadgreen and not args.demosaicnet:
+  if not args.multiresquadgreen and not args.demosaicnet and not args.gradienthalide:
     if args.full_model:
       train_data = Dataset(data_file=args.training_file,
                         green_input=args.use_green_input, 
@@ -136,6 +136,7 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
 
     for i, model in enumerate(models):
       optimizers[i].zero_grad()
+      model.reset()
       if args.use_green_input:
         model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
         pred = model.run(model_inputs)
@@ -190,14 +191,17 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
     n = bayer.size(0)
 
     for i, model in enumerate(models):
+      model.reset()
       if args.use_green_input:
         model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
         pred = model.run(model_inputs)
+        clamped = torch.clamp(pred, min=0, max=1)
       else:
         model_inputs = {"Input(Bayer)": bayer_input}
         pred = model.run(model_inputs)
- 
-      loss = criterion(pred, target)
+        clamped = torch.clamp(pred, min=0, max=1)
+
+      loss = criterion(clamped, target)
       loss_trackers[i].update(loss.item(), n)
 
   return [loss_tracker.avg for loss_tracker in loss_trackers]
@@ -223,13 +227,17 @@ if __name__ == "__main__":
   parser.add_argument('--chroma_no_sub', action='store_true')
   parser.add_argument('--chroma_no_extraction', action='store_true')
   parser.add_argument('--multiresquadgreen', action='store_true')
+  parser.add_argument('--gradienthalide', action='store_true')
+
+  parser.add_argument('--width', type=int, help='num channels in model layers')
+  parser.add_argument('--k', type=int, help='kernel width in model layers')
 
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
   parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--seed', type=int, default=2, help='random seed')
   parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
-  parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/subset_files_100k/subset_7.txt", help='filename of file with list of training data image files')
-  parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/val_files.txt", help='filename of file with list of validation data image files')
+  parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/subset7_100k_train_files.txt", help='filename of file with list of training data image files')
+  parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/subset7_100k_val_files.txt", help='filename of file with list of validation data image files')
   parser.add_argument('--test_file', type=str, default="/home/karima/cnn-data/test_files.txt")
 
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
@@ -289,6 +297,9 @@ if __name__ == "__main__":
   elif args.multiresquadgreen:
     logger.info("TRAINING MULTIRES QUAD GREEN")
     model = model_lib.MultiresQuadGreenModel(2, 10)
+  elif args.gradienthalide:
+    logger.info("TRAINING GRADIENT HALIDE GREEN")
+    model = model_lib.GradientHalideModel(args.width, args.k)
   else:
     logger.info("TRAINING BASIC GREEN")
     model = model_lib.basic1D_green_model()

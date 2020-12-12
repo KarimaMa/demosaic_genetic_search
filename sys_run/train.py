@@ -174,6 +174,7 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
     n = bayer.size(0)
 
     for i, model in enumerate(models):
+      model.reset()
       optimizers[i].zero_grad()
       if args.use_green_input:
         model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
@@ -222,6 +223,7 @@ def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_
 
     for i, model in enumerate(models):
       optimizers[i].zero_grad()
+      model.reset()
       if args.use_green_input:
         model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
         pred = model.run(model_inputs)
@@ -266,6 +268,7 @@ def infer(args, gpu_id, valid_queue, models, criterion):
       n = bayer.size(0)
 
       for i, model in enumerate(models):
+        model.reset()
         if args.use_green_input:
           model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
           pred = model.run(model_inputs)

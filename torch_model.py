@@ -14,57 +14,6 @@ def extclass(cls):
 
 
 
-"""
-Converts flat activation map to 4 channel-wise groups
-of activations
-Assumes activation map points are centered on input
-bayer values with format 
-              Gb B
-              R  Gr
-Moves the values from the flat activation map into 
-channels based on where they're centered with format: 
-             Gr R B Gb
-If input flat activation map has k channels then the 
-output will have 4*k channels
-"""
-def init_flat2dense(weights):
-  assert(weights.shape[0] == weights.shape[1]*4), \
-  "Expected output channels of flat2dense to be 4x the input channels"
-  assert(weights.shape[-2:] == (2,2)), "Expected kernel size of flat2dense to be (2,2)"
-  weights.fill_(0.0)
-  c_stride = weights.shape[1]
-  offset = 0
-  for i in range(c_stride):
-    weights[offset+i, i, 1, 1] = 1
-
-  offset += c_stride
-  for i in range(c_stride):
-    weights[offset+i, i, 1, 0] = 1
-
-  offset += c_stride
-  for i in range(c_stride):
-    weights[offset+i, i, 0, 1] = 1
-
-  offset += c_stride
-  for i in range(c_stride):
-    weights[offset+i, i, 0, 0] = 1
-
-"""
-splats values of a 4 group channel-wise activation map centered 
-at Gr, R, B, Gb in a downsampled input bayer to their locations in an upsampled 
-4 group channel-wise bayer. 
-Assumes that the input channel order is Gr, R, B, Gb
-"""
-def init_dense2fullres_bayer(weights):
-  assert(weights.shape[-2:] == (6, 6)), "Expected kernel size of dense2fullres_bayer to be (6,6)"
-  weights.fill_(0.0)
-  c_stride = weights.shape[0]//4
-  weights[0         :c_stride  , 0, 0::2, 0::2] = 1
-  weights[c_stride  :c_stride*2, 0, 0::2, 1::2] = 1
-  weights[c_stride*2:c_stride*3, 0, 1::2, 0::2] = 1
-  weights[c_stride*3:          , 0, 1::2, 1::2] = 1
-
-
 class InputOp(nn.Module):
   def __init__(self, input_name, model=None, model_name=None):
     super(InputOp, self).__init__()
@@ -73,7 +22,7 @@ class InputOp(nn.Module):
       self.model = model
       self.model_name = f"input_model_{model_name}"
       setattr(self, self.model_name, model)
-      self.output = None
+    self.output = None
 
   def _initialize_parameters(self):
     if hasattr(self, "model"):
@@ -81,18 +30,26 @@ class InputOp(nn.Module):
 
   def reset(self):
     self.output = None
+    if hasattr(self, "model"):
+      self.model.reset()
 
   # unnecessary function, never called but needed by nn.Module
   def foward(self, model_inputs):
     return model_inputs[self.name]
 
   def run(self, model_inputs):
-    if hasattr(self, "model"):
-      if not self.output is None:
-        return self.output
+    if self.output is None:
+      if hasattr(self, "model"):
+        if self.model.output:
+          print(f"model for input {self.name} has already been run")
+          self.output = self.model.output
+          return self.output
+        else:
+          print(f"running model {self.model.name} for input {self.name}")
+          self.output = self.model.run(model_inputs)
+          return self.output
       else:
-        self.output = self.model.run(model_inputs)
-        return self.output
+        return model_inputs[self.name]
     else:
       return model_inputs[self.name]
 
@@ -105,6 +62,7 @@ class AddOp(nn.Module):
   def __init__(self, loperand, roperand):
     super(AddOp, self).__init__()
     self._operands = nn.ModuleList([loperand, roperand])
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -113,11 +71,14 @@ class AddOp(nn.Module):
   def reset(self):
     self._operands[0].reset()
     self._operands[1].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    loperand = self._operands[0].run(model_inputs)
-    roperand = self._operands[1].run(model_inputs)
-    return self.forward(loperand, roperand)
+    if self.output is None:
+      loperand = self._operands[0].run(model_inputs)
+      roperand = self._operands[1].run(model_inputs)
+      self.output = self.forward(loperand, roperand)
+    return self.output 
 
   def forward(self, x, y):
     # for handling quad layouts that can't use default pytorch broadcasting:
@@ -143,6 +104,7 @@ class SubOp(nn.Module):
   def __init__(self, loperand, roperand):
     super(SubOp, self).__init__()
     self._operands = nn.ModuleList([loperand, roperand])
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -151,11 +113,14 @@ class SubOp(nn.Module):
   def reset(self):
     self._operands[0].reset()
     self._operands[1].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    loperand = self._operands[0].run(model_inputs)
-    roperand = self._operands[1].run(model_inputs)
-    return self.forward(loperand, roperand)
+    if self.output is None:
+      loperand = self._operands[0].run(model_inputs)
+      roperand = self._operands[1].run(model_inputs)
+      self.output = self.forward(loperand, roperand)
+    return self.output 
 
   def forward(self, x, y): 
     # for handling quad layouts that can't use default pytorch broadcasting:
@@ -181,6 +146,7 @@ class MulOp(nn.Module):
   def __init__(self, loperand, roperand):
     super(MulOp, self).__init__()
     self._operands = nn.ModuleList([loperand, roperand])
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -189,11 +155,14 @@ class MulOp(nn.Module):
   def reset(self):
     self._operands[0].reset()
     self._operands[1].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    loperand = self._operands[0].run(model_inputs)
-    roperand = self._operands[1].run(model_inputs)
-    return self.forward(loperand, roperand)
+    if self.output is None:
+      loperand = self._operands[0].run(model_inputs)
+      roperand = self._operands[1].run(model_inputs)
+      self.output = self.forward(loperand, roperand)
+    return self.output 
 
   def forward(self, x, y):
     # for handling quad layouts that can't use default pytorch broadcasting:
@@ -219,6 +188,7 @@ class LogSubOp(nn.Module):
   def __init__(self, loperand, roperand):
     super(LogSubOp, self).__init__()
     self._operands = nn.ModuleList([loperand, roperand])
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -227,11 +197,14 @@ class LogSubOp(nn.Module):
   def reset(self):
     self._operands[0].reset()
     self._operands[1].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    loperand = self._operands[0].run(model_inputs)
-    roperand = self._operands[1].run(model_inputs)
-    return self.forward(loperand, roperand)
+    if self.output is None:
+      loperand = self._operands[0].run(model_inputs)
+      roperand = self._operands[1].run(model_inputs)
+      self.output = self.forward(loperand, roperand)
+    return self.output 
 
   def forward(self, x, y):
     # for handling quad layouts that can't use default pytorch broadcasting:
@@ -257,6 +230,7 @@ class AddExpOp(nn.Module):
   def __init__(self, loperand, roperand):
     super(AddExpOp, self).__init__()
     self._operands = nn.ModuleList([loperand, roperand])
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -265,11 +239,14 @@ class AddExpOp(nn.Module):
   def reset(self):
     self._operands[0].reset()
     self._operands[1].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    loperand = self._operands[0].run(model_inputs)
-    roperand = self._operands[1].run(model_inputs)
-    return self.forward(loperand, roperand)
+    if self.output is None:
+      loperand = self._operands[0].run(model_inputs)
+      roperand = self._operands[1].run(model_inputs)
+      self.output = self.forward(loperand, roperand)
+    return self.output
 
   def forward(self, x, y):
     # for handling quad layouts that can't use default pytorch broadcasting:
@@ -295,6 +272,7 @@ class StackOp(nn.Module):
   def __init__(self, loperand, roperand):
     super(StackOp, self).__init__()
     self._operands = nn.ModuleList([loperand, roperand])
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -303,11 +281,14 @@ class StackOp(nn.Module):
   def reset(self):
     self._operands[0].reset()
     self._operands[1].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    loperand = self._operands[0].run(model_inputs)
-    roperand = self._operands[1].run(model_inputs)
-    return self.forward(loperand, roperand)
+    if self.output is None:
+      loperand = self._operands[0].run(model_inputs)
+      roperand = self._operands[1].run(model_inputs)
+      self.output = self.forward(loperand, roperand)
+    return self.output 
 
   def forward(self, x, y):
     return torch.cat((x, y), 1)
@@ -317,12 +298,15 @@ class StackOp(nn.Module):
     self._operands[1].to_gpu(gpu_id)
 
 
-# Takes BayerQuad, 4 channel green prediction, and 6 channel Chroma prediction
-# spits out full RGB image at full resolution 
+# Takes FullGreenQuad predction, RedBlueQuad from Bayer, and 
+# 6 channel chroma quad prection: R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
+# spits out full RGB Image at full resolution
 class RGBExtractorOp(nn.Module):
-  def __init__(self, operand1, operand2, operand3):
+  def __init__(self, fullgreen, redbluebayer, chromapred):
     super(RGBExtractorOp, self).__init__()
-    self._operands = nn.ModuleList([operand1, operand2, operand3])
+    self._operands = nn.ModuleList([fullgreen, redbluebayer, chromapred])
+    self.pixel_shuffle = nn.PixelShuffle(upscale_factor=2)
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -333,36 +317,37 @@ class RGBExtractorOp(nn.Module):
     self._operands[0].reset()
     self._operands[1].reset()
     self._operands[2].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    self.reset()
-    operand1 = self._operands[0].run(model_inputs)
-    operand2 = self._operands[1].run(model_inputs)
-    operand3 = self._operands[2].run(model_inputs)
+    if self.output is None:
+      operand1 = self._operands[0].run(model_inputs)
+      operand2 = self._operands[1].run(model_inputs)
+      operand3 = self._operands[2].run(model_inputs)
+      self.output = self.forward(operand1, operand2, operand3)
+    return self.output 
 
-    return self.forward(operand1, operand2, operand3)
+  def forward(self, fullgreen, redbluebayer, chromapred):
+    # fullgreen : 4 channels
+    # redbluebayer : 2 channels  
+    # chromapred: 6 channels R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
+    fullgreen_shape = np.array(fullgreen.shape)
+    out_shape = [fullgreen_shape[0], 3, fullgreen_shape[2]*2, fullgreen_shape[3]*2]
+    img = torch.empty(torch.Size(out_shape), device=fullgreen.device)
 
-  def forward(self, bayer_quad, green_pred, chroma_pred):
-    # bayer_quad : 4 channels
-    # green_pred : 4 channels Green 
-    # chroma_pred: 6 channels Red at Gr, B, Gb and Blue at Gr, R, Gb
-    mosaic_shape = list(bayer_quad.shape)
-    out_shape = [mosaic_shape[0], 3, mosaic_shape[2]*2, mosaic_shape[3]*2]
-    img = torch.empty(torch.Size(out_shape), device=bayer_quad.device)
+    # fill in reds
+    img[:,0,0::2,0::2] = chromapred[:,0,:,:]
+    img[:,0,0::2,1::2] = redbluebayer[:,0,:,:]
+    img[:,0,1::2,0::2] = chromapred[:,2,:,:]
+    img[:,0,1::2,1::2] = chromapred[:,3,:,:]
 
-    img[:,0,0::2,0::2] = chroma_pred[:,0,:,:]
-    img[:,0,0::2,1::2] = bayer_quad[:,1,:,:]
-    img[:,0,1::2,0::2] = chroma_pred[:,1,:,:]
-    img[:,0,1::2,1::2] = chroma_pred[:,2,:,:]
-
-    img[:,1,0::2,0::2] = bayer_quad[:,0,:,:]
-    img[:,1,0::2,1::2] = green_pred[:,1,:,:]
-    img[:,1,1::2,0::2] = green_pred[:,2,:,:]
-    img[:,1,1::2,1::2] = bayer_quad[:,3,:,:]
-
-    img[:,2,0::2,0::2] = chroma_pred[:,3,:,:]
-    img[:,2,0::2,1::2] = chroma_pred[:,4,:,:]
-    img[:,2,1::2,0::2] = bayer_quad[:,2,:,:]
+    # fill in greens
+    img[:,1,:,:] = self.pixel_shuffle(fullgreen)
+   
+    # fill in blues
+    img[:,2,0::2,0::2] = chroma_pred[:,4,:,:]
+    img[:,2,0::2,1::2] = chroma_pred[:,1,:,:]
+    img[:,2,1::2,0::2] = redbluebayer[:,1,:,:]
     img[:,2,1::2,1::2] = chroma_pred[:,5,:,:]
     
     return img 
@@ -378,6 +363,7 @@ class GreenExtractorOp(nn.Module):
     super(GreenExtractorOp, self).__init__()
     self._operands = nn.ModuleList([operand1, operand2])
     self.pixel_shuffle = nn.PixelShuffle(upscale_factor=2)
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -386,13 +372,14 @@ class GreenExtractorOp(nn.Module):
   def reset(self):
     self._operands[0].reset()
     self._operands[1].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    self.reset()
-    operand1 = self._operands[0].run(model_inputs)
-    operand2 = self._operands[1].run(model_inputs)
-
-    return self.forward(operand1, operand2)
+    if self.output is None:
+      operand1 = self._operands[0].run(model_inputs)
+      operand2 = self._operands[1].run(model_inputs)
+      self.output = self.forward(operand1, operand2)
+    return self.output
 
   """
   Takes bayer quad and 2 channel green prediction
@@ -411,21 +398,111 @@ class GreenExtractorOp(nn.Module):
     self._operands[1].to_gpu(gpu_id)
 
 
-class SoftmaxOp(nn.Module):
+"""
+takes flat green prediction and extracts out 2 channel
+green predicted values at Red and Blue bayer quad locations
+"""
+class GreenRBExtractorOp(nn.Module):
   def __init__(self, operand):
-    super(SoftmaxOp, self).__init__()
+    super(GreenRBExtractorOp, self).__init__()
     self._operands = nn.ModuleList([operand])
-    self.f = nn.Softmax(dim=1)
-  
+    self.output = None
+
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
   def reset(self):
     self._operands[0].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    operand = self._operands[0].run(model_inputs)
-    return self.forward(operand)
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
+
+  def forward(self, flat_green):
+    # input: flat green channel 
+    # output: green at Red and Blue
+    flat_green_shape = np.array(flat_green.shape)
+    N = flat_green_shape[0]
+    quad_h = flat_green_shape[2] // 2
+    quad_w = quad_h
+    out_shape = [N, 2, quad_h, quad_w]
+
+    green_quad = torch.empty(torch.Size(out_shape), device=flat_green.device)
+    green_quad[:,0,:,:] = flat_green[:,0,0::2,1::2]
+    green_quad[:,1,:,:] = flat_green[:,0,1::2,0::2]
+   
+    return green_quad
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
+"""
+takes flat channel prediction and returns full 
+channel in bayer quad format
+"""
+class Flat2QuadOp(nn.Module):
+  def __init__(self, operand):
+    super(Flat2QuadOp, self).__init__()
+    self._operands = nn.ModuleList([operand])
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
+
+  def forward(self, flat):
+    # input: flat green channel 
+    # output: green at Red and Blue
+    flat_shape = np.array(flat.shape)
+    N = flat[0]
+    quad_h = flat_shape[2] // 2
+    quad_w = quad_h
+    out_shape = [N, 4, quad_h, quad_w]
+
+    quad = torch.empty(torch.Size(out_shape), device=flat.device)
+    quad[:,0,:,:] = flat[:,0,0::2,0::2]
+    quad[:,1,:,:] = flat[:,0,0::2,1::2]
+    quad[:,2,:,:] = flat[:,0,1::2,0::2]
+    quad[:,3,:,:] = flat[:,0,1::2,1::2]
+
+    return quad
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
+class SoftmaxOp(nn.Module):
+  def __init__(self, operand):
+    super(SoftmaxOp, self).__init__()
+    self._operands = nn.ModuleList([operand])
+    self.f = nn.Softmax(dim=1)
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
 
   def forward(self, x):
     return self.f(x)
@@ -439,16 +516,20 @@ class ReluOp(nn.Module):
     super(ReluOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.f = nn.ReLU()
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
   def reset(self):
     self._operands[0].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    operand = self._operands[0].run(model_inputs)
-    return self.forward(operand)
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
 
   def forward(self, x):
     return self.f(x)
@@ -461,16 +542,20 @@ class LogOp(nn.Module):
   def __init__(self, operand):
     super(LogOp, self).__init__()
     self._operands = nn.ModuleList([operand])
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
   def reset(self):
     self._operands[0].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    operand = self._operands[0].run(model_inputs)
-    return self.forward(operand)
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
 
   def forward(self, x):
     return torch.log(x)
@@ -483,16 +568,20 @@ class ExpOp(nn.Module):
   def __init__(self, operand):
     super(ExpOp, self).__init__()
     self._operands = nn.ModuleList([operand])
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
   def reset(self):
     self._operands[0].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    operand = self._operands[0].run(model_inputs)
-    return self.forward(operand)
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
 
   def forward(self, x):
     return torch.exp(x)
@@ -511,6 +600,7 @@ class DownsampleOp(nn.Module):
     downsampler = nn.Conv2d(C_in, C_in, self.downsample_w, stride=scale_factor, padding=(self.downsample_w-self.scale_factor)//2, bias=False)
     self.param_name = param_name
     setattr(self, param_name, downsampler)
+    self.output = None
 
   def _initialize_parameters(self):
     downsampler = getattr(self, self.param_name)
@@ -519,10 +609,13 @@ class DownsampleOp(nn.Module):
 
   def reset(self):
     self._operands[0].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    operand = self._operands[0].run(model_inputs)
-    return self.forward(operand)
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
 
   def forward(self, x):
     downsampler = getattr(self, self.param_name)
@@ -541,16 +634,20 @@ class UpsampleOp(nn.Module):
     self.param_name = param_name
     bilinear = nn.Upsample(scale_factor=scale_factor, mode='bilinear')
     setattr(self, self.param_name, bilinear)
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
   def reset(self):
     self._operands[0].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    operand = self._operands[0].run(model_inputs)
-    return self.forward(operand)
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
 
   def forward(self, x):
     upsampler = getattr(self, self.param_name)
@@ -567,6 +664,7 @@ class Conv1x1Op(nn.Module):
     f = nn.Conv2d(C_in, C_out, (1, 1), bias=False, padding=0)
     self.param_name = param_name
     setattr(self, param_name, f)
+    self.output = None
 
   def _initialize_parameters(self):
     f = getattr(self, self.param_name)
@@ -575,10 +673,13 @@ class Conv1x1Op(nn.Module):
 
   def reset(self):
     self._operands[0].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    operand = self._operands[0].run(model_inputs)
-    return self.forward(operand)
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
 
   def forward(self, x): 
     f = getattr(self, self.param_name)
@@ -651,6 +752,7 @@ class Conv1DOp(nn.Module):
   
     setattr(self, self.param_name_v, v)
     setattr(self, self.param_name_h, h)
+    self.output = None
 
   def _initialize_parameters(self):
     v = getattr(self, self.param_name_v)
@@ -662,10 +764,13 @@ class Conv1DOp(nn.Module):
 
   def reset(self):
     self._operands[0].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    operand = self._operands[0].run(model_inputs)
-    return self.forward(operand)
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
 
   def forward(self, x):
     v = getattr(self, self.param_name_v)
@@ -683,6 +788,7 @@ class Conv2DOp(nn.Module):
     self.param_name = param_name
     f = nn.Conv2d(C_in, C_out, (kwidth,kwidth), bias=False, padding=kwidth//2)
     setattr(self, self.param_name, f)
+    self.output = None
 
   def _initialize_parameters(self):
     f = getattr(self, self.param_name)
@@ -691,11 +797,13 @@ class Conv2DOp(nn.Module):
 
   def reset(self):
     self._operands[0].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    operand = self._operands[0].run(model_inputs)
-    return self.forward(operand)
-
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
   def forward(self, x):
     f = getattr(self, self.param_name)
     return f(x)
@@ -709,16 +817,20 @@ class GroupedSumOp(nn.Module):
     super(GroupedSumOp, self).__init__()
     self.C_out = C_out
     self._operands = nn.ModuleList([operand])
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
   def reset(self):
     self._operands[0].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    operand = self._operands[0].run(model_inputs)
-    return self.forward(operand)
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
 
   def forward(self, x):
     x_shape = list(x.shape)
@@ -735,16 +847,20 @@ class InterleavedSumOp(nn.Module):
     super(InterleavedSumOp, self).__init__()
     self.C_out = C_out
     self._operands = nn.ModuleList([operand])
+    self.output = None
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
   def reset(self):
     self._operands[0].reset()
+    self.output = None
 
   def run(self, model_inputs):
-    operand = self._operands[0].run(model_inputs)
-    return self.forward(operand)
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
 
   def forward(self, x):
     x_shape = list(x.shape)
@@ -760,39 +876,59 @@ class InterleavedSumOp(nn.Module):
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   if hasattr(self, "node"):
-    if id(self) in shared_children:
-      return shared_children[id(self)]
-    else:
-      node_model = self.node.ast_to_model()
-      input_op = InputOp(self.name, model=node_model, model_name=self.name)
-      shared_children[id(self)] = input_op
-    return input_op
-  return InputOp(self.name)
+    node_model = self.node.ast_to_model()
+    input_op = InputOp(self.name, model=node_model, model_name=self.name)
+  else:
+    input_op = InputOp(self.name)
+
+  shared_children[id(self)] = input_op 
+  return input_op
 
 @extclass(Add)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   lmodel = self.lchild.ast_to_model(shared_children)
   rmodel = self.rchild.ast_to_model(shared_children)
-  return AddOp(lmodel, rmodel)
+  model = AddOp(lmodel, rmodel)
+
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(Sub)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   lmodel = self.lchild.ast_to_model(shared_children)
   rmodel = self.rchild.ast_to_model(shared_children)
-  return SubOp(lmodel, rmodel)
+  model = SubOp(lmodel, rmodel)
+
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(Mul)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   lmodel = self.lchild.ast_to_model(shared_children)
   rmodel = self.rchild.ast_to_model(shared_children)
-  return MulOp(lmodel, rmodel)
+  model = MulOp(lmodel, rmodel)
+
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(LogSub)
 def ast_to_model(self, shared_children=None):
@@ -828,101 +964,213 @@ def ast_to_model(self, shared_children=None):
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   lmodel = self.lchild.ast_to_model(shared_children)
   rmodel = self.rchild.ast_to_model(shared_children)
-  return StackOp(lmodel, rmodel)
+  model = StackOp(lmodel, rmodel)
+
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(RGBExtractor)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
-  model1 = self.child1.ast_to_model(shared_children)
-  model2 = self.child2.ast_to_model(shared_children)
-  model3 = self.child3.ast_to_model(shared_children)
-  return RGBExtractorOp(model1, model2, model3)
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child1_model = self.child1.ast_to_model(shared_children)
+  child2_model = self.child2.ast_to_model(shared_children)
+  child3_model = self.child3.ast_to_model(shared_children)
+  model = RGBExtractorOp(child1_model, child2_model, child3_model)
+
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(GreenExtractor)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   lmodel = self.lchild.ast_to_model(shared_children)
   rmodel = self.rchild.ast_to_model(shared_children)
-  return GreenExtractorOp(lmodel, rmodel)
+  model = GreenExtractorOp(lmodel, rmodel)
+  
+  shared_children[id(self)] = model 
+  return model
+
+@extclass(GreenRBExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child_model = self.child.ast_to_model(shared_children)
+  model = GreenRBExtractorOp(child_model)
+
+  shared_children[id(self)] = model 
+  return model
+
+@extclass(Flat2Quad)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child_model = self.child.ast_to_model(shared_children)
+  model = Flat2QuadOp(child_model)
+
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(Softmax)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   child_model = self.child.ast_to_model(shared_children)
-  return SoftmaxOp(child_model)
+  model = SoftmaxOp(child_model)
+
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(Relu)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   child_model = self.child.ast_to_model(shared_children)
-  return ReluOp(child_model)
+  model = ReluOp(child_model)
+  
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(Log)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   child_model = self.child.ast_to_model(shared_children)
-  return LogOp(child_model)
+  model = LogOp(child_model)
+  
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(Exp)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   child_model = self.child.ast_to_model(shared_children)
-  return ExpOp(child_model)
+  model = ExpOp(child_model)
+  
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(Downsample)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   child_model = self.child.ast_to_model(shared_children)
-  return DownsampleOp(child_model, self.in_c, 2, self.name)
+  model = DownsampleOp(child_model, self.in_c, 2, self.name)
+
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(Upsample)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+    
   child_model = self.child.ast_to_model(shared_children)
-  return UpsampleOp(child_model, self.in_c, 2, self.name)
+  model = UpsampleOp(child_model, self.in_c, 2, self.name)
+
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(Conv1x1)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   child_model = self.child.ast_to_model(shared_children)
-  return Conv1x1Op(child_model, self.in_c, self.out_c, self.name)
+  model = Conv1x1Op(child_model, self.in_c, self.out_c, self.name)
+
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(Conv1D)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   child_model = self.child.ast_to_model(shared_children)
-  return Conv1DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth)
+  model = Conv1DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth)
+
+  shared_children[id(self)] = model 
+  return model
+
 
 @extclass(Conv2D)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   child_model = self.child.ast_to_model(shared_children)
-  return Conv2DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth)
+  model = Conv2DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth)
+
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(InterleavedSum)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   child_model = self.child.ast_to_model(shared_children)
-  return InterleavedSumOp(child_model, self.out_c)
+  model = InterleavedSumOp(child_model, self.out_c)
+
+  shared_children[id(self)] = model 
+  return model
 
 @extclass(GroupedSum)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
   child_model = self.child.ast_to_model(shared_children)
-  return GroupedSumOp(child_model, self.out_c)
+  model = GroupedSumOp(child_model, self.out_c)
+
+  shared_children[id(self)] = model 
+  return model
+
 

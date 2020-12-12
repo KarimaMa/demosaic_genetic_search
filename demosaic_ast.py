@@ -70,6 +70,10 @@ class Unop(ABC):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
 
+class UnopIcJc(Unop):
+  def __init__(self):
+    assert False, "Do not try to instantiate abstract expressions"
+
 class UnopII(Unop):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
@@ -172,8 +176,9 @@ class Stack(BinopIJK, Special, Node):
     self.in_c = None 
     
 
-# Takes BayerQuad, 4 channel green prediction, and 6 channel Chroma prediction
-# spits out full RGB image at full resolution 
+# Takes FullGreenQuad predction, RedBlueQuad from Bayer, and 
+# 6 channel chroma quad prection: R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
+# spits out full RGB Image at full resolution
 class RGBExtractor(TernaryHcIcJcKc, Special, Node):
   def __init__(self, child1, child2, child3, name=None):
     if name is None:
@@ -182,17 +187,17 @@ class RGBExtractor(TernaryHcIcJcKc, Special, Node):
     self.child1 = child1
     self.child2 = child2
     self.child3 = child3
-    self.in_c = (4, 4, 6) # bayer, green, missing chroma
+    self.in_c = (4, 2, 6) # fullgreen, redbluebayer, missing chroma
     self.out_c = 3
 
   def Hc(self):
-    return 4 # bayer
+    return 4 # fullgreen
   def Ic(self):
-    return 4 # green
+    return 2 # redblue bayer
   def Jc(self):
     return 6 # missing chroma
   def Kc(self): 
-    return 3
+    return 3 # full rgb image
 
 
 """
@@ -215,6 +220,33 @@ class GreenExtractor(BinopIcJcKc, Special, Node):
   def Kc(self):
     return 1
 
+
+class Flat2Quad(UnopIcJc, Special, Node):
+  def __init__(self, child, name=None):
+    if name is None:
+      name = "Flat2Quad"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.in_c = 1
+    self.out_c = 4 
+  def Ic(self):
+    return 1
+  def Jc(self):
+    return 4
+
+class GreenRBExtractor(UnopIcJc, Special, Node):
+  def __init__(self, child, name=None):
+    if name is None:
+      name = "GreenRBExtractorOp"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.in_c = 1
+    self.out_c = 2
+  def Ic(self):
+    return 1
+  def Jc(self):
+    return 2
+ 
 class Softmax(UnopII, NonLinear, Node):
   def __init__(self, child, name=None):
     if name is None:
@@ -392,6 +424,16 @@ def compute_input_output_channels(self):
 def compute_input_output_channels(self):
   self.lchild.compute_input_output_channels()
   self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(Flat2Quad)
+def compute_input_output_channels(self):
+  self.child.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(GreenRBExtractor)
+def compute_input_output_channels(self):
+  self.child.compute_input_output_channels()
   return self.in_c, self.out_c
 
 @extclass(Softmax)
@@ -919,7 +961,7 @@ sandwich_pairs = {
   Downsample: Upsample
 }
 
-border_ops = set((RGBExtractor, GreenExtractor, Input))
+border_ops = set((RGBExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input))
 nl_and_sp = nonlinear_ops.union(special_ops)
 l_and_sp = linear_ops.union(special_ops)
 all_ops = nl_and_sp.union(l_and_sp)

@@ -61,6 +61,11 @@ def shrink_channels(node, max_c, out_c=None):
     shrink_channels(node.child2, max_c, out_c=node.Ic())
     shrink_channels(node.child3, max_c, out_c=node.Jc()) 
     return node.out_c  
+  elif isinstance(node, UnopIcJc): # Flat2Quad or GreenRBExtractor
+    if not out_c is None:
+      assert out_c == node.Jc(), f"output channels of {node.__class__.__name__} cannot be set to {out_c}"
+    shrink_channels(node.child, max_c, out_c=node.Ic())
+    return node.out_c
   elif isinstance(node, UnopIJ):
     if out_c is None:
       node.out_c = min(node.out_c, max_c)
@@ -167,6 +172,10 @@ def check_channel_count(node):
     child3_c = check_channel_count(node.child3)
     assert(child1_c == node.Hc() and child2_c == node.Ic() and child3_c == node.Jc())
     return node.Kc()
+  elif isinstance(node, UnopIcJc):
+    child_c = check_channel_count(node.child)
+    assert(child_c == node.Ic())
+    return node.Jc()
   elif isinstance(node, UnopII):
     child_c = check_channel_count(node.child)
     return child_c
@@ -308,7 +317,10 @@ def fix_channel_count_downwards(root, parent, out_c, fixed_nodes=None):
         if fixed:
           root.in_c = in_c
           root.out_c = out_c 
-    elif isinstance(root, TernaryHcIcJcKc) or isinstance(root, BinopIcJcKc) or isinstance(root, Const):
+    elif isinstance(root, TernaryHcIcJcKc) \
+      or isinstance(root, BinopIcJcKc) \
+      or isinstance(root, UnopIcJc) \
+      or isinstance(root, Const):
       fixed = (root.out_c == out_c) 
     elif isinstance(root, UnopII): # is type UnopII
       fixed = fix_channel_count_downwards(root.child, root, out_c, fixed_nodes)
@@ -420,6 +432,8 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c, fixed_nodes=None):
       fixed = parent.in_c[1] == in_c
     else:
       fixed = parent.in_c[2] == in_c
+  elif isinstance(parent, UnopIcJc):
+    fixed = parent.in_c == in_c
   elif isinstance(parent, tuple):
     assert False, "PARENT SHOULD NEVER BE TUPLE WHEN CALLING FIX UPWARDS HELPER"
   else: # type is UnopII

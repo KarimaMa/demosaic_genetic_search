@@ -3027,7 +3027,7 @@ class MultiresQuadRGBV10Model(nn.Module):
         k = 3
 
       chroma_selector_layers[f"conv{d}"] = nn.Conv2d(in_c, out_c, k, padding=k//2, bias=self.bias)
-      if d != self.depth-1:
+      if d != self.chroma_depth-1:
         chroma_selector_layers[f"relu{d}"] = nn.ReLU()
 
     chroma_selector_layers["upsample"] = nn.Upsample(scale_factor=scale_factor, mode='bilinear') #nn.ConvTranspose2d(width*2, width*2, 2, stride=2, groups=width*2, bias=False)
