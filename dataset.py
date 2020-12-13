@@ -544,7 +544,7 @@ class FullPredictionQuadDataset(data.Dataset):
     redblue_bayer[0,:,:] = bayer_quad[1,:,:]
     redblue_bayer[1,:,:] = bayer_quad[2,:,:]
 
-    green_grgb[0,:,:] = bayer_quad[0,:,;]
+    green_grgb[0,:,:] = bayer_quad[0,:,:]
     green_grgb[1,:,:] = bayer_quad[3,:,:]
 
     target = img

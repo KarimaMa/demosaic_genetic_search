@@ -41,11 +41,9 @@ class InputOp(nn.Module):
     if self.output is None:
       if hasattr(self, "model"):
         if self.model.output:
-          print(f"model for input {self.name} has already been run")
           self.output = self.model.output
           return self.output
         else:
-          print(f"running model {self.model.name} for input {self.name}")
           self.output = self.model.run(model_inputs)
           return self.output
       else:
@@ -935,10 +933,6 @@ def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
   lmodel = self.lchild.ast_to_model(shared_children)
-  if not type(self.rchild.parent) is tuple:
-    print(f"right child of logsub parents {self.rchild.parent}")
-    print(self.rchild.parent.dump())
-    print(self.rchild.dump())
   assert (type(self.rchild.parent) is tuple), "Right child of LogSub should have two parents"
   if id(self.rchild) in shared_children:
     rmodel = shared_children[id(self.rchild)]
@@ -1100,7 +1094,7 @@ def ast_to_model(self, shared_children=None):
     shared_children = {}
   if id(self) in shared_children:
     return shared_children[id(self)]
-    
+
   child_model = self.child.ast_to_model(shared_children)
   model = UpsampleOp(child_model, self.in_c, 2, self.name)
 

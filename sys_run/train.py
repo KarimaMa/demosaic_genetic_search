@@ -9,7 +9,7 @@ import os
 import random 
 import numpy as np
 import sys
-from dataset import QuadDataset, GreenQuadDataset, ids_from_file, FastDataLoader
+from dataset import FullPredictionQuadDataset, GreenQuadDataset, ids_from_file, FastDataLoader
 
 sys.path.append(sys.path[0].split("/")[0])
 sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
@@ -39,7 +39,7 @@ def create_validation_dataset(args):
   if not args.full_model:
     validation_data = GreenQuadDataset(data_file=args.validation_file)
   else:
-    validation_data = QuadDataset(data_file=args.validation_file)
+    validation_data = FullPredictionQuadDataset(data_file=args.validation_file)
 
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
@@ -58,7 +58,7 @@ def create_train_dataset(args):
   if not args.full_model:
     train_data = GreenQuadDataset(data_file=args.training_file) 
   else:
-    train_data = QuadDataset(data_file=args.training_file)
+    train_data = FullPredictionQuadDataset(data_file=args.training_file)
 
   num_train = len(train_data)
   train_indices = list(range(num_train))

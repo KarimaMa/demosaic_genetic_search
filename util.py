@@ -147,12 +147,13 @@ def load_model_from_file(model_file, model_version, gpu_id=None):
     pytorch_files = [l.strip() for l in f]
 
   model_ast = load_ast(ast_file)
-  model = model_ast.ast_to_model(gpu_id)
+  model = model_ast.ast_to_model()
   state_dict = torch.load(pytorch_files[model_version])
   model.load_state_dict(torch.load(pytorch_files[model_version]))
 
   if gpu_id:
     model = model.to(device=f"cuda:{gpu_id}")
+    model.to_gpu(gpu_id)
 
   return model, model_ast
 

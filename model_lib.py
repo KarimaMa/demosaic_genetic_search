@@ -800,7 +800,7 @@ def MultiresQuadGreenModel(depth, width):
   upsampled_weights.compute_input_output_channels()
   
   downsampled_bayer.partner_set = set( [(upsampled_weights, id(upsampled_weights))] )
-  upsampled_weight.partner_set = set( [(downsampled_bayer, id(downsampled_bayer))] )
+  upsampled_weights.partner_set = set( [(downsampled_bayer, id(downsampled_bayer))] )
 
   lowres_mul = Mul(upsampled_weights, lowres_interp)
   fullres_mul = Mul(upsampled_weights, fullres_interp)
@@ -879,9 +879,9 @@ def ChromaSeedModel(depth, width, green_model):
   downsampled = Downsample(chroma_input)
   for i in range(selector_depth):
     if i == 0:
-        conv = Conv2D(downsampled, 6, kwidth=3)
-      else:
-        conv = Conv2D(relu, width, kwidth=3)
+      conv = Conv2D(downsampled, 6, kwidth=3)
+    else:
+      conv = Conv2D(relu, width, kwidth=3)
     if i != selector_depth-1:
       relu = Relu(conv)
 
@@ -895,9 +895,9 @@ def ChromaSeedModel(depth, width, green_model):
   # interp trunk
   for i in range(depth):
     if i == 0:
-        conv = Conv2D(interp_input, 6, kwidth=3)
-      else:
-        interp = Conv2D(relu, width, kwidth=3)
+      conv = Conv2D(interp_input, 6, kwidth=3)
+    else:
+      interp = Conv2D(relu, width, kwidth=3)
     if i != depth-1:
       relu = Relu(conv)
 

@@ -592,6 +592,11 @@ class Searcher():
         for task_id, model_id in enumerate(model_ids):
           self.debug_logger.debug(f"--- loading model {model_id} ---")
           model_ast = self.load_model(model_id)
+          parent_model_cost = self.model_database.get(model_id, 'compute_cost')
+          reloaded_cost = self.evaluator.compute_cost(model_ast)
+          if reloaded_cost != parent_model_cost:
+            print(f"ERROR: parent model saved cost {parent_model_cost} computed cost from reload {reloaded_cost}")
+            exit()
 
           if model_ast is None:
             continue
@@ -614,7 +619,6 @@ class Searcher():
           new_model_dir = self.model_manager.model_dir(new_model_id)
           new_model_entry = model_database_entry(new_model_id, new_model_ast.id_string(), new_model_ast, \
                                                 shash, generation, compute_cost, model_id, mutation_stats)
-
           task_info = MutationTaskInfo(task_id, new_model_entry, new_model_dir, pytorch_models, new_model_id)
 
           # consult mysql db for seen models on other machines
@@ -633,14 +637,29 @@ class Searcher():
           else:
             training_tasks.append((new_model_ast, task_info))
         
-      
+        # hack for now remove later
+        for new_model_ast, task_info in training_tasks:
+          util.create_dir(task_info.model_dir)
+          self.save_model_ast(new_model_ast, task_info.model_id, task_info.model_dir)
+
+        for ast, task_info in training_tasks:
+          task = self.create_train_process(task_info, gpu_ids, train_psnrs, valid_psnrs)
+          process_queue.add((task, task_info))
+
+        failed_tasks = self.run_training_tasks(gpu_ids, process_queue, training_tasks, valid_psnrs)
+
+
         # update model database 
         for new_model_ast, task_info in training_tasks:
+          if task_info.task_id in failed_tasks:
+            self.debug_logger.info(f"failed to train model {task_info.model_id} \n{new_mode_ast.dump()}")
           model_inits = self.args.model_initializations
           task_id = task_info.task_id 
           index = task_id * model_inits
 
-          model_psnrs = list(np.random.rand(len(model_ids)) * 8 + 25)
+          #model_psnrs = list(np.random.rand(len(model_ids)) * 8 + 25)
+          model_psnrs = valid_psnrs[index:(index+model_inits)]
+
           self.update_model_database(task_info, model_psnrs)
           util.create_dir(task_info.model_dir)
           # training subprocess handles saving the model weights - save the ast here in the master process
@@ -696,14 +715,15 @@ def parse_cost_tiers(s):
   print(ranges)
   return ranges
 
+
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
 
   parser.add_argument('--max_channels', type=int, default=32, help='max number of channels in any op')
   parser.add_argument('--default_channels', type=int, default=12, help='initial channel count for Convs')
-  parser.add_argument('--max_nodes', type=int, default=35, help='max number of nodes in a tree')
+  parser.add_argument('--max_nodes', type=int, default=40, help='max number of nodes in a tree')
   parser.add_argument('--min_subtree_size', type=int, default=1, help='minimum size of subtree in insertion')
-  parser.add_argument('--max_subtree_size', type=int, default=12, help='maximum size of subtree in insertion')
+  parser.add_argument('--max_subtree_size', type=int, default=15, help='maximum size of subtree in insertion')
   parser.add_argument('--structural_sim_reject', type=float, default=0.66, help='rejection probability threshold for structurally similar trees')
 
   parser.add_argument('--starting_model_id', type=int)
@@ -749,23 +769,24 @@ if __name__ == "__main__":
   parser.add_argument('--num_gpus', type=int, default=4, help='number of available GPUs') # change this to use all available GPUs
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
   parser.add_argument('--learning_rate', type=float, default=0.01, help='initial learning rate')
-  parser.add_argument('--lr_search_steps', type=int, default=1, help='how many line search iters for finding learning rate')
+  parser.add_argument('--lr_search_steps', type=int, default=0, help='how many line search iters for finding learning rate')
   parser.add_argument('--variance_min', type=float, default=0.003, help='minimum validation psnr variance')
   parser.add_argument('--variance_max', type=float, default=0.02, help='maximum validation psnr variance')
   parser.add_argument('--weight_decay', type=float, default=1e-16, help='weight decay')
   parser.add_argument('--report_freq', type=float, default=200, help='training report frequency')
   parser.add_argument('--save_freq', type=float, default=2000, help='trained weights save frequency')
-  parser.add_argument('--epochs', type=int, default=3, help='num of training epochs')
+  parser.add_argument('--epochs', type=int, default=1, help='num of training epochs')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
   parser.add_argument('--train_portion', type=int, default=1e5, help='portion of training data to use')
-  parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
-  parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
-  parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
+  parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of training data image files')
+  parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of validation data image files')
+  parser.add_argument('--validation_freq', type=int, default=1, help='validation frequency for assessing validation PSNR variance')
 
   # training full chroma + green parameters
   parser.add_argument('--use_green_input', action="store_true")
   parser.add_argument('--full_model', action="store_true")
 
+  parser.add_argument('--tablename', type=str)
   parser.add_argument('--mysql_auth', type=str)
   parser.add_argument("--machine", type=str)
 
@@ -788,13 +809,11 @@ if __name__ == "__main__":
     args.seed_model_file = args.chroma_seed_model_file
     args.seed_model_version = args.chroma_seed_model_version
     args.seed_model_psnr = args.chroma_seed_model_psnr
-    args.tablename = "chroma"
     args.task_out_c = 6
   else:
     args.seed_model_file = args.green_seed_model_file
     args.seed_model_version = args.green_seed_model_version
     args.seed_model_psnr = args.green_seed_model_psnr
-    args.tablename = "green"
     args.task_out_c = 2
 
   args.cost_tiers = parse_cost_tiers(args.cost_tiers)
