@@ -26,6 +26,26 @@ def vis_ast_helper(root, graph, node_id, seen=None):
 		graph.node(str(node_id), node_label)
 		node_id += 1
 
+		if root.num_children == 3:
+			if id(root.child1) in seen:
+				child1_id = seen[id(root.child1)]
+			else:	
+				child1_id = node_id	
+				node_id = vis_ast_helper(root.child1, graph, node_id, seen)
+			if id(root.child2) in seen:
+				child2_id = seen[id(root.child2)]
+			else:
+				child2_id = node_id
+				node_id = vis_ast_helper(root.child2, graph, node_id, seen)		
+			if id(root.child3) in seen:
+				child3_id = seen[id(root.child3)]
+			else:
+				child3_id = node_id
+				node_id = vis_ast_helper(root.child3, graph, node_id, seen)		
+
+			graph.edges([(str(child1_id), str(root_id)), (str(child2_id), str(root_id)), (str(child3_id), str(root_id))])
+
+
 		if root.num_children == 2:
 			if id(root.lchild) in seen:
 				lchild_id = seen[id(root.lchild)]
@@ -38,7 +58,6 @@ def vis_ast_helper(root, graph, node_id, seen=None):
 				rchild_id = node_id
 				node_id = vis_ast_helper(root.rchild, graph, node_id, seen)		
 
-			#graph.edges([(str(root_id), str(lchild_id)), (str(root_id), str(rchild_id))])
 			graph.edges([(str(lchild_id), str(root_id)), (str(rchild_id), str(root_id))])
 
 
@@ -48,7 +67,6 @@ def vis_ast_helper(root, graph, node_id, seen=None):
 			else:
 				child_id = node_id
 				node_id = vis_ast_helper(root.child, graph, node_id, seen)
-			#graph.edges([(str(root_id), str(child_id))])
 			graph.edges([(str(child_id), str(root_id))])
 
 	return node_id

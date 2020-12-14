@@ -861,10 +861,10 @@ def GradientHalideModel(width, k):
   return green
 
 
-def ChromaSeedModel(depth, width, green_model):
+def ChromaSeedModel1(depth, width, green_model):
   green_GrGb = Input(2, "Green@GrGb")
-  flat_green = Input(4, "FullGreen", node=green_model) # GreenExtractor output 
   rb = Input(2, "RedBlueBayer")
+  flat_green = Input(1, "FullGreen", node=green_model) # GreenExtractor output 
 
   green_quad = Flat2Quad(flat_green)
   green_rb = GreenRBExtractor(flat_green)
@@ -872,6 +872,58 @@ def ChromaSeedModel(depth, width, green_model):
   rb_min_g = Sub(rb, green_rb)
   selector_input = Stack(rb, green_quad)
   interp_input = Stack(rb_min_g, green_quad)
+  
+  selector_depth = depth + 1
+
+  # weight trunk
+  downsampled = Downsample(selector_input)
+  for i in range(selector_depth):
+    if i == 0:
+      conv = Conv2D(downsampled, 6, kwidth=3)
+    else:
+      conv = Conv2D(relu, width, kwidth=3)
+    if i != selector_depth-1:
+      relu = Relu(conv)
+
+  weights = Softmax(conv)
+  upsampled_weights = Upsample(weights)
+  upsampled_weights.compute_input_output_channels()
+  
+  downsampled.partner_set = set( [(upsampled_weights, id(upsampled_weights))] )
+  upsampled_weights.partner_set = set( [(downsampled, id(downsampled))] )
+
+  # interp trunk
+  for i in range(depth):
+    if i == 0:
+      interp = Conv2D(interp_input, width, kwidth=3)
+    else:
+      interp = Conv2D(relu, width, kwidth=3)
+    if i != depth-1:
+      relu = Relu(interp)
+
+  weighted_interps = Mul(upsampled_weights, interp)
+  chroma_diff_pred = GroupedSum(weighted_interps, 6) # 6 predicted values R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
+
+  added_green = Stack(green_quad, green_GrGb) # Gr R B Gb Gr Gb --> predicted values R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
+  chroma_pred = Add(chroma_diff_pred, added_green) # Gr R B Gb Gr Gb  
+
+  rgb = RGBExtractor(green_quad, rb, chroma_pred)
+  rgb.assign_parents()
+  rgb.compute_input_output_channels()
+
+  return rgb                                            
+
+
+def ChromaSeedModel2(depth, width, green_model):
+  green_GrGb = Input(2, "Green@GrGb")
+  rb = Input(2, "RedBlueBayer")
+  flat_green = Input(1, "FullGreen", node=green_model) # GreenExtractor output 
+
+  green_quad = Flat2Quad(flat_green)
+  green_rb = GreenRBExtractor(flat_green)
+
+  rb_min_g = Sub(rb, green_rb)
+  chroma_input = Stack(rb_min_g, green_quad)
   
   selector_depth = depth + 1
 
@@ -885,8 +937,8 @@ def ChromaSeedModel(depth, width, green_model):
     if i != selector_depth-1:
       relu = Relu(conv)
 
-  weights = Softmax(upsampled_weights)
-  upsampled_weights = Upsample(conv)
+  weights = Softmax(conv)
+  upsampled_weights = Upsample(weights)
   upsampled_weights.compute_input_output_channels()
   
   downsampled.partner_set = set( [(upsampled_weights, id(upsampled_weights))] )
@@ -895,23 +947,30 @@ def ChromaSeedModel(depth, width, green_model):
   # interp trunk
   for i in range(depth):
     if i == 0:
-      conv = Conv2D(interp_input, 6, kwidth=3)
+      interp = Conv2D(chroma_input, width, kwidth=3)
     else:
       interp = Conv2D(relu, width, kwidth=3)
     if i != depth-1:
-      relu = Relu(conv)
+      relu = Relu(interp)
 
   weighted_interps = Mul(upsampled_weights, interp)
   chroma_diff_pred = GroupedSum(weighted_interps, 6) # 6 predicted values R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
 
   added_green = Stack(green_quad, green_GrGb) # Gr R B Gb Gr Gb --> predicted values R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
-  chroma_pred = chroma_diff_pred + added_green # Gr R B Gb Gr Gb  
+  chroma_pred = Add(chroma_diff_pred, added_green) # Gr R B Gb Gr Gb  
 
   rgb = RGBExtractor(green_quad, rb, chroma_pred)
   rgb.assign_parents()
   rgb.compute_input_output_channels()
 
   return rgb                                            
+
+
+
+
+
+
+
 
 
 
