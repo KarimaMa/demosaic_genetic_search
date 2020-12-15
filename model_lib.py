@@ -889,7 +889,7 @@ def ChromaSeedModel1(depth, width, green_model):
   selector_input = Stack(rb, green_quad)
   interp_input = Stack(rb_min_g, green_quad)
   
-  selector_depth = depth + 1
+  selector_depth = depth 
 
   # weight trunk
   downsampled = Downsample(selector_input)
@@ -941,7 +941,7 @@ def ChromaSeedModel2(depth, width, green_model):
   rb_min_g = Sub(rb, green_rb)
   chroma_input = Stack(rb_min_g, green_quad)
   
-  selector_depth = depth + 1
+  selector_depth = depth
 
   # weight trunk
   downsampled = Downsample(chroma_input)

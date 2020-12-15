@@ -19,7 +19,7 @@ from torch_model import ast_to_model
 from dataset import GreenDataset, Dataset, FastDataLoader
 from dataset import GreenQuadDataset, FullPredictionQuadDataset, FastDataLoader
 from tree import print_parents
-
+import demosaic_ast
 
 def train(args, models, model_id, model_dir):
   print(f"training {len(models)} models")
@@ -218,9 +218,7 @@ if __name__ == "__main__":
   parser.add_argument('--chromaseed1', action='store_true')
   parser.add_argument('--chromaseed2', action='store_true')
 
-  parser.add_argument('--green_model', type=str, help="which green model to use for chroma model")
-  parser.add_argument('--green_depth', type=int)
-  parser.add_argument('--green_width', type=int)
+  parser.add_argument('--green_model_ast', type=str, help="green model ast to use for chroma model")
 
   parser.add_argument('--depth', type=int, help='num conv layers in model')
   parser.add_argument('--width', type=int, help='num channels in model layers')
@@ -296,12 +294,12 @@ if __name__ == "__main__":
     model = model_lib.GradientHalideModel(args.width, args.k)
   elif args.chromaseed1:
     logger.info("TRAINING CHROMA SEED MODEL1")
-    if args.green_model == "multiresquadgreen":
-      green_model = model_lib.MultiresQuadGreenModel(args.green_depth, args.green_width)
+    green_model = demosaic_ast.load_ast(args.green_model_ast)
     model = model_lib.ChromaSeedModel1(args.depth, args.width, green_model)
   elif args.chromaseed2:
     logger.info("TRAINING CHROMA SEED MODEL2")
-    model = model_lib.ChromaSeedModel2(args.depth, args.width)
+    green_model = demosaic_ast.load_ast(args.green_model_ast)
+    model = model_lib.ChromaSeedModel2(args.depth, args.width, green_model)
   else:
     logger.info("TRAINING BASIC GREEN")
     model = model_lib.basic1D_green_model()
