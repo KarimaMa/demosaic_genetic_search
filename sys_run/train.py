@@ -161,14 +161,14 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
   print(f"LEN OF TRAIN QUEUE {len(train_queue)}")
 
   for step, (input, target) in enumerate(train_queue):
-
-    if args.use_green_input:
-      bayer, green = input 
-      green_input = Variable(green, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+    if args.full_model:
+      bayer, redblue_bayer, green_grgb = input 
+      redblue_bayer = Variable(redblue_bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+      green_grgb = Variable(green_grgb, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
     else:
       bayer = input
 
-    bayer_input = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+    bayer = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
     target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
 
     n = bayer.size(0)
@@ -176,11 +176,13 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
     for i, model in enumerate(models):
       model.reset()
       optimizers[i].zero_grad()
-      if args.use_green_input:
-        model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
+      if args.full_model:
+        model_inputs = {"Input(Bayer)": bayer, 
+                        "Input(Green@GrGb)": green_grgb, 
+                        "Input(RedBlueBayer)": redblue_bayer}
         pred = model.run(model_inputs)
       else:
-        model_inputs = {"Input(Bayer)": bayer_input}
+        model_inputs = {"Input(Bayer)": bayer}
 
       pred = model.run(model_inputs)
       loss = criterion(pred, target)
@@ -209,14 +211,14 @@ def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_
     m.train()
 
   for step, (input, target) in enumerate(train_queue):
-
-    if args.use_green_input:
-      bayer, green = input 
-      green_input = Variable(green, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+    if args.full_model:
+      bayer, redblue_bayer, green_grgb = input 
+      redblue_bayer = Variable(redblue_bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+      green_grgb = Variable(green_grgb, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
     else:
       bayer = input
 
-    bayer_input = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+    bayer = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
     target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
 
     n = bayer.size(0)
@@ -224,11 +226,13 @@ def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_
     for i, model in enumerate(models):
       optimizers[i].zero_grad()
       model.reset()
-      if args.use_green_input:
-        model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
+      if args.full_model:
+        model_inputs = {"Input(Bayer)": bayer, 
+                        "Input(Green@GrGb)": green_grgb, 
+                        "Input(RedBlueBayer)": redblue_bayer}
         pred = model.run(model_inputs)
       else:
-        model_inputs = {"Input(Bayer)": bayer_input}
+        model_inputs = {"Input(Bayer)": bayer}
 
       pred = model.run(model_inputs)
       loss = criterion(pred, target)
@@ -255,29 +259,35 @@ def infer(args, gpu_id, valid_queue, models, criterion):
 
   with torch.no_grad():
     for step, (input, target) in enumerate(valid_queue):
-  
-      if args.use_green_input:
-        bayer, green = input 
-        green_input = Variable(green, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+      if args.full_model:
+        bayer, redblue_bayer, green_grgb = input 
+        redblue_bayer = Variable(redblue_bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+        green_grgb = Variable(green_grgb, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
       else:
         bayer = input
 
-      bayer_input = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+      bayer = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
       target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
 
       n = bayer.size(0)
 
       for i, model in enumerate(models):
         model.reset()
-        if args.use_green_input:
-          model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
+        if args.full_model:
+          model_inputs = {"Input(Bayer)": bayer, 
+                          "Input(Green@GrGb)": green_grgb, 
+                          "Input(RedBlueBayer)": redblue_bayer}
           pred = model.run(model_inputs)
         else:
-          model_inputs = {"Input(Bayer)": bayer_input}
-
+          model_inputs = {"Input(Bayer)": bayer}
+       
         pred = model.run(model_inputs)
-        loss = criterion(pred, target)
+        clamped = torch.clamp(pred, min=0, max=1)
+
+        loss = criterion(clamped, target)
         loss_trackers[i].update(loss.item(), n)
 
   return [loss_tracker.avg for loss_tracker in loss_trackers]
+
+
 

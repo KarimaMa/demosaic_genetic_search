@@ -212,6 +212,8 @@ class ModelEvaluator():
 		elif isinstance(root, GreenExtractor):
 			cost += self.compute_cost_helper(root.lchild, seen)
 			cost += self.compute_cost_helper(root.rchild, seen) 
+		elif isinstance(root, GreenRBExtractor):
+			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Softmax):
 			cost += root.in_c * (LOGEXP_COST + DIV_COST + ADD_COST)
 			cost += self.compute_cost_helper(root.child, seen)
@@ -239,6 +241,8 @@ class ModelEvaluator():
 			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, InterleavedSum) or isinstance(root, GroupedSum):
 			cost += ((root.in_c / root.out_c) - 1) * root.out_c * ADD_COST
+			cost += self.compute_cost_helper(root.child, seen)
+		elif isinstance(root, Flat2Quad):
 			cost += self.compute_cost_helper(root.child, seen)
 		else:
 			print(type(root))

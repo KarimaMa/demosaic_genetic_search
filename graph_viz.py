@@ -62,6 +62,8 @@ def vis_ast_helper(root, graph, node_id, seen=None):
 
 
 		elif root.num_children == 1:
+			if root.child.name == "Downsample":
+				print(f"is downsample child {id(root.child)} in seen: {id(root.child) in seen}")
 			if id(root.child) in seen:
 				child_id = seen[id(root.child)]
 			else:

@@ -545,14 +545,14 @@ def structure_to_array(self):
     if type(n.parent) is tuple:
       for node_parent in n.parent:
         for j in range(0, len(preorder)):
-          if preorder[j] is node_parent and not preorder[j] in seen_parents:
+          if id(preorder[j]) == id(node_parent) and not id(preorder[j]) in seen_parents:
             parents += [j]
-            seen_parents.add(preorder[j])
+            seen_parents.add(id(preorder[j]))
     else:
       for j in range(0, i):
-        if preorder[j] is n.parent and not preorder[j] in seen_parents:
+        if id(preorder[j]) == id(n.parent) and not id(preorder[j]) in seen_parents:
           parents += [j]
-          seen_parents.add(preorder[j])
+          seen_parents.add(id(preorder[j]))
 
     node_info["parent"] = parents
     if n.num_children == 3:
@@ -598,6 +598,9 @@ def structure_to_array(self):
     if hasattr(n, 'kwidth'):
       node_info["kwidth"] = n.kwidth
 
+    if hasattr(n, 'groups'):
+      node_info["groups"] = n.groups
+
     array.append(node_info)
   return array
 
@@ -634,8 +637,14 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None):
       child_nodes.append(child_node)
 
     if issubclass(node_class, UnopIJ) or issubclass(node_class, UnopIIdiv):
+      extra_kwargs = {}
       if "kwidth" in node_info:
-        new_node = node_class(*child_nodes, node_info["out_c"], name=node_name, kwidth=node_info["kwidth"])
+        extra_kwargs["kwidth"] = node_info["kwidth"]
+      if "groups" in node_info:
+        extra_kwargs["groups"] = node_info["groups"]
+        
+      if len(extra_kwargs) > 0:
+        new_node = node_class(*child_nodes, node_info["out_c"], name=node_name, **extra_kwargs)
       else:
         new_node = node_class(*child_nodes, node_info["out_c"], name=node_name)
     else:

@@ -17,7 +17,7 @@ import meta_model
 import model_lib
 from torch_model import ast_to_model
 from dataset import GreenDataset, Dataset, FastDataLoader
-from dataset import GreenQuadDataset, QuadDataset, FastDataLoader
+from dataset import GreenQuadDataset, FullPredictionQuadDataset, FastDataLoader
 from tree import print_parents
 
 
@@ -49,35 +49,15 @@ def train(args, models, model_id, model_dir):
       m.parameters(),
       args.learning_rate) for m in models]
 
-  if not args.multiresquadgreen and not args.demosaicnet and not args.gradienthalide:
-    if args.full_model:
-      train_data = Dataset(data_file=args.training_file,
-                        green_input=args.use_green_input, 
-                        green_pred_input=args.use_green_pred,
-                        green_file=args.green_training_file, 
-                        green_output=(not args.full_model))
-
-      validation_data = Dataset(data_file=args.validation_file, 
-                              green_input=args.use_green_input, 
-                              green_pred_input=args.use_green_pred,
-                              green_file=args.green_validation_file,
-                              green_output=(not args.full_model))
-
-    else:
-      train_data = GreenDataset(data_file=args.training_file)
-      validation_data = GreenDataset(data_file=args.validation_file)
-      test_data = GreenDataset(data_file=args.test_file)
-
+ 
+  if not args.full_model:
+    train_data = GreenQuadDataset(data_file=args.training_file) 
+    validation_data = GreenQuadDataset(data_file=args.validation_file)
+    test_data = GreenQuadDataset(data_file=args.test_file)
   else:
-    if not args.full_model:
-      train_data = GreenQuadDataset(data_file=args.training_file) 
-      validation_data = GreenQuadDataset(data_file=args.validation_file)
-      test_data = GreenQuadDataset(data_file=args.test_file)
-    else:
-      train_data = QuadDataset(data_file=args.training_file)
-      validation_data = QuadDataset(data_file=args.validation_file)
-      test_data = QuadDataset(data_file=args.test_file)
-
+    train_data = FullPredictionQuadDataset(data_file=args.training_file)
+    validation_data = FullPredictionQuadDataset(data_file=args.validation_file)
+    test_data = FullPredictionQuadDataset(data_file=args.test_file)
 
   num_train = len(train_data)
   train_indices = list(range(int(num_train*args.train_portion)))
@@ -123,13 +103,14 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
     m.train()
 
   for step, (input, target) in enumerate(train_queue):
-    if args.use_green_input:
-      bayer, green = input 
-      green_input = Variable(green, requires_grad=False).cuda()
+    if args.full_model:
+      bayer, redblue_bayer, green_grgb = input 
+      redblue_bayer = Variable(redblue_bayer, requires_grad=False).float().cuda()
+      green_grgb = Variable(green_grgb, requires_grad=False).float().cuda()
     else:
       bayer = input
 
-    bayer_input = Variable(bayer, requires_grad=False).float().cuda()
+    bayer = Variable(bayer, requires_grad=False).float().cuda()
     target = Variable(target, requires_grad=False).float().cuda()
 
     n = bayer.size(0)
@@ -137,11 +118,13 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
     for i, model in enumerate(models):
       optimizers[i].zero_grad()
       model.reset()
-      if args.use_green_input:
-        model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
+      if args.full_model:
+        model_inputs = {"Input(Bayer)": bayer, 
+                        "Input(Green@GrGb)": green_grgb, 
+                        "Input(RedBlueBayer)": redblue_bayer}
         pred = model.run(model_inputs)
       else:
-        model_inputs = {"Input(Bayer)": bayer_input}
+        model_inputs = {"Input(Bayer)": bayer}
         pred = model.run(model_inputs)
 
       if args.testing:
@@ -179,27 +162,31 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
     m.eval()
 
   for step, (input, target) in enumerate(valid_queue):
-    if args.use_green_input:
-      bayer, green = input 
-      green_input = Variable(green, volatile=True).cuda()
+    if args.full_model:
+      bayer, redblue_bayer, green_grgb = input 
+      redblue_bayer = Variable(redblue_bayer, requires_grad=False).float().cuda()
+      green_grgb = Variable(green_grgb, requires_grad=False).float().cuda()
     else:
       bayer = input
 
-    bayer_input = Variable(bayer, volatile=True).float().cuda()
-    target = Variable(target, volatile=True).float().cuda()
-
+    bayer = Variable(bayer, requires_grad=False).float().cuda()
+    target = Variable(target, requires_grad=False).float().cuda()
+    
     n = bayer.size(0)
 
     for i, model in enumerate(models):
       model.reset()
-      if args.use_green_input:
-        model_inputs = {"Input(Bayer)": bayer_input, "Input(Green)": green_input}
+      if args.full_model:
+        model_inputs = {"Input(Bayer)": bayer, 
+                        "Input(Green@GrGb)": green_grgb, 
+                        "Input(RedBlueBayer)": redblue_bayer}
         pred = model.run(model_inputs)
-        clamped = torch.clamp(pred, min=0, max=1)
       else:
-        model_inputs = {"Input(Bayer)": bayer_input}
+        model_inputs = {"Input(Bayer)": bayer}
         pred = model.run(model_inputs)
-        clamped = torch.clamp(pred, min=0, max=1)
+
+      pred = model.run(model_inputs)
+      clamped = torch.clamp(pred, min=0, max=1)
 
       loss = criterion(clamped, target)
       loss_trackers[i].update(loss.item(), n)
@@ -228,7 +215,14 @@ if __name__ == "__main__":
   parser.add_argument('--chroma_no_extraction', action='store_true')
   parser.add_argument('--multiresquadgreen', action='store_true')
   parser.add_argument('--gradienthalide', action='store_true')
+  parser.add_argument('--chromaseed1', action='store_true')
+  parser.add_argument('--chromaseed2', action='store_true')
 
+  parser.add_argument('--green_model', type=str, help="which green model to use for chroma model")
+  parser.add_argument('--green_depth', type=int)
+  parser.add_argument('--green_width', type=int)
+
+  parser.add_argument('--depth', type=int, help='num conv layers in model')
   parser.add_argument('--width', type=int, help='num channels in model layers')
   parser.add_argument('--k', type=int, help='kernel width in model layers')
 
@@ -296,10 +290,18 @@ if __name__ == "__main__":
     model = model_lib.simple_chroma_no_extraction()
   elif args.multiresquadgreen:
     logger.info("TRAINING MULTIRES QUAD GREEN")
-    model = model_lib.MultiresQuadGreenModel(2, 10)
+    model = model_lib.MultiresQuadGreenModel(args.depth, args.width)
   elif args.gradienthalide:
     logger.info("TRAINING GRADIENT HALIDE GREEN")
     model = model_lib.GradientHalideModel(args.width, args.k)
+  elif args.chromaseed1:
+    logger.info("TRAINING CHROMA SEED MODEL1")
+    if args.green_model == "multiresquadgreen":
+      green_model = model_lib.MultiresQuadGreenModel(args.green_depth, args.green_width)
+    model = model_lib.ChromaSeedModel1(args.depth, args.width, green_model)
+  elif args.chromaseed2:
+    logger.info("TRAINING CHROMA SEED MODEL2")
+    model = model_lib.ChromaSeedModel2(args.depth, args.width)
   else:
     logger.info("TRAINING BASIC GREEN")
     model = model_lib.basic1D_green_model()

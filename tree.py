@@ -44,6 +44,11 @@ class Node:
         h = hash_combine(h, self.in_c[c_idx])
     else: 
       h = hash_combine(h, self.in_c)
+      
+    if hasattr(self, "kwidth"):
+      h = hash_combine(h, self.kwidth)
+    if hasattr(self, "groups"):
+      h = hash_combine(h, self.groups)
 
     if self.num_children == 3:
       h = hash_combine(h, hash(self.child1))
@@ -72,6 +77,11 @@ class Node:
         id_str += f"{self.in_c[0]};{self.in_c[1]};{self.in_c[2]}-"
     else:
       id_str += f"{self.in_c}-"
+    if hasattr(self, "kwidth"):
+      id_str += f"k{self.kwidth}-"
+    if hasattr(self, "groups"):
+      id_str += f"g{self.groups}-"
+
     if self.num_children == 3:
       id_str += f"{self.child1.id_string()}-"
       id_str += f"{self.child2.id_string()}-"

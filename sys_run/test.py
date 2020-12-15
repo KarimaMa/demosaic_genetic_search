@@ -27,7 +27,7 @@ from tree import has_loop
 import cost
 import pareto_util
 from cost import ModelEvaluator, CostTiers
-from demosaic_ast import structural_hash, Downsample
+import demosaic_ast
 from mutate import Mutator, has_downsample, MutationType
 import util
 from database import Database 
@@ -306,7 +306,7 @@ class Searcher():
     with self.mutate_monitor:
       try:
         if self.args.full_model:
-          model_inputs = set(("Input(Bayer)", "Input(Green)"))
+          model_inputs = set(("Input(Bayer)", "Input(Green@GrGb)","Input(RedBlueBayer)", "Input(GreenExtractor)"))
         else: 
           model_inputs = set(("Input(Bayer)",))
         new_model_ast, shash, mutation_stats = self.mutator.mutate(parent_id, new_model_id, model_ast, model_inputs)
@@ -322,16 +322,26 @@ class Searcher():
       else:
         return new_model_ast, shash, mutation_stats
               
+  def insert_green_model(self, new_model_ast, green_model_ast_file, green_model_weight_file):
+    green_model = demosaic_ast.load_ast(green_model_ast_file)
+    nodes = new_model_ast.preorder()
+    for n in nodes:
+      if type(n) is demosaic_ast.Input:
+        if n.name == "Input(GreenExtractor)":
+          n.node = green_model
+          n.weight_file = green_model_weight_file
+
   def lower_model(self, new_model_id, new_model_ast):
     self.lowering_monitor.set_error_msg(f"---\nfailed to lower model {new_model_id}\n---")
     with self.lowering_monitor:
       try:
+        if self.args.full_model:
+          self.insert_green_model(new_model_ast, args.chroma_green_model, args.chroma_green_model_weights)
         new_models = [new_model_ast.ast_to_model() for i in range(self.args.model_initializations)]
       except TimeoutError:
         return None
       else:
         return new_models
-
 
   def create_train_process(self, mutation_task_info, gpu_ids, train_psnrs, validation_psnrs):
     model_id = mutation_task_info.model_id
@@ -512,10 +522,14 @@ class Searcher():
     if self.args.model_db_snapshot is not None:
       self.model_database.load(self.args.model_db_snapshot)
 
-    seed_model, seed_ast = util.load_model_from_file(self.args.seed_model_file, self.args.seed_model_version, 0)
+    seed_ast = demosaic_ast.load_ast(self.args.seed_model_ast)
+    self.insert_green_model(seed_ast, args.chroma_green_model, args.chroma_green_model_weights)
+
     seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)
     util.create_dir(seed_model_dir)
     seed_ast.compute_input_output_channels()
+
+    seed_model = seed_ast.ast_to_model()
     self.model_manager.save_model([seed_model], seed_ast, seed_model_dir)
 
     compute_cost = self.evaluator.compute_cost(seed_ast)
@@ -529,7 +543,7 @@ class Searcher():
             {'model_id': self.model_manager.SEED_ID,
              'id_str' : seed_ast.id_string(),
              'hash': hash(seed_ast),
-             'structural_hash': structural_hash(seed_ast),
+             'structural_hash': demosaic_ast.structural_hash(seed_ast),
              'occurrences': 1,
              'generation': -1,
              'best_init': 0,
@@ -669,7 +683,7 @@ class Searcher():
 
           # if model weights and ast were successfully saved, add model to cost tiers
           best_psnr = max(model_psnrs)
-          if math.isnan(best_psnr):
+          if math.isnan(best_psnr) or best_psnr < 0:
             continue # don't add model to tier 
 
           compute_cost = task_info.database_entry["compute_cost"]
@@ -740,12 +754,17 @@ if __name__ == "__main__":
 
   # seed models 
   parser.add_argument('--green_seed_model_file', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_info', help='')
+  parser.add_argument('--green_seed_model_ast', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_ast', help='')  
   parser.add_argument('--green_seed_model_version', type=int, default=0)
-  parser.add_argument('--green_seed_model_psnr', type=float, default=32.53)
+  parser.add_argument('--green_seed_model_psnr', type=float, default=31.67)
 
-  parser.add_argument('--chroma_seed_model_file', type=str, default='DATADUMP/SIMPLE_GREEN_INPUT_CHROMA_MODEL/models/seed/model_info', help='')
+  parser.add_argument('--chroma_seed_model_file', type=str, default='DATADUMP/CHROMA_SEED_MODEL1/models/seed/model_info', help='')
+  parser.add_argument('--chroma_seed_model_ast', type=str, default='DATADUMP/CHROMA_SEED_MODEL1/models/seed/model_ast', help='')
   parser.add_argument('--chroma_seed_model_version', type=int, default=0)
-  parser.add_argument('--chroma_seed_model_psnr', type=float, default=32.32)
+  parser.add_argument('--chroma_seed_model_psnr', type=float, default=29.67)
+
+  parser.add_argument('--chroma_green_model', type=str, help='model ast for green prediction when doing chroma search')
+  parser.add_argument('--chroma_green_model_weights', type=str, help='model weights for green prediction when doing chroma search')
 
   parser.add_argument('--generations', type=int, default=20, help='model search generations')
   parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
@@ -783,7 +802,6 @@ if __name__ == "__main__":
   parser.add_argument('--validation_freq', type=int, default=1, help='validation frequency for assessing validation PSNR variance')
 
   # training full chroma + green parameters
-  parser.add_argument('--use_green_input', action="store_true")
   parser.add_argument('--full_model', action="store_true")
 
   parser.add_argument('--tablename', type=str)
@@ -807,11 +825,13 @@ if __name__ == "__main__":
 
   if args.full_model:
     args.seed_model_file = args.chroma_seed_model_file
+    args.seed_model_ast = args.chroma_seed_model_ast
     args.seed_model_version = args.chroma_seed_model_version
     args.seed_model_psnr = args.chroma_seed_model_psnr
     args.task_out_c = 6
   else:
     args.seed_model_file = args.green_seed_model_file
+    args.seed_model_ast = args.green_seed_model_ast
     args.seed_model_version = args.green_seed_model_version
     args.seed_model_psnr = args.green_seed_model_psnr
     args.task_out_c = 2

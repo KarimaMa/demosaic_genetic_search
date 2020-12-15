@@ -148,7 +148,6 @@ def load_model_from_file(model_file, model_version, gpu_id=None):
 
   model_ast = load_ast(ast_file)
   model = model_ast.ast_to_model()
-  state_dict = torch.load(pytorch_files[model_version])
   model.load_state_dict(torch.load(pytorch_files[model_version]))
 
   if gpu_id:

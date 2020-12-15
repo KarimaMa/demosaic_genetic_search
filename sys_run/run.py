@@ -27,7 +27,7 @@ from tree import has_loop
 import cost
 import pareto_util
 from cost import ModelEvaluator, CostTiers
-from demosaic_ast import structural_hash, Downsample
+import demosaic_ast 
 from mutate import Mutator, has_downsample, MutationType
 import util
 from database import Database 
@@ -308,7 +308,7 @@ class Searcher():
     with self.mutate_monitor:
       try:
         if self.args.full_model:
-          model_inputs = set(("Input(Bayer)", "Input(Green)"))
+          model_inputs = set(("Input(Bayer)", "Input(Green@GrGb)","Input(RedBlueBayer)", "Input(GreenExtractor)"))
         else:
           model_inputs = set(("Input(Bayer)",))
         new_model_ast, shash, mutation_stats = self.mutator.mutate(parent_id, new_model_id, model_ast, model_inputs)
@@ -324,10 +324,21 @@ class Searcher():
       else:
         return new_model_ast, shash, mutation_stats
               
+  def insert_green_model(self, new_model_ast, green_model_ast_file, green_model_weight_file):
+    green_model = demosaic_ast.load_ast(green_model_ast_file)
+    nodes = new_model_ast.preorder()
+    for n in nodes:
+      if type(n) is demosaic_ast.Input:
+        if n.name == "Input(GreenExtractor)":
+          n.node = green_model
+          n.weight_file = green_model_weight_file
+
   def lower_model(self, new_model_id, new_model_ast):
     self.lowering_monitor.set_error_msg(f"---\nfailed to lower model {new_model_id}\n---")
     with self.lowering_monitor:
       try:
+        if self.args.full_model:
+          self.insert_green_model(new_model_ast, args.chroma_green_model, args.chroma_green_model_weights)
         new_models = [new_model_ast.ast_to_model() for i in range(self.args.model_initializations)]
       except TimeoutError:
         return None
@@ -520,15 +531,22 @@ class Searcher():
     seed_model_psnrs = [float(x) for x in self.args.seed_model_psnrs.strip().split(',')]
 
     for seed_model_i, seed_model_file in enumerate(seed_model_files):
-      model_version = 0 # doesn't matter which one we use
-      seed_model, seed_ast = util.load_model_from_file(seed_model_file, model_version, 0)
 
-      seed_model_dir = self.model_manager.model_dir(seed_model_id)
-      util.create_dir(seed_model_dir)
+      seed_ast = demosaic_ast.load_ast(self.args.seed_model_ast)
       seed_ast.compute_input_output_channels()
+      self.insert_green_model(seed_ast, args.chroma_green_model, args.chroma_green_model_weights)
+
+      seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)
+      util.create_dir(seed_model_dir)
+      seed_model = seed_ast.ast_to_model()
       self.model_manager.save_model([seed_model], seed_ast, seed_model_dir)
 
-      seed_ast.compute_input_output_channels()
+      #seed_model, seed_ast = util.load_model_from_file(seed_model_file, model_version, 0)
+      # seed_model_dir = self.model_manager.model_dir(seed_model_id)
+      # util.create_dir(seed_model_dir)
+      # seed_ast.compute_input_output_channels()
+      # self.model_manager.save_model([seed_model], seed_ast, seed_model_dir)
+      # seed_ast.compute_input_output_channels()
 
       compute_cost = self.evaluator.compute_cost(seed_ast)
       model_accuracy = seed_model_psnrs[seed_model_i]
@@ -542,7 +560,7 @@ class Searcher():
               {'model_id': seed_model_id,
                'id_str' : seed_ast.id_string(),
                'hash': hash(seed_ast),
-               'structural_hash': structural_hash(seed_ast),
+               'structural_hash': demosaic_ast.structural_hash(seed_ast),
                'occurrences': 1,
                'generation': -1,
                'best_init': 0,
@@ -747,11 +765,14 @@ if __name__ == "__main__":
 
   # seed models 
   parser.add_argument('--green_seed_model_files', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_info,DATADUMP/GREEN_DEMOSAICNET_D3W8_SEED/models/seed/model_info')
-  parser.add_argument('--green_seed_model_psnrs', type=str, default='31.4,31.75')
+  parser.add_argument('--green_seed_model_psnrs', type=str, default='31.67,31.75')
 
   parser.add_argument('--chroma_seed_model_file', type=str, default='DATADUMP/SIMPLE_GREEN_INPUT_CHROMA_MODEL/models/seed/model_info', help='')
   parser.add_argument('--chroma_seed_model_version', type=int, default=0)
   parser.add_argument('--chroma_seed_model_psnr', type=float, default=32.32)
+
+  parser.add_argument('--chroma_green_model', type=str, help='model ast for green prediction when doing chroma search')
+  parser.add_argument('--chroma_green_model_weights', type=str, help='model weights for green prediction when doing chroma search')
 
   parser.add_argument('--generations', type=int, default=20, help='model search generations')
   parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
@@ -789,12 +810,8 @@ if __name__ == "__main__":
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
 
   # training full chroma + green parameters
-  parser.add_argument('--use_green_input', action="store_true")
   parser.add_argument('--full_model', action="store_true")
-  parser.add_argument('--use_green_pred', action="store_true", help="whether to use precomputed green predictions")
-  parser.add_argument('--green_training_file', type=str, help="filename of file with list of precomputed green for training data")
-  parser.add_argument('--green_validation_file', type=str, help="filename of file with list of precomputed green for validation data")
-
+  parser.add_argument('--tablename', type=str)
   parser.add_argument('--mysql_auth', type=str)
   parser.add_argument("--machine", type=str)
 
@@ -817,12 +834,10 @@ if __name__ == "__main__":
     args.seed_model_file = args.chroma_seed_model_file
     args.seed_model_version = args.chroma_seed_model_version
     args.seed_model_psnr = args.chroma_seed_model_psnr
-    args.tablename = "chroma"
     args.task_out_c = 6
   else:
     args.seed_model_files = args.green_seed_model_files
     args.seed_model_psnrs = args.green_seed_model_psnrs
-    args.tablename = "green"
     args.task_out_c = 2
 
   args.cost_tiers = parse_cost_tiers(args.cost_tiers)

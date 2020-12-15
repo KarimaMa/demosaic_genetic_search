@@ -49,7 +49,10 @@ class InputOp(nn.Module):
       else:
         return model_inputs[self.name]
     else:
-      return model_inputs[self.name]
+      if hasattr(self, "model"):
+        return self.output 
+      else:
+        return model_inputs[self.name]
 
   def to_gpu(self, gpu_id):
     if hasattr(self, "model"):
@@ -329,7 +332,7 @@ class RGBExtractorOp(nn.Module):
     # fullgreen : 4 channels
     # redbluebayer : 2 channels  
     # chromapred: 6 channels R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
-    fullgreen_shape = np.array(fullgreen.shape)
+    fullgreen_shape = list(fullgreen.shape)
     out_shape = [fullgreen_shape[0], 3, fullgreen_shape[2]*2, fullgreen_shape[3]*2]
     img = torch.empty(torch.Size(out_shape), device=fullgreen.device)
 
@@ -340,13 +343,13 @@ class RGBExtractorOp(nn.Module):
     img[:,0,1::2,1::2] = chromapred[:,3,:,:]
 
     # fill in greens
-    img[:,1,:,:] = self.pixel_shuffle(fullgreen)
+    img[:,1,:,:] = self.pixel_shuffle(fullgreen)[:,0,:,:]
    
     # fill in blues
-    img[:,2,0::2,0::2] = chroma_pred[:,4,:,:]
-    img[:,2,0::2,1::2] = chroma_pred[:,1,:,:]
+    img[:,2,0::2,0::2] = chromapred[:,4,:,:]
+    img[:,2,0::2,1::2] = chromapred[:,1,:,:]
     img[:,2,1::2,0::2] = redbluebayer[:,1,:,:]
-    img[:,2,1::2,1::2] = chroma_pred[:,5,:,:]
+    img[:,2,1::2,1::2] = chromapred[:,5,:,:]
     
     return img 
 
@@ -422,7 +425,7 @@ class GreenRBExtractorOp(nn.Module):
   def forward(self, flat_green):
     # input: flat green channel 
     # output: green at Red and Blue
-    flat_green_shape = np.array(flat_green.shape)
+    flat_green_shape = list(flat_green.shape)
     N = flat_green_shape[0]
     quad_h = flat_green_shape[2] // 2
     quad_w = quad_h
@@ -464,8 +467,8 @@ class Flat2QuadOp(nn.Module):
   def forward(self, flat):
     # input: flat green channel 
     # output: green at Red and Blue
-    flat_shape = np.array(flat.shape)
-    N = flat[0]
+    flat_shape = list(flat.shape)
+    N = flat_shape[0]
     quad_h = flat_shape[2] // 2
     quad_w = quad_h
     out_shape = [N, 4, quad_h, quad_w]
@@ -879,6 +882,8 @@ def ast_to_model(self, shared_children=None):
 
   if hasattr(self, "node"):
     node_model = self.node.ast_to_model()
+    if hasattr(self, "weight_file"):
+      node_model.load_state_dict(torch.load(self.weight_file))
     input_op = InputOp(self.name, model=node_model, model_name=self.name)
   else:
     input_op = InputOp(self.name)
