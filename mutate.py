@@ -21,7 +21,7 @@ from demosaic_ast import *
 from type_check import *
 from tree import *
 from restrictions import *
-from util import extclass, get_factors
+from util import extclass, get_factors, get_closest_factor
 from enum import Enum
 
 
@@ -378,6 +378,14 @@ def channel_mutation(self, tree, chosen_conv_id=None):
   fixed = fix_channel_count_upwards(chosen_conv, new_out_c)
   if fixed:
     chosen_conv.out_c = new_out_c
+    # if the mutated convolution's new output channels is not divisible by its groups,
+    # set the groups to the factor of its in and out channels closest to its current groups
+    in_c_factors = get_factors(chosen_conv.out_c)
+    out_c_factors = get_factors(chosen_conv.in_c)
+    factors = in_c_factors.intersection(out_c_factors)
+    closest_factor = get_closest_factor(factors, chosen_conv.groups)
+    chosen_conv.groups = closest_factor # if current groups is already a factor, this does nothing
+
     #print(f"changed channel count of {chosen_conv.dump()} to {new_out_c} full tree {tree.dump()}")
     return tree
   else:

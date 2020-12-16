@@ -534,7 +534,8 @@ class Searcher():
 
       seed_ast = demosaic_ast.load_ast(self.args.seed_model_ast)
       seed_ast.compute_input_output_channels()
-      self.insert_green_model(seed_ast, args.chroma_green_model, args.chroma_green_model_weights)
+      if self.args.full_model:
+        self.insert_green_model(seed_ast, args.chroma_green_model, args.chroma_green_model_weights)
 
       seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)
       util.create_dir(seed_model_dir)

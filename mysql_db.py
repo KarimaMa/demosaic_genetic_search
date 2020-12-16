@@ -129,15 +129,15 @@ def create_table(password, tablename):
   if tablename == "testgreen":
     table = TestGreenTrees
     models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
-    psnrs = [31.4, 31.75]
+    psnrs = [31.67, 31.75]
   elif tablename == "green":
     table = GreenTrees
     models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
-    psnrs = [31.4, 31.75]
+    psnrs = [31.67, 31.75]
   else:
     table = ChromaTrees
-    model = simple_full_model_green_input()
-    psnr = 32.32
+    models = [ChromaSeedModel2(2,12, MultiresQuadGreenModel(2,10))]
+    psnrs = [29.65]
 
   db.create_tables([table])
 
@@ -580,12 +580,11 @@ if __name__ == "__main__":
   parser.add_argument("--password", type=str)
   parser.add_argument("--table", type=str)
   parser.add_argument("--create", action='store_true')
-  parser.add_argument("--delete", action='store_true')
   parser.add_argument("--delete_range", type=str, help="ids to delete from table")
 
   args = parser.parse_args()
 
-  if args.delete:
+  if args.delete_range:
     delete_range = [int(x.strip()) for x in args.delete_range.split(",")]
     print(f"deleting ids between {delete_range}")
     mysql_delete(args.password, args.table, delete_range[0], delete_range[1])

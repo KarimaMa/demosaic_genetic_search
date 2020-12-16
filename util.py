@@ -34,6 +34,11 @@ def get_factors(n):
     factors.remove(n)
   return factors
 
+"""
+finds the two factors from the given list of factors
+that are adjacently larger and smaller than n and 
+returns that is closest to n  
+"""
 def get_closest_factor(factors, n):
   factor_list = list(factors)
   factor_list.sort()
@@ -54,8 +59,11 @@ def get_closest_factor(factors, n):
     return larger
   elif larger is None:
     return smaller
-  else:
-    return larger 
+  else: # return the closest factor
+    if abs(smaller - n) <= abs(larger - n):
+      return smaller
+    else:
+      return larger 
 
     
 class PerfStatTracker():
