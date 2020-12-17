@@ -28,7 +28,7 @@ from cost import ModelEvaluator
 import util
 from database import Database 
 from monitor import Monitor, TimeoutError
-from train import run_model
+from train import run_model, train_model
 from demosaic_ast import load_ast
 import torch.distributed as dist
 import torch.multiprocessing as mp
