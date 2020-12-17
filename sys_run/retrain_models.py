@@ -67,10 +67,15 @@ def run_train(task_id, train_args, gpu_ids, model_id, pytorch_models, model_dir,
                                         os.path.join(model_dir, f'model_{model_id}_training_log'))
     
     print('Task ', task_id, ' launched on GPU ', gpu_id, ' model id ', model_id)
-    model_valid_psnrs, model_train_psnrs = train_model(train_args, gpu_id, model_id, pytorch_models, model_dir, training_logger)
+    if args.infer:
+      model_valid_psnrs = run_model(train_args, gpu_id, model_id, pytorch_models, model_dir, training_logger)
+    else:
+      model_valid_psnrs, model_train_psnrs = train_model(train_args, gpu_id, model_id, pytorch_models, model_dir, training_logger)
+    
     for i in range(train_args.model_initializations):
       index = train_args.model_initializations * task_id + i 
-      train_psnrs[index] = model_train_psnrs[i]
+      if not args.infer:
+        train_psnrs[index] = model_train_psnrs[i]
       valid_psnrs[index] = model_valid_psnrs[i]
 
 
@@ -281,6 +286,9 @@ if __name__ == "__main__":
   parser.add_argument('--use_green_pred', action="store_true", help="whether to use precomputed green predictions")
   parser.add_argument('--green_training_file', type=str, help="filename of file with list of precomputed green for training data")
   parser.add_argument('--green_validation_file', type=str, help="filename of file with list of precomputed green for validation data")
+
+  parser.add_argument('--pretrained', action='store_true')
+  parser.add_argument('--infer', action='store_true')
   args = parser.parse_args()
 
   if not torch.cuda.is_available():

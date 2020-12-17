@@ -70,6 +70,37 @@ def create_train_dataset(args):
   return train_queue
 
 
+def run_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
+  print(f"running inference for {len(models)} models on GPU {gpu_id}")
+
+  valid_queue = create_validation_dataset(args)
+
+  print(f"FINISHED creating datasets")
+
+  validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
+
+  model_pytorch_files = [util.get_model_pytorch_file(model_dir, model_version) \
+                        for model_version in range(len(models))]
+
+  models = [model.to(device=f"cuda:{gpu_id}") for model in models]
+  for m in models:
+    m.to_gpu(gpu_id)
+    
+  criterion = nn.MSELoss()
+
+  if args.pretrained:
+    for i in range(train_args.model_initializations):
+      weight_file = os.path.join(args.model_info_dir, f"model_v{i}_pytorch")
+      state_dict = torch.load(weight_fileß)
+      pytorch_models[i].load_state_dict(state_dict)
+ 
+  valid_losses, valid_psnrs = infer(args, gpu_id, valid_queue, models, criterion)
+
+  for i in range(len(models)):
+    validation_loggers[i].info('validation epoch %03d %e %2.3f', epoch, valid_losses[i], valid_psnrs[i])
+  return valid_psnrs
+
+
 def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   print(f"training {len(models)} models on GPU {gpu_id}")
 
@@ -115,17 +146,14 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   experiment_logger.info(f"learning rate stored in args {args.learning_rate}")
 
   for epoch in range(cur_epoch, args.epochs):
-    train_losses = train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_loggers, \
+    train_losses, train_psnrs = train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_loggers, \
       model_pytorch_files, valid_queue, validation_loggers, epoch)
-    valid_losses = infer(args, gpu_id, valid_queue, models, criterion)
+    valid_losses, valid_psnrs = infer(args, gpu_id, valid_queue, models, criterion)
 
     for i in range(len(models)):
-      validation_loggers[i].info('validation epoch %03d %e', epoch, valid_losses[i])
+      validation_loggers[i].info('validation epoch %03d %e %2.3f', epoch, valid_losses[i], valid_psnrs[i])
 
-  validation_psnrs = [util.compute_psnr(l) for l in valid_losses]
-  train_psnrs = [util.compute_psnr(l) for l in train_losses]
-
-  return validation_psnrs, train_psnrs
+  return valid_psnrs, train_psnrs
 
 
 def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers):
@@ -195,18 +223,20 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
         train_loggers[i].info('train %03d %e', step, loss.item())
 
     if step % args.validation_freq == 0 and step > 400:
-      valid_losses = infer(args, gpu_id, validation_queue, models, criterion)
-      valid_psnrs = [util.compute_psnr(l) for l in valid_losses]
-      variance_tracker.update(valid_psnrs)
+      valid_losses, valid_psnrs = infer(args, gpu_id, validation_queue, models, criterion)
+      batchwise_valid_psnrs = [util.compute_psnr(l) for l in valid_losses]
+      variance_tracker.update(batchwise_valid_psnrs)
       
       for i in range(len(models)):
-        validation_loggers[i].info(f'validation {step} {valid_losses[i]}')
+        validation_loggers[i].info(f'validation step {step} {valid_losses[i]} {valid_psnrs[i]:2.3f}')
       
   return [loss_tracker.avg for loss_tracker in loss_trackers], variance_tracker.validation_variance()
 
 
 def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files, validation_queue, validation_loggers, epoch):
   loss_trackers = [util.AvgrageMeter() for m in models]
+  psnr_trackers = [util.AvgrageMeter() for m in models]
+
   for m in models:
     m.train()
 
@@ -241,19 +271,26 @@ def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_
       optimizers[i].step()
 
       loss_trackers[i].update(loss.item(), n)
+      # compute running psnr
+      per_image_mse = (clamped-target).square().mean(-1).mean(-1).mean(-1)
+      per_image_psnr = -10.0*torch.log10(per_image_mse)
+      batch_avg_psnr = per_image_psnr.sum(0) / n
+      psnr_trackers[i].update(batch_avg_psnr.item(), n)
 
       if step % args.report_freq == 0 or step == len(train_queue)-1:
-        train_loggers[i].info('train %03d %e', epoch*len(train_queue)+step, loss.item())
+        train_loggers[i].info('train %03d %e %2.3f', epoch*len(train_queue)+step, loss.item(), batch_avg_psnr)
 
     if step % args.save_freq == 0 or step == len(train_queue)-1:
       for i in range(len(models)):
         torch.save(models[i].state_dict(), model_pytorch_files[i])
 
-  return [loss_tracker.avg for loss_tracker in loss_trackers]
+  return [loss_tracker.avg for loss_tracker in loss_trackers], [psnr_tracker.avg for psnr_tracker in psnr_trackers]
 
 
 def infer(args, gpu_id, valid_queue, models, criterion):
   loss_trackers = [util.AvgrageMeter() for m in models]
+  psnr_trackers = [util.AvgrageMeter() for m in models]
+
   for m in models:
     m.eval()
 
@@ -287,7 +324,13 @@ def infer(args, gpu_id, valid_queue, models, criterion):
         loss = criterion(clamped, target)
         loss_trackers[i].update(loss.item(), n)
 
-  return [loss_tracker.avg for loss_tracker in loss_trackers]
+        # compute running psnr
+        per_image_mse = (clamped-target).square().mean(-1).mean(-1).mean(-1)
+        per_image_psnr = -10.0*torch.log10(per_image_mse)
+        batch_avg_psnr = per_image_psnr.sum(0) / n
+        psnr_trackers[i].update(batch_avg_psnr.item(), n)
+
+  return [loss_tracker.avg for loss_tracker in loss_trackers], [psnr_tracker.avg for psnr_tracker in psnr_trackers]
 
 
 
