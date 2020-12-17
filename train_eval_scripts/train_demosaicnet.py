@@ -89,27 +89,26 @@ def run(args, models, model_dir):
       train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, \
         model_pytorch_files, validation_queue, validation_loggers, epoch)
       print(f"finished epoch {epoch}")
-      valid_losses = infer(args, validation_queue, models, criterion, validation_loggers)
-      test_losses = infer(args, test_queue, models, criterion, test_loggers)
+      valid_losses, val_psnrs = infer(args, validation_queue, models, criterion, validation_loggers)
+      test_losses, test_psrns = infer(args, test_queue, models, criterion, test_loggers)
 
       for i in range(len(models)):
         print(f"valid loss {valid_losses[i]}")
-        validation_loggers[i].info('validation epoch %03d %e', epoch, valid_losses[i])
-        test_loggers[i].info('test epoch %03d %e', epoch, test_losses[i])
+        validation_loggers[i].info('validation epoch %03d %e psnr %e', epoch, valid_losses[i], val_psnrs[i])
+        test_loggers[i].info('test epoch %03d %e psnr %e', epoch, test_losses[i], test_psnrs[i])
+
+    return valid_losses, train_losses
   else:
-    valid_losses, val_psnr = infer(args, validation_queue, models, criterion, validation_loggers)
-    test_losses, test_psnr = infer(args, test_queue, models, criterion, test_loggers)
+    valid_losses, val_psnrs = infer(args, validation_queue, models, criterion, validation_loggers)
+    test_losses, test_psnrs = infer(args, test_queue, models, criterion, test_loggers)
 
     for i in range(len(models)):
       print(f"valid loss {valid_losses[i]}")
-      validation_loggers[i].info('validation %e my psnr %e michael psnr %e', \
-          valid_losses[i], util.compute_psnr(valid_losses[i]), val_psnr)
-      test_loggers[i].info('test %e my psnr %e michael psnr %e', \
-          test_losses[i], util.compute_psnr(test_losses[i]), test_psnr)
+      validation_loggers[i].info('validation %e psnr %e', valid_losses[i], val_psnrs[i])
+      test_loggers[i].info('test %e psnr %e', test_losses[i], test_psnrs[i])
 
     return valid_losses, test_losses 
 
-  return valid_losses, train_losses
 
 
 def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files, validation_queue, validation_loggers, epoch):
@@ -147,7 +146,7 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
         torch.save(models[i].state_dict(), model_pytorch_files[i])
 
     if not args.validation_freq is None and step % args.validation_freq == 0:
-      valid_losses = infer(args, validation_queue, models, criterion, validation_loggers)
+      valid_losses, psnrs = infer(args, validation_queue, models, criterion, validation_loggers)
       for i in range(len(models)):
         print(f"validation loss {valid_losses[i]}")
         validation_loggers[i].info(f'validation {epoch*len(train_queue)+step} {valid_losses[i]}')
@@ -160,6 +159,8 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
   running_count = torch.tensor(0)
 
   loss_trackers = [util.AvgrageMeter() for m in models]
+  psnr_trackers = [util.AvgrageMeter() for m in models]
+
   for m in models:
     m.eval()
 
@@ -168,22 +169,23 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
     target = target.cuda()
    
     n = input.size(0)
+    with torch.no_grad():
+      for i, model in enumerate(models):
+        pred = model(input)
+        clamped = torch.clamp(pred, min=0, max=1)
 
-    for i, model in enumerate(models):
-      pred = model(input)
-      clamped = torch.clamp(pred, min=0, max=1)
+        loss = criterion(clamped, target)
+        loss_trackers[i].update(loss.item(), n)
 
-      loss = criterion(clamped, target)
-      loss_trackers[i].update(loss.item(), n)
+        # compute running psnr
+        per_image_mse = (clamped-target).square().mean(-1).mean(-1).mean(-1)
+        per_image_psnr = -10.0*torch.log10(per_image_mse)
+        batch_avg_psnr = per_image_psnr.sum(0) / n
 
-      count = torch.tensor(pred.shape[0])  # account for batch_size > 1
-      mse = (clamped-target).square().mean(-1).mean(-1).mean(-1)
-      psnr = -10.0*torch.log10(mse)
-      # average per-image psnr
-      running_count = running_count + count
-      running_psnr = running_psnr + (psnr.sum(0) - count.float()*running_psnr) / running_count.float() 
+        # average per-image psnr
+        psnr_trackers[i].update(batch_avg_psnr.item(), n)
 
-  return [loss_tracker.avg for loss_tracker in loss_trackers], running_psnr
+  return [loss_tracker.avg for loss_tracker in loss_trackers], [psnr_tracker.avg for psnr_tracker in psnr_trackers]
 
 
 if __name__ == "__main__":
@@ -267,14 +269,13 @@ if __name__ == "__main__":
   else:
     out_c = 1
   
-  #print(f"compute cost : {models[0].compute_cost()}")
+  if args.pretrained:
+    state_dict = torch.load(args.weights)
+    for m in models:
+      m.load_state_dict(state_dict)
 
   model_manager.save_model(models, None, model_dir)
 
-  if args.pretrained:
-    state_dict = torch.load(args.weights)
-    models[0].load_state_dict(state_dict)
- 
   validation_losses, training_losses = run(args, models, model_dir) 
 
   model_manager.save_model(models, None, model_dir)

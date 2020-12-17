@@ -25,7 +25,7 @@ def get_csv_writer(filename):
   return writer
 
 def compute_psnr(loss):
-  return 10*math.log(math.pow(255,2) / math.pow(math.sqrt(loss)*255, 2),10)
+  return 10*math.log(float(255)**2 / math.pow(math.sqrt(loss)*float(255), 2),10)
 
 def get_factors(n):    
   factors = set(reduce(list.__add__, 

@@ -877,6 +877,38 @@ def GradientHalideModel(width, k):
   return green
 
 
+def RGBGradientHalideModel(width, k):
+  bayer = Input(4, "Bayer")
+  
+  weight_conv = Conv2D(bayer, width, kwidth=k)
+  filter_conv = Conv2D(bayer, width, kwidth=k)
+  weights = Softmax(weight_conv)
+
+  mul = Mul(weights, filter_conv)
+  green_rb = GroupedSum(mul, 2)
+
+  bayer = Input(4, "Bayer")
+  flat_green = GreenExtractor(bayer, green_rb)
+
+  green_rb = GreenRBExtractor(flat_green)
+  green_quad = Flat2Quad(flat_green)
+
+  rb = Input(2, "RedBlueBayer")
+  rb_min_g = Sub(rb, green_rb)
+  chroma_diff_pred = Conv2D(rb_min_g, 6, kwidth=3)
+  
+  green_GrGb = Input(2, "Green@GrGb")
+  added_green = Stack(green_quad, green_GrGb) # Gr R B Gb Gr Gb --> predicted values R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
+  
+  chroma_pred = Add(chroma_diff_pred, added_green) # Gr R B Gb Gr Gb  
+  
+  rgb = RGBExtractor(green_quad, rb, chroma_pred)
+  rgb.assign_parents()
+  rgb.compute_input_output_channels()
+
+  return rgb
+
+
 def ChromaSeedModel1(depth, width, green_model):
   green_GrGb = Input(2, "Green@GrGb")
   rb = Input(2, "RedBlueBayer")
