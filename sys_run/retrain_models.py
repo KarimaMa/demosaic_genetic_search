@@ -28,7 +28,7 @@ from cost import ModelEvaluator
 import util
 from database import Database 
 from monitor import Monitor, TimeoutError
-from train import train_model
+from train import run_model
 from demosaic_ast import load_ast
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -67,14 +67,14 @@ def run_train(task_id, train_args, gpu_ids, model_id, pytorch_models, model_dir,
                                         os.path.join(model_dir, f'model_{model_id}_training_log'))
     
     print('Task ', task_id, ' launched on GPU ', gpu_id, ' model id ', model_id)
-    if args.infer:
+    if train_args.infer:
       model_valid_psnrs = run_model(train_args, gpu_id, model_id, pytorch_models, model_dir, training_logger)
     else:
       model_valid_psnrs, model_train_psnrs = train_model(train_args, gpu_id, model_id, pytorch_models, model_dir, training_logger)
     
     for i in range(train_args.model_initializations):
       index = train_args.model_initializations * task_id + i 
-      if not args.infer:
+      if not train_args.infer:
         train_psnrs[index] = model_train_psnrs[i]
       valid_psnrs[index] = model_valid_psnrs[i]
 

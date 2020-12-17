@@ -89,15 +89,19 @@ def run_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   criterion = nn.MSELoss()
 
   if args.pretrained:
-    for i in range(train_args.model_initializations):
-      weight_file = os.path.join(args.model_info_dir, f"model_v{i}_pytorch")
-      state_dict = torch.load(weight_fileß)
-      pytorch_models[i].load_state_dict(state_dict)
+    for i in range(args.model_initializations):
+      weight_file = os.path.join(args.model_info_dir, f"{model_id}/model_v{i}_pytorch")
+      if not os.path.exists(weight_file):
+        print(f"model {model_id} does not have weight files")
+        return [0 for m in models]
+
+      state_dict = torch.load(weight_file)
+      models[i].load_state_dict(state_dict)
  
   valid_losses, valid_psnrs = infer(args, gpu_id, valid_queue, models, criterion)
 
   for i in range(len(models)):
-    validation_loggers[i].info('validation epoch %03d %e %2.3f', epoch, valid_losses[i], valid_psnrs[i])
+    validation_loggers[i].info('validation %e %2.3f', valid_losses[i], valid_psnrs[i])
   return valid_psnrs
 
 
