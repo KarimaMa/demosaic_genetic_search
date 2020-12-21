@@ -965,7 +965,7 @@ def ChromaSeedModel1(depth, width, green_model):
 def ChromaSeedModel2(depth, width, green_model):
   green_GrGb = Input(2, "Green@GrGb")
   rb = Input(2, "RedBlueBayer")
-  flat_green = Input(1, "FullGreen", node=green_model) # GreenExtractor output 
+  flat_green = Input(1, "FullGreen", node=green_model, no_grad=True) # GreenExtractor output 
 
   green_quad = Flat2Quad(flat_green)
   green_rb = GreenRBExtractor(flat_green)

@@ -15,18 +15,27 @@ def extclass(cls):
 
 
 class InputOp(nn.Module):
-  def __init__(self, input_name, model=None, model_name=None):
+  def __init__(self, input_name, model=None, model_name=None, no_grad=False, weights=None):
     super(InputOp, self).__init__()
     self.name = input_name
     if model:
       self.model = model
       self.model_name = f"input_model_{model_name}"
       setattr(self, self.model_name, model)
+      self.no_grad = no_grad 
+      self.weights = weights
+
     self.output = None
 
   def _initialize_parameters(self):
     if hasattr(self, "model"):
-      self.model._initialize_parameters()
+      if self.weights:
+        print(f"loading pretrained weights for input model {self.name} no grad {self.no_grad}")
+        state_dict = torch.load(self.weights)
+        self.model.load_state_dict(state_dict)
+      else:
+        print(f"initializing weight for input model {self.name} no grad {self.no_grad}")
+        self.model._initialize_parameters()
 
   def reset(self):
     self.output = None
@@ -44,7 +53,11 @@ class InputOp(nn.Module):
           self.output = self.model.output
           return self.output
         else:
-          self.output = self.model.run(model_inputs)
+          if self.no_grad:
+            with torch.no_grad():
+              self.output = self.model.run(model_inputs)
+          else:
+            self.output = self.model.run(model_inputs)
           return self.output
       else:
         return model_inputs[self.name]
@@ -883,8 +896,9 @@ def ast_to_model(self, shared_children=None):
   if hasattr(self, "node"):
     node_model = self.node.ast_to_model()
     if hasattr(self, "weight_file"):
-      node_model.load_state_dict(torch.load(self.weight_file))
-    input_op = InputOp(self.name, model=node_model, model_name=self.name)
+      input_op = InputOp(self.name, model=node_model, model_name=self.name, no_grad=self.no_grad, weights=self.weight_file)
+    else:
+      input_op = InputOp(self.name, model=node_model, model_name=self.name, no_grad=self.no_grad)      
   else:
     input_op = InputOp(self.name)
 
