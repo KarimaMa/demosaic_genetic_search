@@ -23,6 +23,7 @@ from tree import *
 from restrictions import *
 from util import extclass, get_factors, get_closest_factor
 from enum import Enum
+from footprint import compute_footprint
 
 
 channel_options = [8, 10, 12, 16, 20, 24, 28, 32]
@@ -172,7 +173,8 @@ class Mutator():
           failures += 1
           continue
         try:
-          check_linear_types(new_tree)
+          #check_linear_types(new_tree)
+          assert_no_nonlinear_adjacency(new_tree) # allow adjacent convs, just no adjacent relu / softmax
         except AssertionError:
           self.debug_logger.debug(f"check linearity failed on model {model_id}")
           self.failed_mutation_info.append(self.current_mutation_info.copy())
@@ -444,13 +446,19 @@ def legal_parent_child_linearity(self, parent, child):
   for p in parents:
     parent_type = type(p)
     self.debug_logger.debug(f"parent type {p.name} {parent_type} child_type {child.name} {child_type}")
-    parent_child_ok = (parent_type in border_ops or child_type in border_ops \
-          or (parent_type in nl_and_sp and child_type in l_and_sp) \
-          or (parent_type in l_and_sp and child_type in nl_and_sp))
-    if not parent_child_ok: 
+    # parent_child_ok = (parent_type in border_ops or child_type in border_ops \
+    #       or (parent_type in nl_and_sp and child_type in l_and_sp) \
+    #       or (parent_type in l_and_sp and child_type in nl_and_sp))
+    """
+    allowing adjacent linear ops now
+    """
+    bad_parent_child = (parent_type in nonlinear_ops) and (child_type in nonlinear_ops)
+
+    if bad_parent_child: 
       illegal_parents += [p]
 
   return illegal_parents
+
 
 """
 adds partner node to node's set of partner nodes
@@ -1423,6 +1431,11 @@ def accept_tree(self, tree):
     self.debug_logger.debug("rejecting invalid spatial resolution")
     return False
     
+  # reject DAGs with receptive fields larger than threshold
+  footprint = self.compute_footprint()
+  if footprint > args.max_footprint:
+    return False
+
   tree_type = type(tree) 
   if tree_type is InterleavedSum or tree_type is GroupedSum: 
     # don't sum reduce over one channel
