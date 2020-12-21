@@ -106,11 +106,12 @@ class Special(ABC):
 """----------------------------------------------------------------------"""
 
 class Input(Const, Special, Node):
-  def __init__(self, out_c, name="Input", node=None):
+  def __init__(self, out_c, name="Input", node=None, no_grad=False):
     if node:
       name = node.name
       self.node = node
       assert(out_c == node.out_c), "output channels of node to input doesn't match given out_c"
+      self.no_grad = no_grad
     Node.__init__(self, "Input({})".format(name), 0)
     self.in_c = out_c
     self.out_c = out_c 

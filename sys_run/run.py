@@ -751,6 +751,8 @@ if __name__ == "__main__":
   parser.add_argument('--min_subtree_size', type=int, default=1, help='minimum size of subtree in insertion')
   parser.add_argument('--max_subtree_size', type=int, default=15, help='maximum size of subtree in insertion')
   parser.add_argument('--structural_sim_reject', type=float, default=0.66, help='rejection probability threshold for structurally similar trees')
+  parser.add_argument('--max_footprint', type=int, default=16, help='max DAG footprint size on input image')
+  parser.add_argument('--crop', type=int, default=16, help='how much to crop images during training and inference')
 
   parser.add_argument('--starting_model_id', type=int)
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')

@@ -269,6 +269,11 @@ def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_
         model_inputs = {"Input(Bayer)": bayer}
 
       pred = model.run(model_inputs)
+      
+      # crop
+      pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
+      target = target[..., args.crop-args.crop, args.crop:-args.crop]
+
       loss = criterion(pred, target)
 
       loss.backward()
@@ -323,6 +328,11 @@ def infer(args, gpu_id, valid_queue, models, criterion):
           model_inputs = {"Input(Bayer)": bayer}
        
         pred = model.run(model_inputs)
+
+        # crop
+        pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
+        target = target[..., args.crop:-args.crop, args.crop:-args.crop]
+        
         clamped = torch.clamp(pred, min=0, max=1)
 
         loss = criterion(clamped, target)

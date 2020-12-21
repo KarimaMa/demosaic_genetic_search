@@ -455,6 +455,26 @@ def fix_channel_count_upwards(subtree, in_c, fixed_nodes=None):
 
 
 """
+checks that there are no two adjacent non-linear types
+"""
+def assert_no_nonlinear_adjacency(root):
+  if isinstance(root, NonLinear):
+    # has only one child
+    assert(isinstance(root.child, Linear))
+    assert_no_nonlinear_adjacency(root.child)
+  else:
+    if root.num_children == 3:
+      assert_no_nonlinear_adjacency(root.child1)
+      assert_no_nonlinear_adjacency(root.child2)
+      assert_no_nonlinear_adjacency(root.child3)
+    elif root.num_children == 2:
+      assert_no_nonlinear_adjacency(root.lchild)
+      assert_no_nonlinear_adjacency(root.rchild)
+    elif root.num_children == 1:
+      assert_no_nonlinear_adjacency(root.child)
+
+
+"""
 type check that linear operators are followed by nonlinear operators
 """
 def check_linear_types(root):
