@@ -35,8 +35,8 @@ class FullDemosaicknet(nn.Module):
       if i == 0:
         n_in = 4
       """ for version with residual masking """
-      if i == depth-1:
-        n_out = 2*width
+      # if i == depth-1:
+      #   n_out = 2*width
 
       layers["conv{}".format(i+1)] = nn.Conv2d(n_in, n_out, 3, padding=pad)
       layers["relu{}".format(i+1)] = nn.ReLU(inplace=True)
@@ -87,21 +87,21 @@ class FullDemosaicknet(nn.Module):
 
     # 1/4 resolution features
     """ my version without the residuual asking """
-    # features = self.main_processor(mosaic)
-    # residual = self.residual_predictor(features)
+    features = self.main_processor(mosaic)
+    residual = self.residual_predictor(features)
 
-    # # Match mosaic and residual
-    # upsampled = self.upsampler(residual)
-    # #cropped = _crop_like(mosaic, upsampled)
+    # Match mosaic and residual
+    upsampled = self.upsampler(residual)
+    #cropped = _crop_like(mosaic, upsampled)
 
-    # packed = th.cat([mosaic, upsampled], 1)  # skip connection
-    # output = self.fullres_processor(packed)
+    packed = th.cat([mosaic, upsampled], 1)  # skip connection
+    output = self.fullres_processor(packed)
 
-    # rgb = output * self.mask + mosaic
+    rgb = output * self.mask + mosaic
 
-    # return rgb
+    return rgb
 
-
+    """
     features = self.main_processor(mosaic)
     filters, masks = features[:, 0:self.width], features[:, self.width:2*self.width]
     filtered = filters * masks
@@ -116,8 +116,8 @@ class FullDemosaicknet(nn.Module):
 
     rgb = output * self.mask + mosaic
     return rgb
-
-
+    """
+  
 
   def compute_cost(self):
     cost = bayer_packer_cost()
