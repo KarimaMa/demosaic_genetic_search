@@ -130,6 +130,9 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
     bayer = Variable(bayer, requires_grad=False).float().cuda()
     target = Variable(target, requires_grad=False).float().cuda()
 
+    if args.crop > 0:
+      target = target[..., args.crop:-args.crop, args.crop:-args.crop]
+
     n = bayer.size(0)
 
     for i, model in enumerate(models):
@@ -150,6 +153,12 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
         print("target")
         print(target[0,:,0:4,0:4])
         exit()
+
+      # pred = pred[:,1,:,:].unsqueeze(1)
+      # target = target[:,1,:,:].unsqueeze(1)
+
+      if args.crop > 0:
+        pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
 
       loss = criterion(pred, target) 
 
@@ -192,6 +201,9 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
       bayer = Variable(bayer, requires_grad=False).float().cuda()
       target = Variable(target, requires_grad=False).float().cuda()
       
+      if args.crop > 0:
+        target = target[..., args.crop:-args.crop, args.crop:-args.crop]
+
       n = bayer.size(0)
 
       for i, model in enumerate(models):
@@ -208,6 +220,12 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
         pred = model.run(model_inputs)
         clamped = torch.clamp(pred, min=0, max=1)
 
+        # clamped = clamped[:,1,:,:].unsqueeze(1)
+        # target = target[:,1,:,:].unsqueeze(1)
+
+        if args.crop > 0:
+          clamped = clamped[..., args.crop:-args.crop, args.crop:-args.crop]
+          
         loss = criterion(clamped, target)
         loss_trackers[i].update(loss.item(), n)
 
@@ -253,6 +271,7 @@ if __name__ == "__main__":
   parser.add_argument('--depth', type=int, help='num conv layers in model')
   parser.add_argument('--width', type=int, help='num channels in model layers')
   parser.add_argument('--k', type=int, help='kernel width in model layers')
+  parser.add_argument('--crop', type=int, default=0, help='amount to crop output image to remove border effects')
 
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
   parser.add_argument('--save', type=str, help='experiment name')
@@ -276,6 +295,8 @@ if __name__ == "__main__":
   parser.add_argument('--infer', action='store_true')
   parser.add_argument('--pretrained', action='store_true')
   parser.add_argument('--weights', type=str, help="pretrained weights")
+  parser.add_argument('--green_pretrained', action='store_true')
+  parser.add_argument('--green_weights', type=str, help="pretrained weights")
 
   args = parser.parse_args()
 
@@ -341,7 +362,14 @@ if __name__ == "__main__":
     logger.info("TRAINING BASIC GREEN")
     model = model_lib.basic1D_green_model()
 
-  print_parents(model)
+
+  if args.green_pretrained:
+    nodes = model.preorder()
+    for n in nodes:
+      if type(n) is demosaic_ast.Input:
+        if n.name == "Input(GreenExtractor)":
+          print('here')
+          n.weight_file = args.green_weights
 
   if not torch.cuda.is_available():
     sys.exit(1)
@@ -369,6 +397,7 @@ if __name__ == "__main__":
     for i, m in enumerate(torch_models):
       state_dict = torch.load(weight_files[i])
       m.load_state_dict(state_dict)
+
 
   model_manager.save_model(torch_models, model, model_dir)
 
