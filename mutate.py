@@ -427,7 +427,6 @@ def group_mutation(self, tree):
   in_c_factors = get_factors(chosen_conv.in_c)
   out_c_factors = get_factors(chosen_conv.out_c)
   factors = in_c_factors.intersection(out_c_factors)
-  self.debug_logger.debug(f"in_c {chosen_conv.in_c} out_c {chosen_conv.out_c} groups {chosen_conv.groups}")
   factors.remove(chosen_conv.groups)
   if len(factors) == 0:
     self.debug_logger.debug("No possible grouping factors for grouped conv mutation")
@@ -456,7 +455,6 @@ def legal_parent_child_linearity(self, parent, child):
   illegal_parents = []
   for p in parents:
     parent_type = type(p)
-    self.debug_logger.debug(f"parent type {p.name} {parent_type} child_type {child.name} {child_type}")
     # parent_child_ok = (parent_type in border_ops or child_type in border_ops \
     #       or (parent_type in nl_and_sp and child_type in l_and_sp) \
     #       or (parent_type in l_and_sp and child_type in nl_and_sp))
@@ -1459,6 +1457,10 @@ def allow_subtree(self, root, input_set, insert_child, target_out_c=None, resolu
     in_c, out_c = root.compute_input_output_channels()
     if out_c != target_out_c: 
       fixed = fix_channel_count_downwards(root, None, target_out_c)
+      # we must also fix upwards now because subtrees are by default not copied,
+      # other parent of subtree is affected by channel change
+      if fixed: 
+        fixed = fix_channel_count_upwards(root, target_out_c)
       if fixed:
         root.compute_input_output_channels()
       else:
