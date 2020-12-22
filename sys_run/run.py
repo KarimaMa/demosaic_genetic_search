@@ -477,7 +477,7 @@ class Searcher():
     seed_model_psnrs = [float(x) for x in self.args.seed_model_psnrs.strip().split(',')]
 
     for seed_model_i, seed_model_file in enumerate(seed_model_files):
-      seed_ast = demosaic_ast.load_ast(self.args.seed_model_ast)
+      seed_ast = demosaic_ast.load_ast(seed_model_file)
       seed_ast.compute_input_output_channels()
       if self.args.full_model:
         self.insert_green_model(seed_ast, args.chroma_green_model, args.chroma_green_model_weights)
@@ -710,7 +710,7 @@ if __name__ == "__main__":
   parser.add_argument('--seed', type=int, default=1, help='random seed')
 
   # seed models 
-  parser.add_argument('--green_seed_model_files', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_info,DATADUMP/GREEN_DEMOSAICNET_D3W8_SEED/models/seed/model_info')
+  parser.add_argument('--green_seed_model_files', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_ast,DATADUMP/GREEN_DEMOSAICNET_D3W8_SEED/models/seed/model_ast')
   parser.add_argument('--green_seed_model_psnrs', type=str, default='34.10,34.19')
 
   parser.add_argument('--chroma_seed_model_file', type=str, default='DATADUMP/SIMPLE_GREEN_INPUT_CHROMA_MODEL/models/seed/model_info', help='')
