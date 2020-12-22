@@ -473,7 +473,7 @@ class Searcher():
     if self.args.full_model:
       self.insert_green_model(seed_ast, args.chroma_green_model, args.chroma_green_model_weights)
 
-    seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)
+    seed_model_dir = self.model_manager.model_dir(self.model_manager.start_id)
     util.create_dir(seed_model_dir)
     seed_ast.compute_input_output_channels()
 
@@ -485,10 +485,10 @@ class Searcher():
 
     self.search_logger.info(f"using seed model:\n{seed_ast.dump()}\nwith cost {compute_cost} and PSNR {model_accuracy}")
 
-    cost_tiers.add(self.model_manager.SEED_ID, compute_cost, model_accuracy)
+    cost_tiers.add(self.model_manager.start_id, compute_cost, model_accuracy)
     
-    self.model_database.add(self.model_manager.SEED_ID,\
-            {'model_id': self.model_manager.SEED_ID,
+    self.model_database.add(self.model_manager.start_id,\
+            {'model_id': self.model_manager.start_id,
              'id_str' : seed_ast.id_string(),
              'hash': hash(seed_ast),
              'structural_hash': demosaic_ast.structural_hash(seed_ast),
