@@ -513,9 +513,9 @@ class Searcher():
                'prune_rejections': 0,
                'structural_rejections': 0,
                'seen_rejections': 0,
-               'mutation_type': None,
-               'insert_ops': None,
-               'mutation_node_id': None,
+               'mutation_type': 'N/A',
+               'insert_ops': 'N/A',
+               'mutation_node_id': -1,
                'new_output_channels': -1,
                'new_grouping': -1})
 
