@@ -1302,7 +1302,7 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
 
   new_ops = [format_for_insert(o) for o in new_ops]
 
-  self.current_mutation_info.insert_ops = ",".join([new_op[0].__name__ for new_op in new_ops])
+  self.current_mutation_info.insert_ops = ";".join([new_op[0].__name__ for new_op in new_ops])
   self.current_mutation_info.node_id = insert_above_node_id
 
   try:
