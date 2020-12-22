@@ -512,7 +512,7 @@ class Searcher():
                'failed_mutations': 0,
                'prune_rejections': 0,
                'structural_rejections': 0,
-               'seen_rejections': 0
+               'seen_rejections': 0,
                'mutation_type': None,
                'insert_ops': None,
                'mutation_node_id': None,
