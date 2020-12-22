@@ -23,7 +23,7 @@ def compute_footprint_helper(self, footprint):
 		children = [self.child1, self.child2, self.child3]
 	elif self.num_children == 2:
 		children = [self.lchild, self.rchild]
-	elif:
+	elif self.num_children == 1:
 		children = [self.child]
 	else:
 		return footprint

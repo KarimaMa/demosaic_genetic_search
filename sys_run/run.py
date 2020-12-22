@@ -1,13 +1,3 @@
-# while mutating
-# for pool in cost_tiers
-#     for model in pool
-#     new_model = mutate(model)   
-#       cost = cost(new_model)
-#     new_pool = get_cost_tier(cost)
-#     new_pool.add(cost, new_model)
-# for pool in cost_tiers:
-#   pool = keep_topk(pool)
-#
 import math 
 import logging
 import sys
@@ -51,17 +41,21 @@ def build_model_database(args):
              "prune_rejections", "structural_rejections", "seen_rejections"]
   field_types += [float, int, int, int, int, int, int]
 
+  fields += ["mutation_type", "insert_ops", "mutation_node_id", "new_output_channels", "new_grouping"]
+  field_types += [str, str, int, int, int]
+
   return Database("ModelDatabase", fields, field_types, args.model_database_dir)
 
 def build_failure_database(args):
   fields = ["model_id", "hash", "mutation_type", "insert_ops", \
-            "insert_child_id", "delete_id"]
-  field_types = [int, int, int, str, str, int, int, int]
+            "node_id", "new_output_channels", "new_grouping"]
+  field_types = [int, int, str, str, int, int, int]
   failure_database = Database("FailureDatabase", fields, field_types, args.failure_database_dir)
   failure_database.cntr = 0
   return failure_database
 
-def model_database_entry(model_id, id_str, model_ast, shash, generation, compute_cost, parent_id, mutation_stats):
+def model_database_entry(model_id, id_str, model_ast, shash, generation, \
+                        compute_cost, parent_id, mutation_stats):
   data = {'model_id': model_id,
          'id_str' : id_str,
          'hash': hash(model_ast),
@@ -74,8 +68,14 @@ def model_database_entry(model_id, id_str, model_ast, shash, generation, compute
          'failed_mutations': mutation_stats.failures,
          'prune_rejections': mutation_stats.prune_rejections,
          'structural_rejections': mutation_stats.structural_rejections,
-         'seen_rejections': mutation_stats.seen_rejections}
+         'seen_rejections': mutation_stats.seen_rejections,
+         'mutation_type': mutation_stats.used_mutation.mutation_type,
+         'insert_ops': mutation_stats.used_mutation.insert_ops,
+         'mutation_node_id': mutation_stats.used_mutation.node_id,
+         'new_output_channels': mutation_stats.used_mutation.new_output_channels,
+         'new_grouping': mutation_stats.used_mutation.new_grouping}
   return data
+
 
 def run_train(task_id, train_args, gpu_ids, model_id, pytorch_models, model_dir, \
               train_psnrs, valid_psnrs, log_format, task_logger):
@@ -205,72 +205,18 @@ class Searcher():
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '29500'
 
-
   def update_failure_database(self, model_id, model_ast):
     for failure in self.mutator.failed_mutation_info:      
       failure_data = {"model_id" : model_id,
                     "hash" : hash(model_ast),
-                    "mutation_type" : failure["mutation_type"]}
-      
-      if failure["mutation_type"] == MutationType.INSERTION.name:
-        failure_data["insert_ops"] = failure["insert_ops"]
-        failure_data["insert_child_id"] = failure["insert_child_id"]
-
-        failure_data["delete_id"] = -1
-        failure_data["node_id"] = -1
-        failure_data["new_output_channels"] = -1
-        failure_data["new_grouping"] = -1
-      elif failure["mutation_type"] == MutationType.DECOUPLE.name:
-        if "node_id" in failure:
-          failure_data["node_id"] = failure["node_id"]
-        else:
-          failure_data["node_id"] = -1
-
-        failure_data["insert_ops"] = None
-        failure_data["insert_child_id"] = -1
-        failure_data["delete_id"] = -1
-        failure_data["new_output_channels"] = -1
-        failure_data["new_grouping"] = -1
-      elif failure["mutation_type"] == MutationType.CHANNEL_CHANGE.name:
-        if "node_id" in failure:
-          failure_data["node_id"] = failure["node_id"]
-        else:
-          failure_data["node_id"] = -1
-        if "new_output_channels" in failure:
-          failure_data["new_output_channels"] = failure["new_output_channels"]
-        else:
-          failure_data["new_output_channels"] = -1
-
-        failure_data["insert_ops"] = None
-        failure_data["insert_child_id"] = -1
-        failure_data["delete_id"] = -1
-        failure_data["new_grouping"] = -1
-
-      elif failure["mutation_type"] == MutationType.GROUP_CHANGE.name:
-        if "node_id" in failure:
-          failure_data["node_id"] = failure["node_id"]
-        else:
-          failure_data["node_id"] = -1
-        if "new_grouping" in failure:
-          failure_data["new_grouping"] = failure["new_grouping"]
-        else:
-          failure_data["new_grouping"] = -1
-
-        failure_data["new_output_channels"] = -1
-        failure_data["insert_ops"] = None
-        failure_data["insert_child_id"] = -1
-        failure_data["delete_id"] = -1
-      else:
-        failure_data["delete_id"] = failure["delete_id"]
-        failure_data["insert_ops"] = None
-        failure_data["insert_child_id"] = -1
-        failure_data["node_id"] = -1
-        failure_data["new_output_channels"] = -1
-        failure_data["new_grouping"] = -1
+                    "mutation_type" : failure.mutation_type,
+                    "insert_ops" : failure.insert_ops,
+                    "node_id" : failure.node_id,
+                    "new_output_channels" : failure.new_output_channels,
+                    "new_grouping" : failure.new_grouping}
 
       self.failure_database.add(self.failure_database.cntr, failure_data)
       self.failure_database.cntr += 1
-
 
   def update_model_database(self, mutation_task_info, validation_psnrs):
     model_inits = self.args.model_initializations
@@ -526,33 +472,25 @@ class Searcher():
       self.model_database.load(self.args.model_db_snapshot)
 
     # load all seed models
-    seed_model_id = self.model_manager.SEED_ID
+    seed_model_id = self.model_manager.start_id
     seed_model_files = [x.strip() for x in self.args.seed_model_files.split(',')]
     seed_model_psnrs = [float(x) for x in self.args.seed_model_psnrs.strip().split(',')]
 
     for seed_model_i, seed_model_file in enumerate(seed_model_files):
-
       seed_ast = demosaic_ast.load_ast(self.args.seed_model_ast)
       seed_ast.compute_input_output_channels()
       if self.args.full_model:
         self.insert_green_model(seed_ast, args.chroma_green_model, args.chroma_green_model_weights)
 
-      seed_model_dir = self.model_manager.model_dir(self.model_manager.SEED_ID)
+      seed_model_dir = self.model_manager.model_dir(seed_model_id)
       util.create_dir(seed_model_dir)
       seed_model = seed_ast.ast_to_model()
       self.model_manager.save_model([seed_model], seed_ast, seed_model_dir)
 
-      #seed_model, seed_ast = util.load_model_from_file(seed_model_file, model_version, 0)
-      # seed_model_dir = self.model_manager.model_dir(seed_model_id)
-      # util.create_dir(seed_model_dir)
-      # seed_ast.compute_input_output_channels()
-      # self.model_manager.save_model([seed_model], seed_ast, seed_model_dir)
-      # seed_ast.compute_input_output_channels()
-
       compute_cost = self.evaluator.compute_cost(seed_ast)
       model_accuracy = seed_model_psnrs[seed_model_i]
       
-      self.search_logger.info(f"seed model {seed_model_i}\ncost: {compute_cost}\npsnr: {model_accuracy}\n{seed_ast.dump()}")
+      self.search_logger.info(f"seed model {seed_model_id}\ncost: {compute_cost}\npsnr: {model_accuracy}\n{seed_ast.dump()}")
 
       cost_tiers.add(seed_model_id, compute_cost, model_accuracy)
       seed_model_id = self.model_manager.get_next_model_id()
@@ -574,7 +512,12 @@ class Searcher():
                'failed_mutations': 0,
                'prune_rejections': 0,
                'structural_rejections': 0,
-               'seen_rejections': 0})
+               'seen_rejections': 0
+               'mutation_type': None,
+               'insert_ops': None,
+               'mutation_node_id': None,
+               'new_output_channels': -1,
+               'new_grouping': -1})
 
     # CHANGE TO NOT BE FIXED - SHOULD BE INFERED FROM TASK
     if self.args.restart_generation is None:
@@ -768,7 +711,7 @@ if __name__ == "__main__":
 
   # seed models 
   parser.add_argument('--green_seed_model_files', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_info,DATADUMP/GREEN_DEMOSAICNET_D3W8_SEED/models/seed/model_info')
-  parser.add_argument('--green_seed_model_psnrs', type=str, default='31.67,31.75')
+  parser.add_argument('--green_seed_model_psnrs', type=str, default='34.10,34.19')
 
   parser.add_argument('--chroma_seed_model_file', type=str, default='DATADUMP/SIMPLE_GREEN_INPUT_CHROMA_MODEL/models/seed/model_info', help='')
   parser.add_argument('--chroma_seed_model_version', type=int, default=0)
@@ -837,11 +780,11 @@ if __name__ == "__main__":
     args.seed_model_file = args.chroma_seed_model_file
     args.seed_model_version = args.chroma_seed_model_version
     args.seed_model_psnr = args.chroma_seed_model_psnr
-    args.task_out_c = 6
+    args.task_out_c = 3
   else:
     args.seed_model_files = args.green_seed_model_files
     args.seed_model_psnrs = args.green_seed_model_psnrs
-    args.task_out_c = 2
+    args.task_out_c = 1
 
   args.cost_tiers = parse_cost_tiers(args.cost_tiers)
   util.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))

@@ -36,11 +36,20 @@ class MutationType(Enum):
   GROUP_CHANGE = 5
 
 class MutationStats():
-  def __init__(self, failures, prune_rejections, structural_rejections, seen_rejections):
+  def __init__(self, failures, prune_rejections, structural_rejections, seen_rejections, mutation_info):
     self.failures = failures
     self.prune_rejections = prune_rejections
     self.structural_rejections = structural_rejections
     self.seen_rejections = seen_rejections
+    self.used_mutation = mutation_info
+
+class MutationInfo():
+  def __init__(self):
+    self.mutation_type = None
+    self.insert_ops = None
+    self.node_id = -1
+    self.new_output_channels = -1
+    self.new_grouping = -1
 
 """
 mutates the given tree 
@@ -58,7 +67,6 @@ class Mutator():
     self.seen_models = {}
     self.seen_structures = set()
 
-    self.current_mutation_info = {}
     self.failed_mutation_info = []
 
   def add_seen_model(self, tree, model_id):
@@ -101,8 +109,8 @@ class Mutator():
             failures += 1
             continue
 
-          self.current_mutation_info = {}
-          self.current_mutation_info["mutation_type"] = mutation_type.name
+          self.current_mutation_info = MutationInfo()
+          self.current_mutation_info.mutation_type = mutation_type.name
 
           #self.debug_logger.debug(f"the tree before mutation:\n{tree_copy.dump()}")
           if mutation_type is MutationType.INSERTION:  
@@ -121,17 +129,17 @@ class Mutator():
             self.debug_logger.debug(f"attempting group mutation")
             new_tree = self.group_mutation(tree_copy)
 
-          self.debug_logger.debug(f"finished mutation")
+          self.debug_logger.debug(f"--- finished mutation ---")
 
           if self.accept_tree(new_tree):
             break
-          
+
           # tree was pruned
-          self.failed_mutation_info.append(self.current_mutation_info.copy())
+          self.failed_mutation_info.append(self.current_mutation_info)
           prune_rejections += 1
 
           if self.give_up(structural_rejections, prune_rejections, seen_rejections, failures):
-            stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections)
+            stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections, self.current_mutation_info)
             self.debug_logger.debug(f"giving up mutation to produce model {model_id}")
             return None, None, stats
 
@@ -148,20 +156,22 @@ class Mutator():
         else:
           self.debug_logger.debug(f'group mutation failed on model {parent_id}')
 
-        self.failed_mutation_info.append(self.current_mutation_info.copy())
+        self.failed_mutation_info.append(self.current_mutation_info)
         failures += 1
         continue
       else: # successfully mutated tree
+        """
+        shrinking channel count is buggy - removed for now
+        """
         # try to shrink channel counts that are too large - Stack can cause channel counts to blow up
-        saved_copy = copy_subtree(new_tree)
-        try:
-          shrink_channels(new_tree, self.args.max_channels, self.args.task_out_c)
-        except AssertionError:
-          #self.debug_logger.debug("Unable to shrink channels")
-          new_tree = saved_copy
+        # saved_copy = copy_subtree(new_tree)
+        # try:
+        #   shrink_channels(new_tree, self.args.max_channels, self.args.task_out_c)
+        # except AssertionError:
+        #   #self.debug_logger.debug("Unable to shrink channels")
+        #   new_tree = saved_copy
 
-        #print(new_tree.dump())
-        new_tree.compute_input_output_channels()
+        # new_tree.compute_input_output_channels()
 
         # TODO: THESE SHOULD NEVER FIRE BUT THEY DO... FIGURE OUT BUGS!!!
         # FOR NOW WE JUST CATCH THE ASSERTION ERRORS
@@ -169,15 +179,15 @@ class Mutator():
           check_channel_count(new_tree) # these should not fire...
         except AssertionError:
           self.debug_logger.debug(f"channel count check failed on model {model_id}")
-          self.failed_mutation_info.append(self.current_mutation_info.copy())
+          self.failed_mutation_info.append(self.current_mutation_info)
           failures += 1
           continue
         try:
           #check_linear_types(new_tree)
           assert_no_nonlinear_adjacency(new_tree) # allow adjacent convs, just no adjacent relu / softmax
         except AssertionError:
-          self.debug_logger.debug(f"check linearity failed on model {model_id}")
-          self.failed_mutation_info.append(self.current_mutation_info.copy())
+          self.debug_logger.debug(f"check no adjacnet nonlinear failed on model {model_id}")
+          self.failed_mutation_info.append(self.current_mutation_info)
           failures += 1
           continue
 
@@ -192,7 +202,7 @@ class Mutator():
           else: # successfully mutated tree!
             self.seen_structures.add(h)
             self.seen_models[new_tree] = {"model_ids":[int(model_id)], "hash": hash(new_tree), "ast_str": new_tree.dump()}
-            stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections)
+            stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections, self.current_mutation_info)
             return new_tree, h, stats
 
         if new_tree in self.seen_models: # we've seen and evaluated this exact tree before
@@ -212,7 +222,7 @@ def decouple_mutation(self, tree, chosen_node_id=None):
   if chosen_node_id:
     chosen_node = preorder_nodes[chosen_node_id]
   else:
-    shared = list(filter(lambda x: type(x.parent) is tuple and not type(x) in set((LogSub, AddExp)), preorder_nodes))
+    shared = list(filter(lambda x: type(x.parent) is tuple and not type(x) in set((LogSub, AddExp, Input)), preorder_nodes))
     if len(shared) == 0:
       self.debug_logger.debug("cannot perform decouple mutation on a tree with no shared computation")
       assert False, "cannot perform decouple mutation on a tree with no shared computation"
@@ -222,7 +232,7 @@ def decouple_mutation(self, tree, chosen_node_id=None):
       if n is chosen_node:
         chosen_node_id = i
         break
-  self.current_mutation_info["node_id"] = chosen_node_id
+  self.current_mutation_info.node_id = chosen_node_id
 
   copies = [copy.copy(chosen_node) for p in chosen_node.parent]
   if chosen_node.num_children == 3:
@@ -374,16 +384,16 @@ def channel_mutation(self, tree, chosen_conv_id=None):
 
   new_out_c = perturb_channel(chosen_conv.out_c)
 
-  self.current_mutation_info["node_id"] = chosen_conv_id
-  self.current_mutation_info["new_output_channels"] = new_out_c
+  self.current_mutation_info.node_id = chosen_conv_id
+  self.current_mutation_info.new_output_channels = new_out_c
 
   fixed = fix_channel_count_upwards(chosen_conv, new_out_c)
   if fixed:
     chosen_conv.out_c = new_out_c
     # if the mutated convolution's new output channels is not divisible by its groups,
     # set the groups to the factor of its in and out channels closest to its current groups
-    in_c_factors = get_factors(chosen_conv.out_c)
-    out_c_factors = get_factors(chosen_conv.in_c)
+    in_c_factors = get_factors(chosen_conv.in_c)
+    out_c_factors = get_factors(chosen_conv.out_c)
     factors = in_c_factors.intersection(out_c_factors)
     closest_factor = get_closest_factor(factors, chosen_conv.groups)
     chosen_conv.groups = closest_factor # if current groups is already a factor, this does nothing
@@ -412,11 +422,12 @@ def group_mutation(self, tree):
     if n is chosen_conv:
       chosen_conv_id = i
       break
-  self.current_mutation_info["node_id"] = chosen_conv_id
+  self.current_mutation_info.node_id = chosen_conv_id
 
-  in_c_factors = get_factors(chosen_conv.out_c)
-  out_c_factors = get_factors(chosen_conv.in_c)
+  in_c_factors = get_factors(chosen_conv.in_c)
+  out_c_factors = get_factors(chosen_conv.out_c)
   factors = in_c_factors.intersection(out_c_factors)
+  self.debug_logger.debug(f"in_c {chosen_conv.in_c} out_c {chosen_conv.out_c} groups {chosen_conv.groups}")
   factors.remove(chosen_conv.groups)
   if len(factors) == 0:
     self.debug_logger.debug("No possible grouping factors for grouped conv mutation")
@@ -424,7 +435,7 @@ def group_mutation(self, tree):
   # randomly pick a factor to use as the group 
   new_grouping = random.sample(factors, 1)[0]
   
-  self.current_mutation_info["new_grouping"] = new_grouping
+  self.current_mutation_info.new_grouping = new_grouping
 
   chosen_conv.groups = new_grouping # input and output channels remain unchanged 
   return tree
@@ -482,6 +493,36 @@ def get_partner_nodes(id2node_map):
 
 
 """
+given a dictionary of node ids to node references, return all of their partner nodes
+that are still reachable through the DAG
+"""
+def get_reachable_partner_nodes(tree, id2node_map):
+  partner_nodes = {}
+  for nid, n in id2node_map.items():
+    if hasattr(n, "partner_set"):
+      for partner_node, partner_id in n.partner_set: 
+        partner_nodes[partner_id] = partner_node  
+
+  reachable = {}
+  for nid, n in partner_nodes.items():
+    if is_in_tree(tree, n):
+      reachable[nid] = n
+  return reachable
+
+"""
+given a dictionary of node ids to node references of nodes, 
+returns the subset whos partners are not all eachable 
+"""
+def get_nodes_missing_partners(tree, id2node_map):
+  nodes_missing_partners = {}
+  for nid, n in id2node_map.items():
+    for partner_node, partner_id in n.partner_set: 
+      if not is_in_tree(tree, partner_node):
+        nodes_missing_partners[nid] = n
+      
+  return nodes_missing_partners
+
+"""
 returns whether a node still exists in the tree
 """
 def is_in_tree(tree, node):
@@ -512,6 +553,31 @@ def remove_deleted_partner_connections(tree, partners_of_deleted, deleted):
     n.partner_set = new_set 
     if len(n.partner_set) == 0:
       delattr(n, "partner_set")
+
+
+"""
+given a dictionary of ids to nodes that have been removed down one path 
+of the DAG, (but may still be reachable through other parents still in the DAG)
+remove connections to parents that are no longer reachable 
+"""
+def remove_connections_to_deleted_nodes(tree, deleted_nodes):
+  for nid, n in deleted_nodes.items():
+    if type(n.parent) is tuple:
+      parents = list(n.parent)
+    else:
+      parents = [n.parent]
+
+    reachable_parents = []
+    for p in parents:
+      if is_in_tree(tree, p):
+        reachable_parents.append(p)
+
+    if len(reachable_parents) > 1:
+      n.parent = tuple(reachable_parents)
+    elif len(reachable_parents) == 1:
+      n.parent = reachable_parents[0]
+    else:
+      n.parent = None
 
 """
 fixes up parent child relationships to remove given node
@@ -611,14 +677,20 @@ reassigns deleted subtrees to one if any of its dependees
 returns the child of the deleted nodes
 """
 @extclass(Mutator)
-def delete_nodes(self, tree, node, already_deleted=None):
-  if already_deleted is None:
-    already_deleted = {}
+def delete_nodes(self, tree, node):
+  # if already_deleted is None:
+  #   already_deleted = {}
+
+  # if id(node) in already_deleted and not is_in_tree(tree, node):
+  #   return tree
+  if not is_in_tree(tree, node):
+    return tree
 
   parent = node.parent
   deleted_nodes = {}
 
   self.debug_logger.debug(f"deleting {id(node)} {node.name}")
+
   deleted_nodes[id(node)] = node
 
   if isinstance(node, Binop):
@@ -648,31 +720,34 @@ def delete_nodes(self, tree, node, already_deleted=None):
   self.fix_channels_after_deletion(tree, parent, child)
 
   illegal_parents = self.legal_parent_child_linearity(parent, child)
-  if len(illegal_parents) > 0:
-    # deletion caused illegal linearity, move up the tree to delete all illegal parents
-    self.debug_logger.debug("illegal parent child linearity")
-
+ 
   # add newly deleted node to already_deleted
-  for deleted_id, deleted_n in deleted_nodes.items():
-    already_deleted[deleted_id] = deleted_n
+  # for deleted_id, deleted_n in deleted_nodes.items():
+  #   already_deleted[deleted_id] = deleted_n
 
+  remove_connections_to_deleted_nodes(tree, deleted_nodes)
+  reachable_partners = get_reachable_partner_nodes(tree, deleted_nodes)
+  nodes_missing_partners = get_nodes_missing_partners(tree, reachable_partners)
   # delete partners if we deleted a sandwich node
-  partners_of_deleted = get_partner_nodes(deleted_nodes)
+  #partners_of_deleted = get_partner_nodes(deleted_nodes)
 
   # filter out any partners that have already been deleted
-  filtered_partners_of_deleted = {}
-  for pid, p in partners_of_deleted.items():
-    if not pid in already_deleted or is_in_tree(tree, p):
-      filtered_partners_of_deleted[pid] = p
+  # filtered_partners_of_deleted = {}
+  # for pid, p in partners_of_deleted.items():
+  #   if not pid in already_deleted or is_in_tree(tree, p):
+  #     filtered_partners_of_deleted[pid] = p
 
   # must remove partner connections that refer back to deleted_nodes - else infinite recursion deletion
-  remove_deleted_partner_connections(tree, filtered_partners_of_deleted, deleted_nodes)
+  #remove_deleted_partner_connections(tree, filtered_partners_of_deleted, deleted_nodes)
+  #remove_deleted_partner_connections(tree, reachable_partners, deleted_nodes)
 
-  for nid, n in filtered_partners_of_deleted.items():
-    tree = self.delete_nodes(tree, n, already_deleted)
-  
+  # for nid, n in filtered_partners_of_deleted.items():
+  #   tree = self.delete_nodes(tree, n, already_deleted)
+  for nid, n in nodes_missing_partners.items():
+    tree = self.delete_nodes(tree, n)
+
   for n in illegal_parents:
-    tree = self.delete_nodes(tree, n, already_deleted)
+    tree = self.delete_nodes(tree, n)
 
   return tree
 
@@ -689,7 +764,6 @@ def select_node_to_delete(self, tree):
   preorder_nodes = tree.preorder()
   n = len(preorder_nodes)
   tree.compute_size(set(), count_all_inputs=True)
-  self.debug_logger.debug(f"finished computing size {tree.size}")
   # rejections = 0
  
   while True:
@@ -726,7 +800,7 @@ def delete_mutation(self, tree, node=None):
     return None
 
   self.debug_logger.debug(f"the chosen delete node {node} id {tree.get_preorder_id(node)}")
-  self.current_mutation_info["delete_id"] = tree.get_preorder_id(node)
+  self.current_mutation_info.node_id = tree.get_preorder_id(node)
   tree = self.delete_nodes(tree, node)
   tree.compute_input_output_channels()
   return tree 
@@ -897,9 +971,12 @@ INSERT PARENT IS NOT MODIFIED TO POINT TO THE NEW NODE
 @extclass(Mutator)
 def insert_unary_op(self, OpClass, insert_parent, insert_child):
   params = list(signature(OpClass).parameters.items())
-  if len(params) >= 3 and len(params) <= 5: # must be a conv, possible params: child, out_c, name, groups, kwidth
+  if len(params) >= 3 and len(params) <= 5: # conv or grouped/interleaved sum, possible params: child, out_c, name, groups, kwidth
     if issubclass(OpClass, UnopIIdiv):
       in_c_factors = get_factors(insert_child.out_c)
+      # remove the input channels from the list of output channel options
+      in_c_factors.remove(insert_child.out_c)
+      assert len(in_c_factors) > 0, "Cannot insert {OpClass} without output channels to choose from"
       out_c = random.sample(in_c_factors, 1)[0]
     else:
       out_c = self.args.default_channels
@@ -936,6 +1013,10 @@ def accept_insertion_loc(child, parent, insert_ops):
   if insert_ops[-1] is LogSub:
     insertion_loc_options = find_closest_ancestor(child, set((Binop, Softmax)))
     if len(insertion_loc_options) < 3:
+      return False
+  # reject two UnopIIdivs in a row (i.e. InterleavedSum / GroupedSum)
+  if isinstance(insert_ops[-1], UnopIIdiv):
+    if isinstance(parent, UnopIIdiv) or isinstance(child, UnopIIdiv):
       return False
   return True
 
@@ -1132,7 +1213,6 @@ def insert(self, tree, insert_ops, insert_parent, insert_child, input_set):
 
   for i, (OpClass, use_child, use_right) in enumerate(reversed(insert_ops)):
     cur_child.compute_input_output_channels()
-
     if issubclass(OpClass, Binop):
       params = list(signature(OpClass).parameters.items())
       assert len(params) == 3, f"Invalid number of parameters {len(params)} for Binary op"
@@ -1171,7 +1251,10 @@ def insert(self, tree, insert_ops, insert_parent, insert_child, input_set):
       self.debug_logger.debug("unable to make inserted nodes channel counts agree with tree")
       assert False, "Could not make channel counts agree with inserted ops"
 
+  self.debug_logger.debug(f"tree after fixing channels {tree.dump()}")
   tree.compute_input_output_channels()
+  self.debug_logger.debug(f"tree after recomputing channels {tree.dump()}")
+
   check_channel_count(tree)
 
   return new_nodes, tree
@@ -1193,6 +1276,7 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
     insert_parent = insert_child.parent
 
     if type(insert_parent) is tuple:
+      self.debug_logger.debug(f"insert parents {insert_parent}")
       parent_types = [type(p) for p in insert_parent]
       if not LogSub in parent_types and not AddExp in parent_types:
         insert_parent = random.sample(insert_parent, 1)[0]
@@ -1213,17 +1297,17 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
         break
 
     if self.accept_insertion_choice(insert_child, insert_parent, new_ops):
+      self.debug_logger.debug(f"accepted insertion choice insert child: {insert_child.dump()} new ops {new_ops}")
       break
 
   new_ops = [format_for_insert(o) for o in new_ops]
 
-  self.current_mutation_info["insert_ops"] = ",".join([new_op[0].__name__ for new_op in new_ops])
-  self.current_mutation_info["insert_child_id"] = insert_above_node_id
+  self.current_mutation_info.insert_ops = ",".join([new_op[0].__name__ for new_op in new_ops])
+  self.current_mutation_info.node_id = insert_above_node_id
 
   try:
     new_nodes, tree = self.insert(tree, new_ops, insert_parent, insert_child, input_set)
   except AssertionError:
-    self.debug_logger.debug(f"failed to insert {new_ops}")
     assert False, "insertion mutation failed"
     
   # if we inserted a sandwich op, we must insert its partner node as well
@@ -1367,9 +1451,6 @@ def allow_subtree(self, root, input_set, insert_child, target_out_c=None, resolu
   if induces_loop(insert_child, root):
     self.debug_logger.debug("CHOSEN SUBTREE INDUCES LOOP")
 
-  self.debug_logger.debug(f"the subtree: {root.dump()}")
-  self.debug_logger.debug(f"the subtree parents {root.parent}")
-
   if make_copy or induces_loop(insert_child, root):
     root = copy_subtree(root)
     root.parent = None
@@ -1432,8 +1513,15 @@ def accept_tree(self, tree):
     return False
     
   # reject DAGs with receptive fields larger than threshold
-  footprint = self.compute_footprint()
-  if footprint > args.max_footprint:
+  footprint = tree.compute_footprint()
+  if footprint > self.args.max_footprint:
+    self.debug_logger.debug(f"rejecting DAG with footprint {footprint}")
+    return False
+
+  # reject DAGs with channel counts larger than threshold
+  max_channels = get_max_channels(tree)
+  if max_channels > self.args.max_channels:
+    self.debug_logger.debug(f"rejection tree with max channels {max_channels}")
     return False
 
   tree_type = type(tree) 

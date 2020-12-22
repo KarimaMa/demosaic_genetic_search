@@ -254,6 +254,8 @@ def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_
 
     bayer = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
     target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+    
+    target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
     n = bayer.size(0)
 
@@ -272,7 +274,6 @@ def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_
       
       # crop
       pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
-      target = target[..., args.crop-args.crop, args.crop:-args.crop]
 
       loss = criterion(pred, target)
 
@@ -281,7 +282,7 @@ def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_
 
       loss_trackers[i].update(loss.item(), n)
       # compute running psnr
-      per_image_mse = (clamped-target).square().mean(-1).mean(-1).mean(-1)
+      per_image_mse = (pred-target).square().mean(-1).mean(-1).mean(-1)
       per_image_psnr = -10.0*torch.log10(per_image_mse)
       batch_avg_psnr = per_image_psnr.sum(0) / n
       psnr_trackers[i].update(batch_avg_psnr.item(), n)
@@ -314,6 +315,8 @@ def infer(args, gpu_id, valid_queue, models, criterion):
 
       bayer = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
       target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+      
+      target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
       n = bayer.size(0)
 
@@ -331,7 +334,6 @@ def infer(args, gpu_id, valid_queue, models, criterion):
 
         # crop
         pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
-        target = target[..., args.crop:-args.crop, args.crop:-args.crop]
         
         clamped = torch.clamp(pred, min=0, max=1)
 

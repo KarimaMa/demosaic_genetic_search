@@ -815,8 +815,8 @@ def MultiresQuadGreenModel(depth, width):
   weights = Softmax(upsampled_weights)
   weights.compute_input_output_channels()
   
-  downsampled_bayer.partner_set = set( [(weights, id(weights))] )
-  weights.partner_set = set( [(downsampled_bayer, id(downsampled_bayer))] )
+  downsampled_bayer.partner_set = set( [(upsampled_weights, id(upsampled_weights))] )
+  upsampled_weights.partner_set = set( [(downsampled_bayer, id(downsampled_bayer))] )
 
   lowres_mul = Mul(weights, lowres_interp)
   fullres_mul = Mul(weights, fullres_interp)

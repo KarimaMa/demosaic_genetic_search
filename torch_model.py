@@ -757,12 +757,13 @@ class Conv1DOp(nn.Module):
   def __init__(self, operand, C_in, C_out, param_name, kwidth):
     super(Conv1DOp, self).__init__()
     self._operands = nn.ModuleList([operand])
-    assert C_out % 2 == 0, "Output channels must be divisible by 2 to use separable conv"
     self.param_name_v = f"{param_name}_v"
     self.param_name_h = f"{param_name}_h"
 
-    v = nn.Conv2d(C_in, C_out//4, (kwidth, 1), bias=False, padding=(kwidth//2, 0))
-    h = nn.Conv2d(C_in, C_out//4, (1, kwidth), bias=False, padding=(0, kwidth//2))
+    num_vfilters = C_out // 2
+    num_hfilters = C_out - num_vfilters
+    v = nn.Conv2d(C_in, num_vfilters, (kwidth, 1), bias=False, padding=(kwidth//2, 0))
+    h = nn.Conv2d(C_in, num_hfilters, (1, kwidth), bias=False, padding=(0, kwidth//2))
   
     setattr(self, self.param_name_v, v)
     setattr(self, self.param_name_h, h)

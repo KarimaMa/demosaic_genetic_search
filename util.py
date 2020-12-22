@@ -30,8 +30,6 @@ def compute_psnr(loss):
 def get_factors(n):    
   factors = set(reduce(list.__add__, 
     ([i, n//i] for i in range(1, int(n**0.5) + 1) if n % i == 0)))
-  if len(factors) > 1:
-    factors.remove(n)
   return factors
 
 """
@@ -184,7 +182,6 @@ class ModelManager():
     self.base_dir = model_path
     self.start_id = start_id
     self.model_id_generator = model_id_generator(self.start_id)
-    self.SEED_ID = 0
     
   def load_model(self, model_id, model_version, device=None):
     model_dir = os.path.join(self.base_dir, str(model_id))

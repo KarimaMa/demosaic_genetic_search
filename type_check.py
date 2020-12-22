@@ -12,6 +12,24 @@ class Resolution(Enum):
 
 
 """
+returns max channel over all nodes in DAG
+"""
+def get_max_channels(node):
+  max_channels = node.out_c
+  if node.num_children == 3:
+    children = [node.child1, node.child2, node.child3]
+  elif node.num_children == 2:
+    children = [node.lchild, node.rchild]
+  elif node.num_children == 1:
+    children = [node.child]
+  else:
+    return max_channels
+  child_channels = [get_max_channels(c) for c in children]
+  max_channels = max(max_channels, max(child_channels))
+  return max_channels
+
+
+"""
 only shrink channels if channel count exceeds a max threshold
 """
 def shrink_channels(node, max_c, out_c=None):
@@ -22,12 +40,11 @@ def shrink_channels(node, max_c, out_c=None):
       node.in_c = (left_in_c, right_in_c)
       node.out_c = left_in_c + right_in_c
     else:
-      left_in_c = out_c // 2
-      right_in_c = out_c - left_in_c
+      assert out_c == node.out_c, "cannot force stack to change output channels"
+      left_in_c = node.lchild.out_c
+      right_in_c = node.rchild.out_c
       shrink_channels(node.lchild, max_c, out_c=left_in_c)
       shrink_channels(node.rchild, max_c, out_c=right_in_c)
-      node.in_c = (left_in_c, right_in_c)
-      node.out_c = out_c
     return node.out_c
   elif isinstance(node, BinopIII):   
     if out_c is None:
@@ -40,8 +57,8 @@ def shrink_channels(node, max_c, out_c=None):
       return node.out_c
     else:
       try: # trying (out_c, out_c)
-        shrink_channels(node.lchild, target_c, out_c=out_c)
-        shrink_channels(node.rchild, target_c, out_c=out_c)
+        shrink_channels(node.lchild, max_c, out_c=out_c)
+        shrink_channels(node.rchild, max_c, out_c=out_c)
       except AssertionError:
         assert False, f"Failed to make BinopIII output channels agree with {out_c}"
       else:
@@ -183,7 +200,7 @@ def check_channel_count(node):
     check_channel_count(node.child)
     return node.out_c
   elif isinstance(node, UnopIIdiv):
-    assert(node.in_c % node.out_c == 0 and node.in_c > node.out_c )
+    assert(node.in_c % node.out_c == 0 and node.in_c >= node.out_c )
     return node.out_c
   elif isinstance(node, Const):
     return node.out_c
@@ -306,6 +323,12 @@ def fix_channel_count_downwards(root, parent, out_c, fixed_nodes=None):
           fixed = False
     elif isinstance(root, UnopIJ):
       root.out_c = out_c
+      # change grouping if old groups is no longer divisible by the new input channels
+      in_c_factors = get_factors(root.in_c)
+      out_c_factors = get_factors(root.out_c)
+      factors = in_c_factors.intersection(out_c_factors)
+      closest_factor = get_closest_factor(factors, root.groups)
+      root.groups = closest_factor # if current groups is already a factor, this does nothing
       fixed = True
     elif isinstance(root, UnopIIdiv):
       if root.in_c % out_c == 0:
@@ -405,6 +428,13 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c, fixed_nodes=None):
       fixed = fix_channel_count_upwards(parent, in_c + parent.lchild.out_c, fixed_nodes)
   elif isinstance(parent, UnopIJ):
     parent.in_c = in_c
+    # change grouping if old groups is no longer divisible by the new input channels
+    in_c_factors = get_factors(parent.in_c)
+    out_c_factors = get_factors(parent.out_c)
+    factors = in_c_factors.intersection(out_c_factors)
+    closest_factor = get_closest_factor(factors, parent.groups)
+    parent.groups = closest_factor # if current groups is already a factor, this does nothing
+
     fixed = True
   elif isinstance(parent, UnopIIdiv): # want parent to have in_c input channels 
     if in_c % parent.out_c == 0:
@@ -460,7 +490,7 @@ checks that there are no two adjacent non-linear types
 def assert_no_nonlinear_adjacency(root):
   if isinstance(root, NonLinear):
     # has only one child
-    assert(isinstance(root.child, Linear))
+    assert(not isinstance(root.child, NonLinear))
     assert_no_nonlinear_adjacency(root.child)
   else:
     if root.num_children == 3:

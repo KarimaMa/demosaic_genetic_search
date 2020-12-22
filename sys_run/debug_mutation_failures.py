@@ -9,15 +9,18 @@ import demosaic_ast
 import mutate
 import util
 import model_lib
+import cost
 
 
 class Args():
 	def __init__(self):
 		self.min_subtree_size = 1
 		self.max_subtree_size = 12
+		self.max_footprint = 16
 		self.subtree_selection_tries = 10
 		self.default_channels = 16
 		self.max_nodes = 35
+		self.max_channels = 32
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
@@ -40,7 +43,7 @@ if __name__ == "__main__":
 
 	mutator_args = Args()
 	mutator = mutate.Mutator(mutator_args, debug_logger, mysql_logger)
-
+	mutator.current_mutation_info = mutate.MutationInfo()
 	model_manager = util.ModelManager(args.model_dir, 0)
 	tree = model_manager.load_model_ast(args.model_id)
 
@@ -105,9 +108,31 @@ if __name__ == "__main__":
 	type_check.check_channel_count(new_tree)
 	accepted = mutator.accept_tree(new_tree)
 	print(f"is tree accepted {accepted}")
-	type_check.check_linear_types(new_tree)
-
+	#type_check.check_linear_types(new_tree)
+	type_check.assert_no_nonlinear_adjacency(new_tree)
+	ev = cost.ModelEvaluator(None)
+	cost_before = ev.compute_cost(new_tree)
+	print(f"new tree cost before {cost_before}")
 	new_tree.save_ast("test-ast")
 	reloaded = demosaic_ast.load_ast("test-ast")
 	print("reloaded new tree")
 	print(reloaded.dump())
+
+	cost_after = ev.compute_cost(reloaded)
+	print(f"new tree cost after {cost_after}")
+
+	preorder_nodes = reloaded.preorder()
+	print("In reloaded tree nodes with multiple parents")
+	for n in preorder_nodes:
+		if type(n.parent) is tuple:
+			print(n.dump())
+	print("------------")
+
+	print("partners in reloaded tree:")
+	for n in preorder_nodes:
+		if hasattr(n, "partner_set"):
+			print(f"node {n.name} with id {id(n)} partners:")
+			for p, pid in n.partner_set:
+				print(f"{p.name} {id(p)}")
+			print("-----")
+	print("===========")

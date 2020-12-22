@@ -322,7 +322,7 @@ if __name__ == "__main__":
     model = model_lib.fast_multires_green_model()
   elif args.demosaicnet:
     logger.info("TRAINING DEMOSAICNET GREEN")
-    model = model_lib.GreenDemosaicknet(3, 8)
+    model = model_lib.GreenDemosaicknet(args.depth, args.width)
   elif args.ahd:
     logger.info(f"TRAINING AHD GREEN")
     model = model_lib.ahd1D_green_model()

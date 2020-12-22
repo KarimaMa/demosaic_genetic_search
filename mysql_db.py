@@ -129,11 +129,11 @@ def create_table(password, tablename):
   if tablename == "testgreen":
     table = TestGreenTrees
     models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
-    psnrs = [31.67, 31.75]
+    psnrs = [34.10, 34.19]
   elif tablename == "green":
     table = GreenTrees
     models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
-    psnrs = [31.67, 31.75]
+    psnrs = [34.10, 34.19]
   else:
     table = ChromaTrees
     models = [ChromaSeedModel2(2,12, MultiresQuadGreenModel(2,10))]
