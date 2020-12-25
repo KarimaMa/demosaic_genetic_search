@@ -24,11 +24,12 @@ class InputOp(nn.Module):
       setattr(self, self.model_name, model)
       self.no_grad = no_grad 
       self.weights = weights
+      self.initialized = False
 
     self.output = None
 
   def _initialize_parameters(self):
-    if hasattr(self, "model"):
+    if hasattr(self, "model") and not self.initialized:
       if self.weights:
         print(f"loading pretrained weights for input model {self.name} no grad {self.no_grad}")
         state_dict = torch.load(self.weights)
@@ -36,6 +37,8 @@ class InputOp(nn.Module):
       else:
         print(f"initializing weight for input model {self.name} no grad {self.no_grad}")
         self.model._initialize_parameters()
+
+      self.initialized = True
 
   def reset(self):
     self.output = None

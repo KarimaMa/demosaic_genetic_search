@@ -269,9 +269,39 @@ class Searcher():
         return None, None, None
       else:
         return new_model_ast, shash, mutation_stats
-              
-  def insert_green_model(self, new_model_ast, green_model_ast_file, green_model_weight_file):
+   
+  """
+  given a full model, finds the green model id used by the full model
+  and asserts that only one type of green model is used
+  """
+  def get_green_model_id(self, full_model_ast):
+    green_model_id = None
+
+    nodes = new_model_ast.preorder()
+    for n in nodes:
+      if type(n) is demosaic_ast.Input:
+        if n.name == "Input(GreenExtractor)":
+          green_nodes += [n]
+          if green_model_id is None:  
+            green_model_id = n.green_model_id
+          else:
+            assert green_model_id == n.green_model_id, "chroma DAG must use only one type of green model"
+    return green_model_id
+
+  """
+  inserts the green model ast referenced by the green_model_id stored in 
+  an input node into the input node.
+  NOTE: WE MAKE SURE ONLY ONE GREEN MODEL DAG IS CREATED SO THAT 
+  IT IS ONLY RUN ONCE PER RUN OF THE FULL MODEL
+  """
+  def insert_green_model(self, new_model_ast):
+    green_model_id = self.get_green_model_id(new_model_ast)
+
+    green_model_ast_file = self.args.green_model_asts[green_model_id]
+    green_model_weight_file = self.args.green_model_weight_files[green_model_id]
+
     green_model = demosaic_ast.load_ast(green_model_ast_file)
+
     nodes = new_model_ast.preorder()
     for n in nodes:
       if type(n) is demosaic_ast.Input:
@@ -279,12 +309,13 @@ class Searcher():
           n.node = green_model
           n.weight_file = green_model_weight_file
 
+
   def lower_model(self, new_model_id, new_model_ast):
     self.lowering_monitor.set_error_msg(f"---\nfailed to lower model {new_model_id}\n---")
     with self.lowering_monitor:
       try:
-        if self.args.full_model:
-          self.insert_green_model(new_model_ast, args.chroma_green_model, args.chroma_green_model_weights)
+        # if self.args.full_model:
+        #   self.insert_green_model(new_model_ast)
         new_models = [new_model_ast.ast_to_model() for i in range(self.args.model_initializations)]
       except TimeoutError:
         return None
@@ -480,7 +511,7 @@ class Searcher():
       seed_ast = demosaic_ast.load_ast(seed_model_file)
       seed_ast.compute_input_output_channels()
       if self.args.full_model:
-        self.insert_green_model(seed_ast, args.chroma_green_model, args.chroma_green_model_weights)
+        self.insert_green_model(seed_ast)
 
       seed_model_dir = self.model_manager.model_dir(seed_model_id)
       util.create_dir(seed_model_dir)
@@ -574,11 +605,15 @@ class Searcher():
           new_model_ast, shash, mutation_stats = self.mutate_model(model_id, new_model_id, model_ast, generation_stats)
           if new_model_ast is None:
             continue
-                
+          
+          if self.args.full_model:
+            self.insert_green_model(new_model_ast)
+
           pytorch_models = self.lower_model(new_model_id, new_model_ast)
           if pytorch_models is None:
             continue
 
+          # green model must be inserted before computing cost if we're running full model search
           compute_cost = self.evaluator.compute_cost(new_model_ast)
           if compute_cost > new_cost_tiers.max_cost:
             self.debug_logger.info(f"dropping model with cost {compute_cost} - too computationally expensive")
@@ -713,12 +748,11 @@ if __name__ == "__main__":
   parser.add_argument('--green_seed_model_files', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_ast,DATADUMP/GREEN_DEMOSAICNET_D3W8_SEED/models/seed/model_ast')
   parser.add_argument('--green_seed_model_psnrs', type=str, default='34.10,34.19')
 
-  parser.add_argument('--chroma_seed_model_file', type=str, default='DATADUMP/SIMPLE_GREEN_INPUT_CHROMA_MODEL/models/seed/model_info', help='')
-  parser.add_argument('--chroma_seed_model_version', type=int, default=0)
-  parser.add_argument('--chroma_seed_model_psnr', type=float, default=32.32)
+  parser.add_argument('--chroma_seed_model_files', type=str, default='DATADUMP/SIMPLE_GREEN_INPUT_CHROMA_MODEL/models/seed/model_info', help='')
+  parser.add_argument('--chroma_seed_model_psnrs', type=float, default=32.32)
 
-  parser.add_argument('--chroma_green_model', type=str, help='model ast for green prediction when doing chroma search')
-  parser.add_argument('--chroma_green_model_weights', type=str, help='model weights for green prediction when doing chroma search')
+  parser.add_argument('--green_model_asts', type=str, help='model asts for green prediction models when doing chroma search')
+  parser.add_argument('--green_model_weight_files', type=str, help='model weights for green prediction models')
 
   parser.add_argument('--generations', type=int, default=20, help='model search generations')
   parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
@@ -777,9 +811,10 @@ if __name__ == "__main__":
   torch.cuda.manual_seed(args.seed)
 
   if args.full_model:
-    args.seed_model_file = args.chroma_seed_model_file
-    args.seed_model_version = args.chroma_seed_model_version
-    args.seed_model_psnr = args.chroma_seed_model_psnr
+    args.seed_model_files = args.chroma_seed_model_files
+    args.seed_model_psnrs = args.chroma_seed_model_psnrs
+    args.green_model_asts = [f.strip() for f in args.green_model_asts.split(',')]
+    args.green_model_weight_files = [f.strip() for f in args.green_model_weight_files.split(',')]
     args.task_out_c = 3
   else:
     args.seed_model_files = args.green_seed_model_files

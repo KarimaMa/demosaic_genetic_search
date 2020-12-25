@@ -106,12 +106,18 @@ class Special(ABC):
 """----------------------------------------------------------------------"""
 
 class Input(Const, Special, Node):
-  def __init__(self, out_c, name="Input", node=None, no_grad=False):
+  def __init__(self, out_c, name="Input", node=None, no_grad=None, green_model_id=None):
     if node:
       name = node.name
       self.node = node
       assert(out_c == node.out_c), "output channels of node to input doesn't match given out_c"
+    
+    if green_model_id:
+      self.green_model_id = green_model_id
+
+    if not no_grad is None:
       self.no_grad = no_grad
+
     Node.__init__(self, "Input({})".format(name), 0)
     self.in_c = out_c
     self.out_c = out_c 
@@ -602,6 +608,12 @@ def structure_to_array(self):
     if hasattr(n, 'groups'):
       node_info["groups"] = n.groups
 
+    if hasattr(n, 'green_model_id'):
+      node_info['green_model_id'] = n.green_model_id # only has meaning given the current search run's choice of green models
+
+    if hasattr(n, "no_grad"):
+      node_info['no_grad'] = n.no_grad
+
     array.append(node_info)
   return array
 
@@ -652,7 +664,18 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None):
       new_node = node_class(*child_nodes, name=node_name)
 
   else: # is input node
-    new_node = node_class(node_info["in_c"], name=node_name)
+    extra_kwargs = {}
+    # made the choice to not save the node ast if input node is a sub model
+    # just save the model id and assume upon reloading this model id is understood
+    if "green_model_id" in node_info:
+      extra_kwargs["green_model_id"] = node_info["green_model_id"]
+    if "no_grad" in node_info:
+      extra_kwargs["no_grad"] = node_info["no_grad"]
+        
+    if len(extra_kwargs) > 0:
+      new_node = node_class(node_info["in_c"], name=node_name, **extra_kwargs)
+    else:
+      new_node = node_class(node_info["in_c"], name=node_name)
   
   return new_node
 

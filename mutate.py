@@ -34,6 +34,7 @@ class MutationType(Enum):
   DECOUPLE = 3
   CHANNEL_CHANGE = 4
   GROUP_CHANGE = 5
+  GREEN_MODEL_CHANGE = 6
 
 class MutationStats():
   def __init__(self, failures, prune_rejections, structural_rejections, seen_rejections, mutation_info):
@@ -50,6 +51,7 @@ class MutationInfo():
     self.node_id = -1
     self.new_output_channels = -1
     self.new_grouping = -1
+
 
 """
 mutates the given tree 
@@ -86,7 +88,10 @@ class Mutator():
     elif tree_size <= 3:
       mutation_type = MutationType.INSERTION
     else:
-      mutation_type = random.choice(list(MutationType))
+      if self.args.full_model:
+        mutation_type = random.choice(list(MutationType))
+      else:
+        mutation_type = random.choice(list(MutationType)[:-1])
     return mutation_type
 
   def mutate(self, parent_id, model_id, tree, input_set):
@@ -125,9 +130,12 @@ class Mutator():
           elif mutation_type is MutationType.CHANNEL_CHANGE:
             self.debug_logger.debug(f"attempting channel change")
             new_tree = self.channel_mutation(tree_copy)
-          else:
+          elif mutation_type is MutationType.GROUP_CHANGE:
             self.debug_logger.debug(f"attempting group mutation")
             new_tree = self.group_mutation(tree_copy)
+          else:
+            self.debug_logger.debug(f"attempting green model change mutation")
+            new_tree = self.green_model_change_mutation(tree_copy)
 
           self.debug_logger.debug(f"--- finished mutation ---")
 
@@ -209,6 +217,35 @@ class Mutator():
           self.seen_models[new_tree]["model_ids"].append(int(model_id))
           seen_rejections += 1
           continue
+
+
+@extclass(Mutator)
+def green_model_change_mutation(self, tree):
+  green_nodes = []
+  green_model_id = None
+
+  nodes = new_model_ast.preorder()
+
+  for n in nodes:
+    if type(n) is demosaic_ast.Input:
+      if n.name == "Input(GreenExtractor)":
+        green_nodes += [n]
+        if green_model_id is None:  
+          green_model_id = n.green_model_id
+        else:
+          assert green_model_id == n.green_model_id, "chroma DAG must use only one type of green model"
+  
+  green_model_options = [i for i in range(len(self.args.green_model_asts))]
+  green_model_options.remove(green_model_id)
+  new_green_model_id = random.choice(green_model_options)
+
+  new_green_model = demosaic_ast.load_ast(self.args.green_model_asts[new_green_model_id])
+  new_green_weight_file = self.args.green_model_weight_files[new_green_model_id]
+  
+  for n in green_nodes:
+    n.green_model_id = new_green_model_id
+    n.node = new_green_model
+    n.weight_file = new_green_model_weight_file
 
 
 """

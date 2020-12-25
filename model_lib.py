@@ -909,10 +909,10 @@ def RGBGradientHalideModel(width, k):
   return rgb
 
 
-def ChromaSeedModel1(depth, width, green_model):
+def ChromaSeedModel1(depth, width, no_grad, green_model, green_model_id):
   green_GrGb = Input(2, "Green@GrGb")
   rb = Input(2, "RedBlueBayer")
-  flat_green = Input(1, "GreenExtractor", node=green_model) # GreenExtractor output 
+  flat_green = Input(1, "GreenExtractor", no_grad=no_grad, node=green_model, green_model_id=green_model_id) # GreenExtractor output 
 
   green_quad = Flat2Quad(flat_green)
   green_rb = GreenRBExtractor(flat_green)
@@ -962,10 +962,10 @@ def ChromaSeedModel1(depth, width, green_model):
   return rgb                                            
 
 
-def ChromaSeedModel2(depth, width, green_model):
+def ChromaSeedModel2(depth, width, no_grad, green_model, green_model_id):
   green_GrGb = Input(2, "Green@GrGb")
   rb = Input(2, "RedBlueBayer")
-  flat_green = Input(1, "FullGreen", node=green_model, no_grad=True) # GreenExtractor output 
+  flat_green = Input(1, "FullGreen", no_grad=no_grad, node=green_model, green_model_id=green_model_id) # GreenExtractor output 
 
   green_quad = Flat2Quad(flat_green)
   green_rb = GreenRBExtractor(flat_green)
@@ -979,7 +979,7 @@ def ChromaSeedModel2(depth, width, green_model):
   downsampled = Downsample(chroma_input)
   for i in range(selector_depth):
     if i == 0:
-      conv = Conv2D(downsampled, 6, kwidth=3)
+      conv = Conv2D(downsampled, width, kwidth=3)
     else:
       conv = Conv2D(relu, width, kwidth=3)
     if i != selector_depth-1:
@@ -1014,7 +1014,42 @@ def ChromaSeedModel2(depth, width, green_model):
   return rgb                                            
 
 
+def ChromaSeedModel3(depth, width, no_grad, green_model, green_model_id):
+  green_GrGb = Input(2, "Green@GrGb")
+  rb = Input(2, "RedBlueBayer")
+  flat_green = Input(1, "FullGreen", no_grad=no_grad, node=green_model, green_model_id=green_model_id) # GreenExtractor output 
 
+  green_quad = Flat2Quad(flat_green)
+  green_rb = GreenRBExtractor(flat_green)
+
+  rb_min_g = Sub(rb, green_rb)
+  chroma_input = Stack(rb_min_g, green_quad)
+  
+  # interp trunk
+  for i in range(depth):
+    if i == 0:
+      interp = Conv2D(chroma_input, width, kwidth=3)
+    else:
+      interp = Conv2D(relu, width, kwidth=3)
+    if i != depth-1:
+      relu = Relu(interp)
+
+    residual_prediction = Conv1x1(relu, 6)
+
+  stacked = Stack(rb_min_g, residual_prediction) 
+
+  post_conv = Conv2D(stacked, width, kwidth=3)
+  post_relu = Relu(post_conv)
+  chroma_diff_pred = Conv1x1(post_relu, 6) # 6 predicted values R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
+  
+  added_green = Stack(green_quad, green_GrGb) # Gr R B Gb Gr Gb --> predicted values R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
+  chroma_pred = Add(chroma_diff_pred, added_green) # Gr R B Gb Gr Gb  
+
+  rgb = RGBExtractor(green_quad, rb, chroma_pred)
+  rgb.assign_parents()
+  rgb.compute_input_output_channels()
+
+  return rgb        
 
 
 
