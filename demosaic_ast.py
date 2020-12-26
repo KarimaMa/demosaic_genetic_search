@@ -744,12 +744,9 @@ def structural_hash(tree):
       op_coverage += 1 << i
 
   sh = str(h) + str(op_coverage) 
-  # sh = hash_combine(h, op_coverage)
-  # sh = hash_combine(sh, len(nodes))
 
   green_model_id = get_green_model_id(tree)
   if green_model_id:
-    #sh = hash_combine(sh, green_model_id)
     sh += str(green_model_id)
 
   return sh

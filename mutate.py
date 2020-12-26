@@ -52,7 +52,7 @@ class MutationInfo():
     self.new_output_channels = -1
     self.new_grouping = -1
     self.green_model_id = -1
-
+    self.here = 0
 
 """
 mutates the given tree 
@@ -140,7 +140,7 @@ class Mutator():
 
           self.debug_logger.debug(f"--- finished mutation ---")
 
-          if self.accept_tree(new_tree):              
+          if self.accept_tree(new_tree):    
             break
 
           # tree was pruned
@@ -171,19 +171,6 @@ class Mutator():
         failures += 1
         continue
       else: # successfully mutated tree
-        """
-        shrinking channel count is buggy - removed for now
-        """
-        # try to shrink channel counts that are too large - Stack can cause channel counts to blow up
-        # saved_copy = copy_subtree(new_tree)
-        # try:
-        #   shrink_channels(new_tree, self.args.max_channels, self.args.task_out_c)
-        # except AssertionError:
-        #   #self.debug_logger.debug("Unable to shrink channels")
-        #   new_tree = saved_copy
-
-        # new_tree.compute_input_output_channels()
-
         # TODO: THESE SHOULD NEVER FIRE BUT THEY DO... FIGURE OUT BUGS!!!
         # FOR NOW WE JUST CATCH THE ASSERTION ERRORS
         try:
@@ -194,11 +181,11 @@ class Mutator():
           failures += 1
           continue
         try:
-          #check_linear_types(new_tree)
           assert_no_nonlinear_adjacency(new_tree) # allow adjacent convs, just no adjacent relu / softmax
         except AssertionError:
           self.debug_logger.debug(f"check no adjacnet nonlinear failed on model {model_id}")
           self.failed_mutation_info.append(self.current_mutation_info)
+
           failures += 1
           continue
 
@@ -210,17 +197,21 @@ class Mutator():
             if random.random() < self.args.structural_sim_reject:
               structural_rejections += 1
               continue
+            else: # accepting tree that is structurally similar to one already seen
+              self.seen_models[new_tree] = {"model_ids":[int(model_id)], "hash": hash(new_tree), "ast_str": new_tree.dump()}
+              stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections, self.current_mutation_info)
+              return new_tree, h, stats
           else: # successfully mutated tree!
             self.seen_structures.add(h)
             self.seen_models[new_tree] = {"model_ids":[int(model_id)], "hash": hash(new_tree), "ast_str": new_tree.dump()}
             stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections, self.current_mutation_info)
             return new_tree, h, stats
 
-        if new_tree in self.seen_models: # we've seen and evaluated this exact tree before
+        else: # we've seen and evaluated this exact tree before
           self.seen_models[new_tree]["model_ids"].append(int(model_id))
           seen_rejections += 1
           continue
-
+      
 
 @extclass(Mutator)
 def green_model_change_mutation(self, tree):
