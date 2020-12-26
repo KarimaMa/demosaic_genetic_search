@@ -52,7 +52,6 @@ class MutationInfo():
     self.new_output_channels = -1
     self.new_grouping = -1
     self.green_model_id = -1
-    self.here = 0
 
 """
 mutates the given tree 

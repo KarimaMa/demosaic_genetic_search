@@ -512,6 +512,8 @@ class Searcher():
       cost_tiers.add(seed_model_id, compute_cost, model_accuracy)
 
       seed_green_model_id = get_green_model_id(seed_ast)
+      if seed_green_model_id is None:
+        seed_green_model_id = -1
 
       self.model_database.add(seed_model_id,\
               {'model_id': seed_model_id,
@@ -538,7 +540,7 @@ class Searcher():
                'new_grouping': -1,
                'green_model_id': seed_green_model_id})
 
-    seed_model_id = self.model_manager.get_next_model_id()
+      seed_model_id = self.model_manager.get_next_model_id()
 
     # CHANGE TO NOT BE FIXED - SHOULD BE INFERED FROM TASK
     if self.args.restart_generation is None:
