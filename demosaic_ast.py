@@ -112,7 +112,7 @@ class Input(Const, Special, Node):
       self.node = node
       assert(out_c == node.out_c), "output channels of node to input doesn't match given out_c"
     
-    if green_model_id:
+    if not green_model_id is None:
       self.green_model_id = green_model_id
 
     if not no_grad is None:
@@ -671,7 +671,6 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None):
       extra_kwargs["green_model_id"] = node_info["green_model_id"]
     if "no_grad" in node_info:
       extra_kwargs["no_grad"] = node_info["no_grad"]
-        
     if len(extra_kwargs) > 0:
       new_node = node_class(node_info["in_c"], name=node_name, **extra_kwargs)
     else:
@@ -706,6 +705,24 @@ def str_to_class(str):
 
 
 """
+given a full model, finds the green model id used by the full model
+and asserts that only one type of green model is used
+"""
+def get_green_model_id(full_model_ast):
+  green_model_id = None
+
+  nodes = full_model_ast.preorder()
+  for n in nodes:
+    if type(n) is Input:
+      if n.name == "Input(GreenExtractor)":
+        if green_model_id is None:  
+          green_model_id = n.green_model_id
+        else:
+          assert green_model_id == n.green_model_id, "chroma DAG must use only one type of green model"
+  return green_model_id
+
+
+"""
 returns an integer that represents high level structural 
 information of the given tree
 """
@@ -716,15 +733,25 @@ def structural_hash(tree):
     if isinstance(n, Binop):
       h += 1 << i
 
-  op_list = [Conv1x1, Conv1D, Conv2D, Softmax, Relu, Mul, Add, Sub, AddExp, LogSub, Stack, Upsample, Downsample, InterleavedSum, GroupedSum]
+  op_list = [Conv1x1, Conv1D, Conv2D, Softmax, Relu, Mul, Add, Sub, \
+            AddExp, LogSub, Stack, Upsample, Downsample, InterleavedSum, \
+            GroupedSum, RGBExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input]
+
   ops_used = set([type(n) for n in nodes])
   op_coverage = 0
   for i,o in enumerate(op_list):
     if o in ops_used:
       op_coverage += 1 << i
 
-  sh = hash_combine(h, op_coverage)
-  sh = hash_combine(sh, len(nodes))
+  sh = str(h) + str(op_coverage) 
+  # sh = hash_combine(h, op_coverage)
+  # sh = hash_combine(sh, len(nodes))
+
+  green_model_id = get_green_model_id(tree)
+  if green_model_id:
+    #sh = hash_combine(sh, green_model_id)
+    sh += str(green_model_id)
+
   return sh
   
 """

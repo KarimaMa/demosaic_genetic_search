@@ -3,7 +3,7 @@ from tree import *
 from model_lib import *
 import datetime
 import argparse
-
+import demosaic_ast 
 
 def drop_table(password, tablename):
   db_host = 'mysql.csail.mit.edu'
@@ -136,8 +136,11 @@ def create_table(password, tablename):
     psnrs = [34.10, 34.19]
   else:
     table = ChromaTrees
-    models = [ChromaSeedModel2(2,12, MultiresQuadGreenModel(2,10))]
-    psnrs = [29.65]
+    green_model = demosaic_ast.load_ast("RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3318/model_ast")
+    green_model_id = 2
+    models = [ChromaSeedModel2(2, 12, True, green_model, green_model_id), \
+              ChromaSeedModel3(3, 12, True, green_model, green_model_id)]
+    psnrs = [31.89, 32.04]
 
   db.create_tables([table])
 

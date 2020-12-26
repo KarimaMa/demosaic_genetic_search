@@ -49,6 +49,8 @@ class Node:
       h = hash_combine(h, self.kwidth)
     if hasattr(self, "groups"):
       h = hash_combine(h, self.groups)
+    if hasattr(self, "green_model_id"):
+      h = hash_combine(h, self.green_model_id)
 
     if self.num_children == 3:
       h = hash_combine(h, hash(self.child1))
@@ -81,6 +83,8 @@ class Node:
       id_str += f"k{self.kwidth}-"
     if hasattr(self, "groups"):
       id_str += f"g{self.groups}-"
+    if hasattr(self, "green_model_id"):
+      id_str += f"green_model{self.green_model_id}-"
 
     if self.num_children == 3:
       id_str += f"{self.child1.id_string()}-"
@@ -107,6 +111,8 @@ class Node:
     printstr += "\n {} {} {} {}".format(indent, self.name, self.in_c, self.out_c)
     if hasattr(self, "groups"):
       printstr += f" g{self.groups}"
+    if hasattr(self, "green_model_id"):
+      printstr += f" green_model{self.green_model_id}"
     printstr += f"  [ID: {nodeid}] {id(self)}"
 
     nodeid += 1
@@ -246,20 +252,25 @@ class Node:
   
     if self.num_children != other.num_children or type(self) != type(other):
       return False
-    if self.num_children == 0:
+    if self.num_children == 0: # input nodes
       if self.out_c != other.out_c or self.in_c != other.in_c:
         return False
-      return self.name == other.name
-    elif self.num_children == 1:
+      if self.name != other.name:
+        return False
+      if hasattr(self, "green_model_id"):
+        return self.green_model_id == other.green_model_id
+      return True
+    elif self.num_children == 1: 
       if self.out_c != other.out_c or self.in_c != other.in_c:
         return False
+      if hasattr(self, "groups"):
+        if self.groups != other.groups:
+          return False
       return self.child.is_same_as(other.child)
     elif self.num_children == 2:
       if self.out_c != other.out_c:
         return False      
-      #if self.in_c[0] == other.in_c[1] and self.in_c[1] == other.in_c[0]:
       flipped_same = self.rchild.is_same_as(other.lchild) and self.lchild.is_same_as(other.rchild)
-      #if self.in_c[0] == other.in_c[0] and self.in_c[1] == other.in_c[1]:
       same = self.lchild.is_same_as(other.lchild) and self.rchild.is_same_as(other.rchild) 
       return same or flipped_same
     elif self.num_children == 3:
@@ -280,7 +291,11 @@ class Node:
     if self.num_children == 0:
       if self.out_c != other.out_c or self.in_c != other.in_c:
         return False
-      return self.name == other.name
+      if self.name != other.name:
+        return False
+      if hasattr(self.green_model_id):
+        return self.green_model_id == other.green_model_id
+      return True
     elif self.num_children == 1:
       return self.child.is_same_mod_channels(other.child)
     elif self.num_children == 2:

@@ -18,6 +18,7 @@ import cost
 import pareto_util
 from cost import ModelEvaluator, CostTiers
 import demosaic_ast 
+from demosaic_ast import get_green_model_id
 from mutate import Mutator, has_downsample, MutationType
 import util
 from database import Database 
@@ -41,15 +42,15 @@ def build_model_database(args):
              "prune_rejections", "structural_rejections", "seen_rejections"]
   field_types += [float, int, int, int, int, int, int]
 
-  fields += ["mutation_type", "insert_ops", "mutation_node_id", "new_output_channels", "new_grouping"]
-  field_types += [str, str, int, int, int]
+  fields += ["mutation_type", "insert_ops", "mutation_node_id", "new_output_channels", "new_grouping", "green_model_id"]
+  field_types += [str, str, int, int, int, int]
 
   return Database("ModelDatabase", fields, field_types, args.model_database_dir)
 
 def build_failure_database(args):
   fields = ["model_id", "hash", "mutation_type", "insert_ops", \
-            "node_id", "new_output_channels", "new_grouping"]
-  field_types = [int, int, str, str, int, int, int]
+            "node_id", "new_output_channels", "new_grouping", "green_model_id"]
+  field_types = [int, int, str, str, int, int, int, int]
   failure_database = Database("FailureDatabase", fields, field_types, args.failure_database_dir)
   failure_database.cntr = 0
   return failure_database
@@ -73,7 +74,8 @@ def model_database_entry(model_id, id_str, model_ast, shash, generation, \
          'insert_ops': mutation_stats.used_mutation.insert_ops,
          'mutation_node_id': mutation_stats.used_mutation.node_id,
          'new_output_channels': mutation_stats.used_mutation.new_output_channels,
-         'new_grouping': mutation_stats.used_mutation.new_grouping}
+         'new_grouping': mutation_stats.used_mutation.new_grouping,
+         'green_model_id': mutation_stats.used_mutation.green_model_id}
   return data
 
 
@@ -270,23 +272,7 @@ class Searcher():
       else:
         return new_model_ast, shash, mutation_stats
    
-  """
-  given a full model, finds the green model id used by the full model
-  and asserts that only one type of green model is used
-  """
-  def get_green_model_id(self, full_model_ast):
-    green_model_id = None
 
-    nodes = new_model_ast.preorder()
-    for n in nodes:
-      if type(n) is demosaic_ast.Input:
-        if n.name == "Input(GreenExtractor)":
-          green_nodes += [n]
-          if green_model_id is None:  
-            green_model_id = n.green_model_id
-          else:
-            assert green_model_id == n.green_model_id, "chroma DAG must use only one type of green model"
-    return green_model_id
 
   """
   inserts the green model ast referenced by the green_model_id stored in 
@@ -295,7 +281,7 @@ class Searcher():
   IT IS ONLY RUN ONCE PER RUN OF THE FULL MODEL
   """
   def insert_green_model(self, new_model_ast):
-    green_model_id = self.get_green_model_id(new_model_ast)
+    green_model_id = get_green_model_id(new_model_ast)
 
     green_model_ast_file = self.args.green_model_asts[green_model_id]
     green_model_weight_file = self.args.green_model_weight_files[green_model_id]
@@ -524,7 +510,8 @@ class Searcher():
       self.search_logger.info(f"seed model {seed_model_id}\ncost: {compute_cost}\npsnr: {model_accuracy}\n{seed_ast.dump()}")
 
       cost_tiers.add(seed_model_id, compute_cost, model_accuracy)
-      seed_model_id = self.model_manager.get_next_model_id()
+
+      seed_green_model_id = get_green_model_id(seed_ast)
 
       self.model_database.add(seed_model_id,\
               {'model_id': seed_model_id,
@@ -548,7 +535,10 @@ class Searcher():
                'insert_ops': 'N/A',
                'mutation_node_id': -1,
                'new_output_channels': -1,
-               'new_grouping': -1})
+               'new_grouping': -1,
+               'green_model_id': seed_green_model_id})
+
+    seed_model_id = self.model_manager.get_next_model_id()
 
     # CHANGE TO NOT BE FIXED - SHOULD BE INFERED FROM TASK
     if self.args.restart_generation is None:
@@ -748,11 +738,19 @@ if __name__ == "__main__":
   parser.add_argument('--green_seed_model_files', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_ast,DATADUMP/GREEN_DEMOSAICNET_D3W8_SEED/models/seed/model_ast')
   parser.add_argument('--green_seed_model_psnrs', type=str, default='34.10,34.19')
 
-  parser.add_argument('--chroma_seed_model_files', type=str, default='DATADUMP/SIMPLE_GREEN_INPUT_CHROMA_MODEL/models/seed/model_info', help='')
-  parser.add_argument('--chroma_seed_model_psnrs', type=float, default=32.32)
+  parser.add_argument('--chroma_seed_model_files', type=str, default='DATADUMP/CHROMA_SEED_MODEL2_3318GREEN/models/seed/model_ast,DATADUMP/CHROMA_SEED_MODEL3_3318GREEN/models/seed/model_ast')
+  parser.add_argument('--chroma_seed_model_psnrs', type=str, default='31.89,32.04')
 
-  parser.add_argument('--green_model_asts', type=str, help='model asts for green prediction models when doing chroma search')
-  parser.add_argument('--green_model_weight_files', type=str, help='model weights for green prediction models')
+  parser.add_argument('--green_model_asts', type=str, default=\
+     'RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3398/model_ast,\
+      RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/556/model_ast,\
+      RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3318/model_ast,\
+      RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/833/model_ast', help='model asts for green prediction models when doing chroma search')
+  parser.add_argument('--green_model_weight_files', type=str, default=\
+    'RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3398/model_v0_pytorch,\
+     RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/556/model_v0_pytorch,\
+     RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3318/model_v1_pytorch,\
+     RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/833/model_v2_pytorch', help='model weights for green prediction models')
 
   parser.add_argument('--generations', type=int, default=20, help='model search generations')
   parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
@@ -785,8 +783,11 @@ if __name__ == "__main__":
   parser.add_argument('--epochs', type=int, default=3, help='num of training epochs')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
   parser.add_argument('--train_portion', type=int, default=1e5, help='portion of training data to use')
-  parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
-  parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
+  # parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
+  # parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
+  parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of training data image files')
+  parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of validation data image files')
+  
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
 
   # training full chroma + green parameters

@@ -21,6 +21,10 @@ class Args():
 		self.default_channels = 16
 		self.max_nodes = 35
 		self.max_channels = 32
+		self.green_model_asts = ['RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3398/model_ast',
+							     'RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/556/model_ast',
+							     'RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3318/model_ast',
+							     'RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/833/model_ast']
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
@@ -80,6 +84,8 @@ if __name__ == "__main__":
 		new_tree = mutator.decouple_mutation(tree, chosen_node_id=args.decouple_node_id)
 	elif args.mutation_type == "channel_change":
 		new_tree = mutator.channel_mutation(tree, chosen_conv_id=args.chosen_conv_id)
+	elif args.mutation_type == "green_change":
+		new_tree = mutator.green_model_change_mutation(tree)
 	else:
 		new_tree = mutator.group_mutation(tree)
 

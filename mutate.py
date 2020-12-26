@@ -51,6 +51,7 @@ class MutationInfo():
     self.node_id = -1
     self.new_output_channels = -1
     self.new_grouping = -1
+    self.green_model_id = -1
 
 
 """
@@ -139,7 +140,7 @@ class Mutator():
 
           self.debug_logger.debug(f"--- finished mutation ---")
 
-          if self.accept_tree(new_tree):
+          if self.accept_tree(new_tree):              
             break
 
           # tree was pruned
@@ -161,6 +162,8 @@ class Mutator():
           self.debug_logger.debug(f'decouple mutation failed on parent model {parent_id}')
         elif mutation_type is MutationType.CHANNEL_CHANGE:
           self.debug_logger.debug(f'channel change mutation failed on model {parent_id}')
+        elif mutation_type is MutationType.GREEN_MODEL_CHANGE:
+          self.debug_logger.debug(f'green model change mutation failed on model {parent_id}')
         else:
           self.debug_logger.debug(f'group mutation failed on model {parent_id}')
 
@@ -224,10 +227,10 @@ def green_model_change_mutation(self, tree):
   green_nodes = []
   green_model_id = None
 
-  nodes = new_model_ast.preorder()
+  nodes = tree.preorder()
 
   for n in nodes:
-    if type(n) is demosaic_ast.Input:
+    if type(n) is Input:
       if n.name == "Input(GreenExtractor)":
         green_nodes += [n]
         if green_model_id is None:  
@@ -238,14 +241,10 @@ def green_model_change_mutation(self, tree):
   green_model_options = [i for i in range(len(self.args.green_model_asts))]
   green_model_options.remove(green_model_id)
   new_green_model_id = random.choice(green_model_options)
-
-  new_green_model = demosaic_ast.load_ast(self.args.green_model_asts[new_green_model_id])
-  new_green_weight_file = self.args.green_model_weight_files[new_green_model_id]
-  
   for n in green_nodes:
     n.green_model_id = new_green_model_id
-    n.node = new_green_model
-    n.weight_file = new_green_model_weight_file
+
+  return tree
 
 
 """
@@ -1261,7 +1260,6 @@ def insert(self, tree, insert_ops, insert_parent, insert_child, input_set):
 
     cur_child.parent = insert_parent  
 
-  # insert parent is tuple when parents are LogSub / AddExp
   if type(insert_parent) is tuple: 
     for p in insert_parent:
       self.link_insertion_parent_to_new_child(p, insert_child, cur_child)
@@ -1270,15 +1268,22 @@ def insert(self, tree, insert_ops, insert_parent, insert_child, input_set):
 
   # make sure output channels of inserted nodes agree with parent
   cur_child.compute_input_output_channels()
+
   cur_child_id = tree.get_preorder_id(cur_child)
-  new_node_copies = [tree.get_preorder_id(n) for n in new_nodes]
+  insert_parent_id = tree.get_preorder_id(insert_parent)
+  
   tree_copy = copy_subtree(tree) # make a copy in case fixing upwards fails, we can try fixing down
+  copy_nodes = tree_copy.preorder()
+  new_node_copies = [copy_nodes[tree.get_preorder_id(n)] for n in new_nodes]
 
   fixed = fix_channel_count_upwards(cur_child, cur_child.out_c)
   if not fixed:
-    output_c = get_out_c_from_parent(cur_child, insert_parent)
-    cur_child_in_copy = tree_copy.preorder()[cur_child_id]
-    fixed = fix_channel_count_downwards(cur_child_in_copy, insert_parent, output_c)
+    cur_child_copy = copy_nodes[cur_child_id]
+    insert_parent_copy = copy_nodes[insert_parent_id]
+  
+    output_c = get_out_c_from_parent(cur_child_copy, insert_parent_copy)
+
+    fixed = fix_channel_count_downwards(cur_child_copy, insert_parent_copy, output_c)
     if fixed:
       tree = tree_copy
       new_nodes = new_node_copies
@@ -1286,9 +1291,7 @@ def insert(self, tree, insert_ops, insert_parent, insert_child, input_set):
       self.debug_logger.debug("unable to make inserted nodes channel counts agree with tree")
       assert False, "Could not make channel counts agree with inserted ops"
 
-  self.debug_logger.debug(f"tree after fixing channels {tree.dump()}")
   tree.compute_input_output_channels()
-  self.debug_logger.debug(f"tree after recomputing channels {tree.dump()}")
 
   check_channel_count(tree)
 
@@ -1591,14 +1594,10 @@ def accept_tree(self, tree):
       return False
 
   # don't allow stacking of same trees
-  # don't allow stack to stack trees that could have been one tree with channel count changes
-  if tree_type is Stack:
-    if tree.lchild.is_same_as(tree.rchild):
-      self.debug_logger.debug("rejecting stacking same children")
-      return False
-    if tree.lchild.is_same_mod_channels(tree.rchild):
-      self.debug_logger.debug("rejecting stacking structurally same children")
-      return False
+  # if tree_type is Stack:
+  #   if tree.lchild.is_same_as(tree.rchild):
+  #     self.debug_logger.debug("rejecting stacking same children")
+  #     return False
 
   # don't allow softmax over a single channel
   if tree_type is Softmax and tree.out_c == 1:
