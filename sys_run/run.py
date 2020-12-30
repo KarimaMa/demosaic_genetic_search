@@ -177,7 +177,7 @@ class Searcher():
     self.debug_logger = util.create_logger('debug_logger', logging.INFO, self.log_format, \
                                   os.path.join(args.save, 'debug_log'))
     self.mysql_logger = util.create_logger('mysql_logger', logging.INFO, self.log_format, \
-                                  os.path.join(args.save, 'myql_log'))
+                                  os.path.join(args.save, 'mysql_log'))
     self.monitor_logger = util.create_logger('monitor_logger', logging.INFO, self.log_format, \
                                   os.path.join(args.save, 'monitor_log'))
     self.task_logger = util.create_logger('task_logger', logging.INFO, self.log_format, \
@@ -740,19 +740,19 @@ if __name__ == "__main__":
   parser.add_argument('--green_seed_model_files', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_ast,DATADUMP/GREEN_DEMOSAICNET_D3W8_SEED/models/seed/model_ast')
   parser.add_argument('--green_seed_model_psnrs', type=str, default='34.10,34.19')
 
-  parser.add_argument('--chroma_seed_model_files', type=str, default='DATADUMP/CHROMA_SEED_MODEL2_3318GREEN/models/seed/model_ast,DATADUMP/CHROMA_SEED_MODEL3_3318GREEN/models/seed/model_ast')
-  parser.add_argument('--chroma_seed_model_psnrs', type=str, default='31.89,32.04')
+  parser.add_argument('--chroma_seed_model_files', type=str, default='DATADUMP/CHROMA_SEED_MODEL2_1202GREEN/models/seed/model_ast,DATADUMP/CHROMA_SEED_MODEL3_1202GREEN/models/seed/model_ast')
+  parser.add_argument('--chroma_seed_model_psnrs', type=str, default='32.18,32.35')
 
   parser.add_argument('--green_model_asts', type=str, default=\
-     'RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3398/model_ast,\
-      RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/556/model_ast,\
-      RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3318/model_ast,\
-      RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/833/model_ast', help='model asts for green prediction models when doing chroma search')
+     'RETRAINED_GREEN_MODEL_SEARCH_12-26-COMBINED/models/2759/model_ast,\
+      RETRAINED_GREEN_MODEL_SEARCH_12-26-COMBINED/models/1234/model_ast,\
+      RETRAINED_GREEN_MODEL_SEARCH_12-26-COMBINED/models/1191/model_ast,\
+      RETRAINED_GREEN_MODEL_SEARCH_12-26-COMBINED/models/1202/model_ast', help='model asts for green prediction models when doing chroma search')
   parser.add_argument('--green_model_weight_files', type=str, default=\
-    'RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3398/model_v0_pytorch,\
-     RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/556/model_v0_pytorch,\
-     RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3318/model_v1_pytorch,\
-     RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/833/model_v2_pytorch', help='model weights for green prediction models')
+    'RETRAINED_GREEN_MODEL_SEARCH_12-26-COMBINED/models/2759/model_v1_pytorch,\
+     RETRAINED_GREEN_MODEL_SEARCH_12-26-COMBINED/models/1234/model_v0_pytorch,\
+     RETRAINED_GREEN_MODEL_SEARCH_12-26-COMBINED/models/1191/model_v0_pytorch,\
+     RETRAINED_GREEN_MODEL_SEARCH_12-26-COMBINED/models/1202/model_v0_pytorch', help='model weights for green prediction models')
 
   parser.add_argument('--generations', type=int, default=20, help='model search generations')
   parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
