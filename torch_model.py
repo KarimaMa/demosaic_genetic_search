@@ -890,6 +890,32 @@ class InterleavedSumOp(nn.Module):
     self._operands[0].to_gpu(gpu_id)
 
 
+"""
+Collects all the operators in a DAG
+"""
+def collect_operators(model, operators=None, seen=None):
+  if operators is None:
+    operators = []
+  if seen is None:
+    seen = set()
+
+  if not(id(model)) in seen:
+    seen.add(id(model))
+    operators += [model]
+
+  if hasattr(model, "_operands"):
+    if len(model._operands) == 3:
+      collect_operators(model._operands[0], operators, seen)
+      collect_operators(model._operands[1], operators, seen)
+      collect_operators(model._operands[2], operators, seen)
+    elif len(model._operands) == 2:
+      collect_operators(model._operands[0], operators, seen)
+      collect_operators(model._operands[1], operators, seen)
+    elif len(model._operands) == 1:
+      collect_operators(model._operands[0], operators, seen)
+    return operators
+
+
 @extclass(Input)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
