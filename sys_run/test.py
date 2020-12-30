@@ -539,7 +539,7 @@ class Searcher():
                'new_grouping': -1,
                'green_model_id': seed_green_model_id})
    
-    seed_model_id = self.model_manager.get_next_model_id()
+      seed_model_id = self.model_manager.get_next_model_id()
 
     # CHANGE TO NOT BE FIXED - SHOULD BE INFERED FROM TASK
     if self.args.restart_generation is None:
@@ -732,7 +732,7 @@ if __name__ == "__main__":
   parser.add_argument('--max_nodes', type=int, default=40, help='max number of nodes in a tree')
   parser.add_argument('--min_subtree_size', type=int, default=1, help='minimum size of subtree in insertion')
   parser.add_argument('--max_subtree_size', type=int, default=15, help='maximum size of subtree in insertion')
-  parser.add_argument('--structural_sim_reject', type=float, default=0.66, help='rejection probability threshold for structurally similar trees')
+  parser.add_argument('--structural_sim_reject', type=float, default=0.2, help='rejection probability threshold for structurally similar trees')
   parser.add_argument('--max_footprint', type=int, default=16, help='max DAG footprint size on input image')
   parser.add_argument('--crop', type=int, default=16, help='how much to crop images during training and inference')
 
@@ -777,7 +777,8 @@ if __name__ == "__main__":
   parser.add_argument('--delete_failure_threshold', type=int, default=25, help='max number of tries to find a node to delete')
   parser.add_argument('--subtree_selection_tries', type=int, default=50, help='max number of tries to find a subtree when inserting a binary op')
   parser.add_argument('--select_insert_loc_tries', type=int, default=10, help='max number of tries to find a insert location for a partner op')
-  
+  parser.add_argument('--insert_location_tries', type=int, default=20, help='max number of tries to find an insert location for a chosen insert op')
+
   parser.add_argument('--load_timeout', type=int, default=10)
   parser.add_argument('--mutate_timeout', type=int, default=30)
   parser.add_argument('--lowering_timeout', type=int, default=10)
@@ -851,3 +852,4 @@ if __name__ == "__main__":
 
   searcher = Searcher(args)
   searcher.search(args.cost_tiers, args.tier_size)
+

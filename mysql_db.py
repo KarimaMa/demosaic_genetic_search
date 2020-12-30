@@ -136,11 +136,11 @@ def create_table(password, tablename):
     psnrs = [34.10, 34.19]
   else:
     table = ChromaTrees
-    green_model = demosaic_ast.load_ast("RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3318/model_ast")
-    green_model_id = 2
+    green_model = demosaic_ast.load_ast("RETRAINED_GREEN_MODEL_SEARCH_12-26-COMBINED/models/1202/model_ast")
+    green_model_id = 3
     models = [ChromaSeedModel2(2, 12, True, green_model, green_model_id), \
               ChromaSeedModel3(3, 12, True, green_model, green_model_id)]
-    psnrs = [31.89, 32.04]
+    psnrs = [32.18, 32.35]
 
   db.create_tables([table])
 

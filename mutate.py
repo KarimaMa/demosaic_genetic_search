@@ -847,44 +847,44 @@ inserted with an op type belonging to the returned set.
 If two sets are returned, two nodes will be inserted with their types
 dictated by those two sets. 
 """
-@extclass(Mutator)
-def get_insert_types(self, parent, child):
-  if type(parent) is tuple: 
-    assert isinstance(parent[0], Linear) and isinstance(parent[1], Linear) or\
-          isinstance(parent[0], NonLinear) and isinstance(parent[1], NonLinear) or\
-          isinstance(parent[0], Special) and isinstance(parent[1], Special)
-    parent = parent[0]
-  if isinstance(parent, Linear):
-    if isinstance(child, NonLinear):
-      flip = random.randint(0,10)
-      if flip < 7:
-        return [special_insert_ops]
-      else:
-        return [nonlinear_insert_ops, linear_insert_ops]
-    elif isinstance(child, Special):
-      return [nl_sp_insert_ops]
-    else:
-      self.debug_logger.debug("Linear parent cannot have Linear child")
-      assert False, "Linear parent cannot have Linear child"
-  elif isinstance(parent, NonLinear):
-    if isinstance(child, Linear):
-      flip = random.randint(0,10)
-      if flip < 7:
-        return [special_insert_ops]
-      else:
-        return [linear_insert_ops, nonlinear_insert_ops]
-    elif isinstance(child, Special):
-      return [l_sp_insert_ops]
-    else:
-      self.debug_logger.debug("NonLinear parent cannot have NonLinear child")
-      assert False, "NonLinear parent cannot have NonLinear child"
-  elif isinstance(parent, Special):
-    if isinstance(child, Linear):
-      return [nl_sp_insert_ops]
-    elif isinstance(child, NonLinear):
-      return [l_sp_insert_ops]
-    else:
-      return [all_insert_ops]
+# @extclass(Mutator)
+# def get_insert_types(self, parent, child):
+#   if type(parent) is tuple: 
+#     assert isinstance(parent[0], Linear) and isinstance(parent[1], Linear) or\
+#           isinstance(parent[0], NonLinear) and isinstance(parent[1], NonLinear) or\
+#           isinstance(parent[0], Special) and isinstance(parent[1], Special)
+#     parent = parent[0]
+#   if isinstance(parent, Linear):
+#     if isinstance(child, NonLinear):
+#       flip = random.randint(0,10)
+#       if flip < 7:
+#         return [special_insert_ops]
+#       else:
+#         return [nonlinear_insert_ops, linear_insert_ops]
+#     elif isinstance(child, Special):
+#       return [nl_sp_insert_ops]
+#     else:
+#       self.debug_logger.debug("Linear parent cannot have Linear child")
+#       assert False, "Linear parent cannot have Linear child"
+#   elif isinstance(parent, NonLinear):
+#     if isinstance(child, Linear):
+#       flip = random.randint(0,10)
+#       if flip < 7:
+#         return [special_insert_ops]
+#       else:
+#         return [linear_insert_ops, nonlinear_insert_ops]
+#     elif isinstance(child, Special):
+#       return [l_sp_insert_ops]
+#     else:
+#       self.debug_logger.debug("NonLinear parent cannot have NonLinear child")
+#       assert False, "NonLinear parent cannot have NonLinear child"
+#   elif isinstance(parent, Special):
+#     if isinstance(child, Linear):
+#       return [nl_sp_insert_ops]
+#     elif isinstance(child, NonLinear):
+#       return [l_sp_insert_ops]
+#     else:
+#       return [all_insert_ops]
 
 """
 connects insertion parent node to newly created child
@@ -1023,43 +1023,88 @@ def insert_unary_op(self, OpClass, insert_parent, insert_child):
 
   return new_node
 
+
 """
-selectively rejects an insertion location for given ops to insert
-Downsamples must be inserted above input node
-reject if LogSub would be inserted without enough space above to insert its partner
+checks if insertion location is ok for the given op, asserts False if not ok.
+if OK, returns any necessary additional ops to keep nonlin / lin op adjacency
 """
-def accept_insertion_loc(child, parent, insert_ops):
-  if insert_ops[-1] is Downsample:
+def accept_insertion_loc(child, parent, insert_op):
+  # Downsample cannot be parent of any Conv
+  if insert_op is Downsample:
     found_node, found_level = find_type(child, Linear, 0, ignore_root=False)
-    if any(found_node): # Downsample cannot be parent of any Conv
-    #if not isinstance(child, Input):
-      return False
-  if insert_ops[-1] is LogSub:
-    insertion_loc_options = find_closest_ancestor(child, set((Binop, Softmax)))
-    if len(insertion_loc_options) < 3:
-      return False
+    if any(found_node): 
+      assert False, "rejecting insert location for downsample above a conv"
+    found_node, found_level = find_type(child, Downsample, 0, ignore_root=False)
+    if any(found_node): 
+      assert False, "rejecting insert location for downsample above another Downsample"
+
   # reject two UnopIIdivs in a row (i.e. InterleavedSum / GroupedSum)
-  if isinstance(insert_ops[-1], UnopIIdiv):
+  if isinstance(insert_op, UnopIIdiv):
     if isinstance(parent, UnopIIdiv) or isinstance(child, UnopIIdiv):
-      return False
-  return True
+      assert False, "rejecting insert location for UnopIIdiv next to another UnopIIdiv"
 
-"""
-rejects insertion ops if only Relu or Softmax is being inserted
-These ops only make sense when used in combination with other ops
-"""
-def accept_insertion_op(insert_ops):
-  return not (len(insert_ops) == 1 and (insert_ops[0] is Relu or insert_ops[0] is Softmax)) 
+  if isinstance(parent, Linear):
+    if isinstance(child, NonLinear):
+      if insert_op in linear_insert_ops:
+        nonlin_op = random.sample(nonlinear_insert_ops, 1)[0]
+        return [nonlin_op, insert_op]
+      elif insert_op in nonlinear_insert_ops:
+        lin_op = random.sample(linear_insert_ops, 1)[0]
+        return [insert_op, lin_op]
+      else:
+        return [insert_op] # op is special op 
+    elif isinstance(child, Special): # parent is linear, child is special
+      if insert_op in linear_insert_ops:
+        nonlin_op = random.sample(nonlinear_insert_ops, 1)[0]
+        return [nonlin_op, insert_op]
+      else:
+        return [insert_op]
+    else: # parent is Linear, child is Linear
+      if insert_op in linear_insert_ops:
+        nonlin_op1 = random.sample(nonlinear_insert_ops, 1)[0]
+        nonlin_op2 = random.sample(nonlinear_insert_ops, 1)[0]
+        return [nonlin_op1, insert_op, nonlin_op2]
+      else:
+        return [insert_op]
+  elif isinstance(parent, NonLinear):
+    if isinstance(child, Linear):
+      if insert_op in linear_insert_ops:
+        nonlin_op = random.sample(nonlinear_insert_ops, 1)[0]
+        return [insert_op, nonlin_op]
+      elif insert_op in nonlinear_insert_ops:
+        lin_op = random.sample(linear_insert_ops, 1)[0]
+        return [lin_op, insert_op]
+      else:
+        return [insert_op]
+    elif isinstance(child, Special):
+      if insert_op in nonlinear_insert_ops:
+        lin_op = random.sample(linear_insert_ops, 1)[0]
+        return [lin_op, insert_op]
+      else:
+        return [insert_op]
+    else: # parent is Nonlinear, child is NonLinear
+      if insert_op in nonlinear_insert_ops:
+        lin_op1 = random.sample(linear_insert_ops, 1)[0]
+        lin_op2 = random.sample(linear_insert_ops, 1)[0]
+        return [lin_op1, insert_op, lin_op2]
+      else:
+        return [insert_op]
+  elif isinstance(parent, Special):
+    if isinstance(child, Linear):
+      if insert_op in linear_insert_ops:
+        nonlin_op = random.sample(nonlinear_insert_ops, 1)[0]
+        return [insert_op, nonlin_op]
+      else:
+        return [insert_op]
+    elif isinstance(child, NonLinear):
+      if insert_op in nonlinear_insert_ops:
+        lin_op = random.sample(linear_insert_ops, 1)[0]
+        return [insert_op, lin_op]
+      else:
+        return [insert_op]
+    else: # parent and child are both special
+      return [insert_op]
 
-@extclass(Mutator)
-def accept_insertion_choice(self, child, parent, insert_ops):
-  if not accept_insertion_loc(child, parent, insert_ops):
-    self.debug_logger.debug("rejecting inserting {} with child {}".format(insert_ops, child.dump()))
-    return False
-  if not accept_insertion_op(insert_ops):
-    self.debug_logger.debug("rejecting inserting {}".format(insert_ops))
-    return False
-  return True
 
 
 def format_for_insert(insert_op):
@@ -1115,7 +1160,7 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
     # allow upsamples to be parent of certain binops: Subs and Adds --> requires fixing resolution of children
     # because we may subtract or add downsampled Green from/to downsampled Bayer
     # upsample cannot be inserted above a pre-existing downsample op or any other binary op: Mul, Stack
-    insertion_child_options = find_closest_ancestor(op_node, set((Downsample, Upsample, Mul, Stack)))[1:]       
+    insertion_child_options = find_closest_ancestor(op_node, set((Downsample, Upsample)))[1:]       
     resolution = None
 
   tries = 0
@@ -1149,22 +1194,45 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
 """
 fixes the resolution of children downstream from newly inserted
 Upsample when upsample is inserted above a Binop
+prev_node is the parent that we traversed to arrive at the current node 
+in the case where a node has multiple parents and not all of them need a 
+Downsample inserted between it and the curr_node
 """
 @extclass(Mutator)
-def fix_res(self, tree, input_set, curr_node):
+def fix_res(self, tree, input_set, curr_node, prev_node, path=None):
+  if path is None:
+    path = []
+  
+  path += [id(curr_node)]
   if isinstance(curr_node, Upsample) or isinstance(curr_node, Input):
     # insert downsample between curr_node and all curr_node's parents
-    return self.insert(tree, [(Downsample, None, None)], curr_node.parent, curr_node, input_set)
+    tree = self.insert(tree, [(Downsample, None, None)], prev_node, curr_node, input_set)
+    # make sure if upstream paths are affected by this downsample insertion, and they need an upsample that we add it 
+    # go up the DAG from the newly inserted Downsample until you either find an Upsample or you find a node with multiple
+    # parents. If you find a node with multiple parents first, insert an Upsample right above the node with multiple parents 
+    # between the node and all of its parents EXCEPT the parent from the path we just came down
+    root = prev_node
+    while not root is None:
+      if type(root) is Upsample:
+        break
+      if type(root.parent) is tuple:
+        for p in root.parent:
+          if not id(p) in path:
+            tree = self.insert(tree, [(Upsample, None, None)], p, root, input_set)
+        return tree
+      root = root.parent
+    return tree 
+
   elif isinstance(curr_node, Unop):
-    return self.fix_res(tree, input_set, curr_node.child)
+    return self.fix_res(tree, input_set, curr_node.child, curr_node, path)
   elif isinstance(curr_node, Binop):
     lres = spatial_resolution(curr_node.lchild)
     rres = spatial_resolution(curr_node.rchild)
-    if lres == Resolution.FULL:
-      return self.fix_res(tree, input_set, curr_node.lchild)
-    if rres == Resolution.FULL:
-      return self.fix_res(tree, input_set, curr_node.rchild)
-
+    if lres != Resolution.DOWNSAMPLED:
+      tree = self.fix_res(tree, input_set, curr_node.lchild, curr_node, path)
+    if rres != Resolution.DOWNSAMPLED:
+      tree = self.fix_res(tree, input_set, curr_node.rchild, curr_node, path)
+    return tree
 
 """
 inserts the partner op of the given op_node with class op_class
@@ -1179,13 +1247,13 @@ def insert_partner_op(self, tree, input_set, op_class, op_node):
     assert False, f"failed to find insertion location for partner of {op_node}"
   
   insert_nodes, tree = self.insert(tree, insert_op, insert_parent, insert_child, input_set)
+  
   partner_node = insert_nodes[0]
 
   if op_partner_class is Upsample:
     # fix spatial resolution of downstream children if Upsample inserted above binary op 
     if find_type_between(partner_node, op_node, Binop):
-      self.fix_res(tree, input_set, partner_node.child) 
-
+      self.fix_res(tree, input_set, partner_node.child, partner_node) 
   # NOT GOING TO DEAL WITH THIS FOR NOW BECAUSE WE'RE NOT INSERTING LOGSUB OR ADDEXP
   # manually fix linear / nonlinearity by inserting an additional node
   # if issubclass(op_partner_class, NonLinear):
@@ -1297,58 +1365,111 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
   preorder_nodes = tree.preorder()
 
   while True:
-    # insert above the selected node
-    if not insert_above_node_id:
-      insert_above_node_id = random.randint(1, len(preorder_nodes)-1)
-    insert_child = preorder_nodes[insert_above_node_id]
-    insert_parent = insert_child.parent
+    # pick an op to insert
+    if not insert_op:
+      insert_op = random.sample(all_insert_ops, 1)[0]
 
-    if type(insert_parent) is tuple:
-      self.debug_logger.debug(f"insert parents {insert_parent}")
-      parent_types = [type(p) for p in insert_parent]
-      if not LogSub in parent_types and not AddExp in parent_types:
-        insert_parent = random.sample(insert_parent, 1)[0]
+    location_selection_failures = 0 
 
-    # pick op(s) to insert
-    insert_types = self.get_insert_types(insert_parent, insert_child)
+    while location_selection_failures < self.args.insert_location_tries:
+      if not insert_above_node_id:
+        insert_above_node_id = random.randint(1, len(preorder_nodes)-1)
+
+      insert_child = preorder_nodes[insert_above_node_id]
+      insert_parent = insert_child.parent
+
+      if type(insert_parent) is tuple:
+        parent_types = [type(p) for p in insert_parent]
+        if not LogSub in parent_types and not AddExp in parent_types:
+          insert_parent = random.sample(insert_parent, 1)[0]
+
+      try:
+        insert_ops = accept_insertion_loc(insert_child, insert_parent, insert_op)
+      except AssertionError:
+        insert_above_node_id = None
+        location_selection_failures += 1
+        if location_selection_failures >= self.args.insert_location_tries:
+          insert_op = None 
+        continue
+
+      new_ops = [format_for_insert(o) for o in insert_ops]
+     
+      self.current_mutation_info.insert_ops = ";".join([new_op[0].__name__ for new_op in new_ops])
+      self.current_mutation_info.node_id = insert_above_node_id
+
+      try:
+        new_nodes, tree = self.insert(tree, new_ops, insert_parent, insert_child, input_set)
+      except AssertionError:
+        assert False, "insertion mutation failed"
+      
+      """
+      if we inserted a sandwich op, we must insert its partner node as well
+      if we inserted Mul, and neither child is Softmax or Relu, add Softmax or Relu as a child
+      """
+      for (OpClass,_,_), new_node in zip(new_ops, new_nodes):
+        if OpClass is Mul:
+          _, tree = self.insert_activation_under_mul(tree, input_set, new_node)
+        if OpClass in sandwich_ops:
+          _, tree = self.insert_partner_op(tree, input_set, OpClass, new_node)
+      return tree
+
+  # while True:
+  #   # randomly pick an op type to insert
+  #   all_insert_ops
+  #   # insert above the selected node
+  #   if not insert_above_node_id:
+  #     insert_above_node_id = random.randint(1, len(preorder_nodes)-1)
+  #   insert_child = preorder_nodes[insert_above_node_id]
+  #   insert_parent = insert_child.parent
+
+  #   if type(insert_parent) is tuple:
+  #     self.debug_logger.debug(f"insert parents {insert_parent}")
+  #     parent_types = [type(p) for p in insert_parent]
+  #     if not LogSub in parent_types and not AddExp in parent_types:
+  #       insert_parent = random.sample(insert_parent, 1)[0]
+
+  #   # pick op(s) to insert
+  #   insert_types = self.get_insert_types(insert_parent, insert_child)
    
-    while True:
-      if not insert_op:
-        new_ops = []
-        for n in range(len(insert_types)):
-          OpClass = random.sample(insert_types[n], 1)[0]
-          new_ops += [OpClass]
-      else:
-        new_ops = [insert_op]
-      # allow at most one sandwich op to be inserted
-      if sum(map(lambda x : x in sandwich_ops, new_ops)) <= 1: 
-        break
+  #   while True:
+  #     if not insert_op:
+  #       new_ops = []
+  #       for n in range(len(insert_types)):
+  #         OpClass = random.sample(insert_types[n], 1)[0]
+  #         new_ops += [OpClass]
+  #     else:
+  #       new_ops = [insert_op]
+  #     # allow at most one sandwich op to be inserted
+  #     if sum(map(lambda x : x in sandwich_ops, new_ops)) <= 1: 
+  #       break
 
-    if self.accept_insertion_choice(insert_child, insert_parent, new_ops):
-      self.debug_logger.debug(f"accepted insertion choice insert child: {insert_child.dump()} new ops {new_ops}")
-      break
+  #   if self.accept_insertion_choice(insert_child, insert_parent, new_ops):
+  #     self.debug_logger.debug(f"accepted insertion choice insert child: {insert_child.dump()} new ops {new_ops}")
+  #     break
 
-  new_ops = [format_for_insert(o) for o in new_ops]
+  # new_ops = [format_for_insert(o) for o in new_ops]
 
-  self.current_mutation_info.insert_ops = ";".join([new_op[0].__name__ for new_op in new_ops])
-  self.current_mutation_info.node_id = insert_above_node_id
+  # self.current_mutation_info.insert_ops = ";".join([new_op[0].__name__ for new_op in new_ops])
+  # self.current_mutation_info.node_id = insert_above_node_id
 
-  try:
-    new_nodes, tree = self.insert(tree, new_ops, insert_parent, insert_child, input_set)
-  except AssertionError:
-    assert False, "insertion mutation failed"
+  # try:
+  #   new_nodes, tree = self.insert(tree, new_ops, insert_parent, insert_child, input_set)
+  # except AssertionError:
+  #   if Downsample in new_ops:
+  #     self.debug_logger.debug(f"failed to insert downsample into tree:\n{tree.dump()}\nwith insert_child\n{insert_child.dump()}")
+  #   assert False, "insertion mutation failed"
     
-  # if we inserted a sandwich op, we must insert its partner node as well
-  # if we inserted Mul, and neither child is Softmax or Relu, add Softmax or Relu as a child
-  """
-   NOTE: not ideal that this pruning rule is being muddled in as an insertion rule
-  """
-  for (OpClass,_,_), new_node in zip(new_ops, new_nodes):
-    if OpClass is Mul:
-      _, tree = self.insert_activation_under_mul(tree, input_set, new_node)
-    if OpClass in sandwich_ops:
-      _, tree = self.insert_partner_op(tree, input_set, OpClass, new_node)
-  return tree
+  # # if we inserted a sandwich op, we must insert its partner node as well
+  # # if we inserted Mul, and neither child is Softmax or Relu, add Softmax or Relu as a child
+  # """
+  #  NOTE: not ideal that this pruning rule is being muddled in as an insertion rule
+  # """
+  # for (OpClass,_,_), new_node in zip(new_ops, new_nodes):
+  #   if OpClass is Mul:
+  #     _, tree = self.insert_activation_under_mul(tree, input_set, new_node)
+  #   if OpClass in sandwich_ops:
+  #     _, tree = self.insert_partner_op(tree, input_set, OpClass, new_node)
+  # return tree
 
 
 def has_downsample(tree):
@@ -1553,7 +1674,7 @@ def accept_tree(self, tree):
   # reject DAGs with channel counts larger than threshold
   max_channels = get_max_channels(tree)
   if max_channels > self.args.max_channels:
-    self.debug_logger.debug(f"rejection tree with max channels {max_channels}")
+    self.debug_logger.debug(f"rejecting tree with max channels {max_channels}")
     return False
 
   tree_type = type(tree) 
@@ -1608,15 +1729,15 @@ def accept_tree(self, tree):
       return False
   if tree_type is Downsample:
     if type(tree.parent) is Upsample:
-      self.debug_logger.debug("rejecting adjacent Down / Up")
+      self.debug_logger.debug(f"rejecting adjacent Down / Up in {tree.parent.dump()}")
       return False
 
     # downsample cannot be parent of any conv
     found_node, found_level = find_type(tree.child, Linear, 0, ignore_root=False)
     if any(found_node):
-    #if not type(tree.child) is Input:
       self.debug_logger.debug("rejecting downsample with a Conv child")
       return False
+
     # downsample cannot be parent of an upsample
     found_node, found_level = find_type(tree.child, Upsample, 0, ignore_root=False)
     if any(found_node):

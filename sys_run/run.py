@@ -765,7 +765,8 @@ if __name__ == "__main__":
   parser.add_argument('--delete_failure_threshold', type=int, default=25, help='max number of tries to find a node to delete')
   parser.add_argument('--subtree_selection_tries', type=int, default=50, help='max number of tries to find a subtree when inserting a binary op')
   parser.add_argument('--select_insert_loc_tries', type=int, default=10, help='max number of tries to find a insert location for a partner op')
-  
+  parser.add_argument('--insert_location_tries', type=int, default=20, help='max number of tries to find an insert location for a chosen insert op')
+
   parser.add_argument('--load_timeout', type=int, default=10)
   parser.add_argument('--mutate_timeout', type=int, default=30)
   parser.add_argument('--lowering_timeout', type=int, default=10)
