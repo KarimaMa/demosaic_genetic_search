@@ -12,7 +12,7 @@ def compute_footprint(self):
 
 @extclass(Node)
 def compute_footprint_helper(self, footprint):
-	if type(self) is Conv2D:
+	if type(self) is Conv2D or type(self) is Conv1D:
 		footprint += (self.kwidth // 2) 
 	elif type(self) is Upsample:
 		footprint /= 2
