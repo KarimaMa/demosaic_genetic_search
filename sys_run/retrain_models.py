@@ -261,6 +261,7 @@ if __name__ == "__main__":
   parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--model_retrain_list', type=str, help='filename with list of model ids to retrain')
   parser.add_argument('--train_timeout', type=int, default=3600)
+  parser.add_argument('--crop', type=int, default=16)
 
   # training parameters
   parser.add_argument('--seed', type=int, default=2)
