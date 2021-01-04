@@ -404,15 +404,22 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c, fixed_nodes=None):
       parent.in_c = (in_c, in_c)
       # need to call fix upwards for all parents of child we fix downwards from 
       # in case we fix down a child with other parents than the one we are calling fix down from
-      child_fixed = fix_channel_count_downwards(parent.rchild, parent, in_c, fixed_nodes)
-     
+      if parent.rchild.out_c != in_c:
+        child_fixed = fix_channel_count_downwards(parent.rchild, parent, in_c, fixed_nodes)
+      else:
+        child_fixed = True
       if child_fixed:
         if type(parent.rchild.parent) is tuple:
           for p in parent.rchild.parent:
             if not id(p) == id(parent):
               child_fixed = child_fixed and fix_channel_count_upwards_helper(parent.rchild, p, in_c, fixed_nodes)
+
     else:
-      child_fixed = fix_channel_count_downwards(parent.lchild, parent, in_c, fixed_nodes)
+      parent.in_c = (in_c, in_c)
+      if parent.lchild.out_c != in_c:
+        child_fixed = fix_channel_count_downwards(parent.lchild, parent, in_c, fixed_nodes)
+      else:
+        child_fixed = True
       if child_fixed:
         if type(parent.lchild.parent) is tuple:
           for p in parent.lchild.parent:
