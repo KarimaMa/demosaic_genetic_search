@@ -284,7 +284,7 @@ class Searcher():
     green_model_id = get_green_model_id(new_model_ast)
 
     green_model_ast_file = self.args.green_model_asts[green_model_id]
-    green_model_weight_file = self.args.green_model_weight_files[green_model_id]
+    green_model_weight_file = self.args.green_model_weights[green_model_id]
 
     green_model = demosaic_ast.load_ast(green_model_ast_file)
 
@@ -490,8 +490,8 @@ class Searcher():
 
     # load all seed models
     seed_model_id = self.model_manager.start_id
-    seed_model_files = [x.strip() for x in self.args.seed_model_files.split(',')]
-    seed_model_psnrs = [float(x) for x in self.args.seed_model_psnrs.strip().split(',')]
+    seed_model_files = [l.strip() for l in open(self.args.seed_model_files)]
+    seed_model_psnrs = [float(l.strip()) for l in open(self.args.seed_model_psnrs)]
 
     for seed_model_i, seed_model_file in enumerate(seed_model_files):
       print(f"seed model id {seed_model_id}")
@@ -597,7 +597,7 @@ class Searcher():
           new_model_ast, shash, mutation_stats = self.mutate_model(model_id, new_model_id, model_ast, generation_stats)
           if new_model_ast is None:
             continue
-          
+
           if self.args.full_model:
             self.insert_green_model(new_model_ast)
 
@@ -609,6 +609,7 @@ class Searcher():
           if reloaded_cost != parent_model_cost:
             print(f"--- ERROR: parent model saved cost {parent_model_cost} computed cost from reload {reloaded_cost} ---")
             #exit()
+          self.debug_logger.debug(f"new model\n{new_model_ast.dump()}\n")
 
           pytorch_models = self.lower_model(new_model_id, new_model_ast)
           if pytorch_models is None:
@@ -653,7 +654,6 @@ class Searcher():
 
         if args.train:
           failed_tasks = self.run_training_tasks(gpu_ids, process_queue, training_tasks, valid_psnrs)
-
 
         # update model database 
         for new_model_ast, task_info in training_tasks:
@@ -749,22 +749,14 @@ if __name__ == "__main__":
   parser.add_argument('--seed', type=int, default=1, help='random seed')
 
   # seed models 
-  parser.add_argument('--green_seed_model_files', type=str, default='DATADUMP/GREEN_MULTIRESQUAD_SEED/models/seed/model_ast,DATADUMP/GREEN_DEMOSAICNET_D3W8_SEED/models/seed/model_ast')
-  parser.add_argument('--green_seed_model_psnrs', type=str, default='34.10,34.19')
+  parser.add_argument('--green_seed_model_files', type=str, help='file with list of filenames of green seed model asts')
+  parser.add_argument('--green_seed_model_psnrs', type=str, help='file with list of psnrs of green seed models')
 
-  parser.add_argument('--chroma_seed_model_files', type=str, default='DATADUMP/CHROMA_SEED_MODEL2_3318GREEN/models/seed/model_ast,DATADUMP/CHROMA_SEED_MODEL3_3318GREEN/models/seed/model_ast')
-  parser.add_argument('--chroma_seed_model_psnrs', type=str, default='31.89,32.04')
+  parser.add_argument('--chroma_seed_model_files', type=str, help='file with list of filenames of chroma seed model asts')
+  parser.add_argument('--chroma_seed_model_psnrs', type=str, help='file with list of psnrs of chroma seed models')
 
-  parser.add_argument('--green_model_asts', type=str, default=\
-     'RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3398/model_ast,\
-      RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/556/model_ast,\
-      RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3318/model_ast,\
-      RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/833/model_ast', help='model asts for green prediction models when doing chroma search')
-  parser.add_argument('--green_model_weight_files', type=str, default=\
-    'RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3398/model_v0_pytorch,\
-     RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/556/model_v0_pytorch,\
-     RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/3318/model_v1_pytorch,\
-     RETRAINED_GREEN_MODEL_SEARCH_12-22-COMBINED/models/833/model_v2_pytorch', help='model weights for green prediction models')
+  parser.add_argument('--green_model_asts', type=str, help="file with list of filenames of green model asts")
+  parser.add_argument('--green_model_weights', type=str, help="file with list of filenames of green model weights")
 
   parser.add_argument('--generations', type=int, default=20, help='model search generations')
   parser.add_argument('--cost_tiers', type=str, help='list of tuples of cost tier ranges')
@@ -776,7 +768,7 @@ if __name__ == "__main__":
   parser.add_argument('--mutation_failure_threshold', type=int, default=500, help='max number of tries to mutate a tree')
   parser.add_argument('--delete_failure_threshold', type=int, default=25, help='max number of tries to find a node to delete')
   parser.add_argument('--subtree_selection_tries', type=int, default=50, help='max number of tries to find a subtree when inserting a binary op')
-  parser.add_argument('--select_insert_loc_tries', type=int, default=10, help='max number of tries to find a insert location for a partner op')
+  parser.add_argument('--partner_insert_loc_tries', type=int, default=10, help='max number of tries to find a insert location for a partner op')
   parser.add_argument('--insert_location_tries', type=int, default=20, help='max number of tries to find an insert location for a chosen insert op')
 
   parser.add_argument('--load_timeout', type=int, default=10)
@@ -830,8 +822,8 @@ if __name__ == "__main__":
   if args.full_model:
     args.seed_model_files = args.chroma_seed_model_files
     args.seed_model_psnrs = args.chroma_seed_model_psnrs
-    args.green_model_asts = [f.strip() for f in args.green_model_asts.split(',')]
-    args.green_model_weight_files = [f.strip() for f in args.green_model_weight_files.split(',')]
+    args.green_model_asts = [l.strip() for l in open(args.green_model_asts)]
+    args.green_model_weights = [l.strip() for l in open(args.green_model_weights)]
     args.task_out_c = 3
   else:
     args.seed_model_files = args.green_seed_model_files
