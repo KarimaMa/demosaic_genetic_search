@@ -245,13 +245,28 @@ class Node:
         self.child.parent = self
         self.child.assign_parents()
 
+
+  def is_same_as_wrapper(self, other):
+    return self.is_same_as(other, self, other)
+
   """
   returns whether or not two ASTs are the same
   """
-  def is_same_as(self, other):
-  
+  def is_same_as(self, other, root, other_root):
     if self.num_children != other.num_children or type(self) != type(other):
       return False
+
+    if type(self.parent) is tuple:
+      if not type(other.parent) is tuple:
+        return False
+      if not len(self.parent) == len(other.parent):
+        return False
+      parent_ids = set([root.get_preorder_id(p) for p in self.parent])
+      other_parent_ids = set([other_root.get_preorder_id(p) for p in other.parent])
+
+      if not parent_ids == other_parent_ids:
+        return False
+
     if self.num_children == 0: # input nodes
       if self.out_c != other.out_c or self.in_c != other.in_c:
         return False
@@ -266,21 +281,25 @@ class Node:
       if hasattr(self, "groups"):
         if self.groups != other.groups:
           return False
-      return self.child.is_same_as(other.child)
+      return self.child.is_same_as(other.child, root, other_root)
     elif self.num_children == 2:
       if self.out_c != other.out_c:
         return False      
-      flipped_same = self.rchild.is_same_as(other.lchild) and self.lchild.is_same_as(other.rchild)
-      same = self.lchild.is_same_as(other.lchild) and self.rchild.is_same_as(other.rchild) 
+      flipped_same = self.rchild.is_same_as(other.lchild, root, other_root) \
+                and self.lchild.is_same_as(other.rchild, root, other_root)
+      same = self.lchild.is_same_as(other.lchild, root, other_root) \
+          and self.rchild.is_same_as(other.rchild, root, other_root) 
       return same or flipped_same
     elif self.num_children == 3:
       if self.out_c != other.out_c:
         return False
       # nodes with three children are not symmetric, order must be obeyed
-      same = self.child1.is_same_as(other.child1) 
-      same = same and self.child2.is_same_as(other.child2)
-      same = same and self.child3.is_same_as(other.child3)
+      same = self.child1.is_same_as(other.child1, root, other_root) 
+      same = same and self.child2.is_same_as(other.child2, root, other_root)
+      same = same and self.child3.is_same_as(other.child3, root, other_root)
       return same 
+
+
   """
   returns whether or not two ASTs are the same - IGNORING channel count
   """
@@ -325,10 +344,10 @@ class Node:
       n.out_c = in_out_channels[i][1]
 
   def __eq__(self, other):
-    return self.is_same_as(other)
+    return self.is_same_as_wrapper(other)
 
   def __ne__(self, other):
-    return not self.is_same_as(other)
+    return not self.is_same_as_wrapper(other)
 
 """
 detects if there is loop in tree
