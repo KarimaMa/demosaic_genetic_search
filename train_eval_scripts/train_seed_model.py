@@ -12,14 +12,15 @@ import sys
 
 sys.path.append(sys.path[0].split("/")[0])
 
+import cost
 import util
-import meta_model
 import model_lib
 from torch_model import ast_to_model
 from dataset import GreenDataset, Dataset, FastDataLoader
 from dataset import GreenQuadDataset, FullPredictionQuadDataset, FastDataLoader
 from tree import print_parents
 import demosaic_ast
+
 
 def run(args, models, model_id, model_dir):
   print(f"training {len(models)} models")
@@ -217,7 +218,6 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
           model_inputs = {"Input(Bayer)": bayer}
           pred = model.run(model_inputs)
 
-        pred = model.run(model_inputs)
         clamped = torch.clamp(pred, min=0, max=1)
 
         # clamped = clamped[:,1,:,:].unsqueeze(1)
@@ -257,16 +257,16 @@ if __name__ == "__main__":
   parser.add_argument('--ahd', action='store_true')
   parser.add_argument('--ahd2d', action='store_true')
   parser.add_argument('--basic_model2d', action='store_true')
-  parser.add_argument('--chroma', action='store_true')
-  parser.add_argument('--chroma_no_sub', action='store_true')
-  parser.add_argument('--chroma_no_extraction', action='store_true')
   parser.add_argument('--multiresquadgreen', action='store_true')
   parser.add_argument('--gradienthalide', action='store_true')
   parser.add_argument('--chromagradienthalide', action='store_true')
   parser.add_argument('--chromaseed1', action='store_true')
   parser.add_argument('--chromaseed2', action='store_true')
+  parser.add_argument('--chromaseed3', action='store_true')
 
   parser.add_argument('--green_model_ast', type=str, help="green model ast to use for chroma model")
+  parser.add_argument('--no_grad', action='store_true', help='whether or not to backprop through green model')
+  parser.add_argument('--green_model_id', type=int, help='id of green model used')
 
   parser.add_argument('--depth', type=int, help='num conv layers in model')
   parser.add_argument('--width', type=int, help='num channels in model layers')
@@ -284,11 +284,7 @@ if __name__ == "__main__":
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
   parser.add_argument('--validation_freq', type=int, default=None, help='validation frequency')
 
-  parser.add_argument('--use_green_input', action="store_true")
   parser.add_argument('--full_model', action="store_true")
-  parser.add_argument('--use_green_pred', action="store_true", help="whether to use precomputed green predictions")
-  parser.add_argument('--green_training_file', type=str, help="filename of file with list of precomputed green for training data")
-  parser.add_argument('--green_validation_file', type=str, help="filename of file with list of precomputed green for validation data")
 
   parser.add_argument('--testing', action='store_true')
 
@@ -332,15 +328,6 @@ if __name__ == "__main__":
   elif args.basic_model2d:
     logger.info(f"TRAINING BASIC_MODEL2D GREEN")
     model = model_lib.basic2D_green_model()
-  elif args.chroma:
-    logger.info(f"TRAINING CHROMA MODEL USING GREEN INPUT")
-    model = model_lib.simple_full_model_green_input()
-  elif args.chroma_no_sub:
-    logger.info(f"TRAINING NO SUB CHROMA MODEL USING GREEN INPUT")
-    model = model_lib.no_sub_full_model_green_input()
-  elif args.chroma_no_extraction:
-    logger.info(f"TRAINING CHROMA WITHOUT EXTRACTOR")
-    model = model_lib.simple_chroma_no_extraction()
   elif args.multiresquadgreen:
     logger.info("TRAINING MULTIRES QUAD GREEN")
     model = model_lib.MultiresQuadGreenModel(args.depth, args.width)
@@ -353,16 +340,24 @@ if __name__ == "__main__":
   elif args.chromaseed1:
     logger.info("TRAINING CHROMA SEED MODEL1")
     green_model = demosaic_ast.load_ast(args.green_model_ast)
-    model = model_lib.ChromaSeedModel1(args.depth, args.width, green_model)
+    model = model_lib.ChromaSeedModel1(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
   elif args.chromaseed2:
     logger.info("TRAINING CHROMA SEED MODEL2")
     green_model = demosaic_ast.load_ast(args.green_model_ast)
-    model = model_lib.ChromaSeedModel2(args.depth, args.width, green_model)
+    model = model_lib.ChromaSeedModel2(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
+  elif args.chromaseed3:
+    logger.info("TRAINING CHROMA SEED MODEL3")
+    green_model = demosaic_ast.load_ast(args.green_model_ast)
+    model = model_lib.ChromaSeedModel3(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
   else:
     logger.info("TRAINING BASIC GREEN")
     model = model_lib.basic1D_green_model()
 
 
+  ev = cost.ModelEvaluator(None)
+  model_cost = ev.compute_cost(model)
+  print(f"model compute cost: {model_cost}")
+  
   if args.green_pretrained:
     nodes = model.preorder()
     for n in nodes:
