@@ -90,7 +90,7 @@ def run(args, models, model_dir):
         model_pytorch_files, validation_queue, validation_loggers, epoch)
       print(f"finished epoch {epoch}")
       valid_losses, val_psnrs = infer(args, validation_queue, models, criterion, validation_loggers)
-      test_losses, test_psrns = infer(args, test_queue, models, criterion, test_loggers)
+      test_losses, test_psnrs = infer(args, test_queue, models, criterion, test_loggers)
 
       for i in range(len(models)):
         print(f"valid loss {valid_losses[i]}")
@@ -120,10 +120,15 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
     n = input.size(0)
     input = input.cuda()
     target = target.cuda()
+    if args.crop > 0:
+      target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
     for i, model in enumerate(models):
       optimizers[i].zero_grad()
       pred = model(input)
+      if args.crop > 0:
+        pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
+
       loss = criterion(pred, target)
 
       if args.testing:
@@ -132,7 +137,7 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
         print("target")
         print(target[0,:,0:4,0:4])
         exit()
-
+      
       loss.backward()
       optimizers[i].step()
 
@@ -167,13 +172,18 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
   for step, (input, target) in enumerate(valid_queue):
     input = input.cuda()
     target = target.cuda()
-   
+    if args.crop > 0:
+      target = target[..., args.crop:-args.crop, args.crop:-args.crop]
+
     n = input.size(0)
     with torch.no_grad():
       for i, model in enumerate(models):
         pred = model(input)
         clamped = torch.clamp(pred, min=0, max=1)
-
+        
+        if args.crop > 0:
+          clamped = clamped[..., args.crop:-args.crop, args.crop:-args.crop]
+ 
         loss = criterion(clamped, target)
         loss_trackers[i].update(loss.item(), n)
 
@@ -186,6 +196,7 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
         psnr_trackers[i].update(batch_avg_psnr.item(), n)
 
   return [loss_tracker.avg for loss_tracker in loss_trackers], [psnr_tracker.avg for psnr_tracker in psnr_trackers]
+
 
 
 if __name__ == "__main__":
@@ -213,6 +224,7 @@ if __name__ == "__main__":
   parser.add_argument('--width', type=int)
   parser.add_argument('--full_model', action='store_true')
   parser.add_argument('--testing', action='store_true')
+  parser.add_argument('--crop', type=int, default=0, help='amount to crop output image to remove border effects')
 
   parser.add_argument('--infer', action='store_true')
   parser.add_argument('--pretrained', action='store_true')
