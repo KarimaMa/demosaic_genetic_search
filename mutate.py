@@ -27,6 +27,7 @@ from footprint import compute_footprint
 
 channel_options = [8, 10, 12, 16, 20, 24, 28, 32]
 
+
 class MutationType(Enum):
   DELETION = 1
   INSERTION = 2
@@ -69,6 +70,9 @@ class Mutator():
     self.seen_structures = set()
 
     self.failed_mutation_info = []
+    
+    if self.args.full_model:  
+      self.mutation_type_cdf = [0.10, 0.56, 0.66, 0.78, 0.90, 1.0]
 
   def add_seen_model(self, tree, model_id):
     self.seen_models[tree] = {"model_ids":[int(model_id)], "hash": hash(tree), "ast_str": tree.dump()}
@@ -88,7 +92,11 @@ class Mutator():
       mutation_type = MutationType.INSERTION
     else:
       if self.args.full_model:
-        mutation_type = random.choice(list(MutationType))
+        rv = random.uniform(0,1)
+        for i, mtype in enumerate(list(MutationType)):
+          if rv <= self.mutation_type_cdf[i]:
+            mutation_type = mtype
+            break
       else:
         mutation_type = random.choice(list(MutationType)[:-1])
     return mutation_type
@@ -109,7 +117,7 @@ class Mutator():
           try:
             tree_copy = copy_subtree(tree)
           except AssertionError:
-            self.debug_logger.debug(f"failed to copy model {model_id}")
+            self.debug_logger.debug(f"failed to copy model {parent_id}")
             failures += 1
             continue
 
@@ -151,8 +159,12 @@ class Mutator():
             return None, None, stats
 
       # mutation failed
-      except (AssertionError, AttributeError) as e: 
+      except (AssertionError, AttributeError, TypeError) as e: 
         if mutation_type is MutationType.INSERTION:
+          if "Downsample" in self.current_mutation_info.insert_ops:
+            with open(f"{self.args.save}/downsample_fails.txt", "a+") as f:
+              f.write(f"failed insert {self.current_mutation_info.insert_ops} above node {self.current_mutation_info.insert_ops.node_id}\n")
+              f.write(f"in model{parent_id}\n{tree.dump()}\n--------\n")
           self.debug_logger.debug(f'insertion mutation failed on parent model {parent_id}')
         elif mutation_type is MutationType.DELETION:
           self.debug_logger.debug(f'deletion mutation failed on parent model {parent_id}')
