@@ -163,7 +163,7 @@ class Mutator():
         if mutation_type is MutationType.INSERTION:
           if "Downsample" in self.current_mutation_info.insert_ops:
             with open(f"{self.args.save}/downsample_fails.txt", "a+") as f:
-              f.write(f"failed insert {self.current_mutation_info.insert_ops} above node {self.current_mutation_info.insert_ops.node_id}\n")
+              f.write(f"failed insert {self.current_mutation_info.insert_ops} above node {self.current_mutation_info.node_id}\n")
               f.write(f"in model{parent_id}\n{tree.dump()}\n--------\n")
           self.debug_logger.debug(f'insertion mutation failed on parent model {parent_id}')
         elif mutation_type is MutationType.DELETION:
