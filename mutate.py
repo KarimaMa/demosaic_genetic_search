@@ -1187,12 +1187,11 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
     insertion_child_options = find_closest_ancestor(op_node, set((Binop,Softmax)))[1:] 
     resolution = spatial_resolution(op_node.rchild)
   else:
-    # don't insert sandwich op as parent of a binary op
-    #insertion_child_options = find_closest_ancestor(op_node, set((Binop,)))[1:]
-
-    # allow upsamples to be parent of certain binops: Subs and Adds --> requires fixing resolution of children
+    # don't insert upsample above any node with multiple parents 
+    # find_closest_ancestor will return if it encounters a node with tuple parents or any of the passed in node types 
+    # allow upsamples to be parent of certain binops: Subs Adds Muls --> requires fixing resolution of children
     # because we may subtract or add downsampled Green from/to downsampled Bayer
-    # upsample cannot be inserted above a pre-existing downsample op or a Softmax, or Stack
+    # upsample cannot be inserted above a pre-existing downsample or Upsample op or a Softmax, or Stack
     insertion_child_options = find_closest_ancestor(op_node, set((Downsample, Upsample, Softmax, Stack)))[1:]       
     resolution = None
 
@@ -1268,9 +1267,9 @@ def fix_res(self, tree, parent_upsample, input_set, curr_node, prev_node, path=N
     return self.fix_res(tree, parent_upsample, input_set, curr_node.child, curr_node, path)
   elif isinstance(curr_node, Binop):
     lres = spatial_resolution(curr_node.lchild)
-    rres = spatial_resolution(curr_node.rchild)
     if lres != Resolution.DOWNSAMPLED:
       tree = self.fix_res(tree, parent_upsample, input_set, curr_node.lchild, curr_node, path)
+    rres = spatial_resolution(curr_node.rchild)
     if rres != Resolution.DOWNSAMPLED:
       tree = self.fix_res(tree, parent_upsample, input_set, curr_node.rchild, curr_node, path)
     return tree
