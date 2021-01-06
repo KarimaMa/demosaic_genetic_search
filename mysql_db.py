@@ -58,12 +58,25 @@ def drop_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestChromaTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   if tablename == "testgreen":
     table_to_drop = TestGreenTrees
   elif tablename == "green":
     table_to_drop = GreenTrees
-  else:
+  elif tablename == "chroma":
     table_to_drop = ChromaTrees
+  else:
+    table_to_drop = TestChromaTrees
 
   db.drop_tables((table_to_drop,))
   tables = db.get_tables()
@@ -103,17 +116,6 @@ def create_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  class ChromaTrees(BaseModel):
-    model_id = IntegerField(primary_key=True)
-    machine = CharField(index=False, max_length=20)
-    experiment_dir = CharField(index=False, max_length=40)
-    tree_hash = CharField(index=True, max_length=30)
-    tree_id_str = TextField()
-    add_date = DateTimeField(default=datetime.datetime.now)
-    psnr_0 = FloatField()
-    psnr_1 = FloatField()
-    psnr_2 = FloatField()
-
   class TestGreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -125,6 +127,27 @@ def create_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class ChromaTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
+  class TestChromaTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
 
   if tablename == "testgreen":
     table = TestGreenTrees
@@ -134,8 +157,16 @@ def create_table(password, tablename):
     table = GreenTrees
     models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
     psnrs = [34.10, 34.19]
-  else:
+  elif tablename == "chroma":
     table = ChromaTrees
+    green_model = demosaic_ast.load_ast("SELECTED_GREEN_MODELS_12-30/3331/model_ast")
+    green_model_id = 5
+    models = [ChromaSeedModel1(2, 12, True, green_model, green_model_id),\
+              ChromaSeedModel2(2, 12, True, green_model, green_model_id), \
+              ChromaSeedModel3(3, 12, True, green_model, green_model_id)]
+    psnrs = [31.95, 32.05, 32.16]
+  else:
+    table = TestChromaTrees
     green_model = demosaic_ast.load_ast("SELECTED_GREEN_MODELS_12-30/3331/model_ast")
     green_model_id = 5
     models = [ChromaSeedModel1(2, 12, True, green_model, green_model_id),\
@@ -213,12 +244,25 @@ def select(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestChromaTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   if tablename == "testgreen":
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
-  else:
+  elif tablename == "chroma":
     table = ChromaTrees
+  else:
+    table = TestChromaTrees
 
   query = table.select()
   print(len(query))
@@ -279,12 +323,25 @@ def select_range(password, tablename, id_min, id_max):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestChromaTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   if tablename == "testgreen":
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
-  else:
+  elif tablename == "chroma":
     table = ChromaTrees
+  else:
+    table = TestChromaTrees
 
   query = table.select().where(table.model_id < id_max, table.model_id > id_min)
   print(len(query))
@@ -347,12 +404,25 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestChromaTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   if tablename == "testgreen":
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
-  else:
+  elif tablename == "chroma":
     table = ChromaTrees
+  else:
+    table = TestChromaTrees
 
   tree_hash = str(tree_hash).zfill(30)
   query = table.select().where(table.tree_hash == tree_hash, \
@@ -426,12 +496,25 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestChromaTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   if tablename == "testgreen":
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
-  else:
+  elif tablename == "chroma":
     table = ChromaTrees
+  else:
+    table = TestChromaTrees
 
   tree_hash = str(tree_hash).zfill(30)
 
@@ -499,13 +582,25 @@ def mysql_delete_all(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestChromaTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
 
   if tablename == "testgreen":
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
-  else:
+  elif tablename == "chroma":
     table = ChromaTrees
+  else:
+    table = TestChromaTrees
 
   found = table.select().where(table.model_id != 0)
   for f in found:
@@ -565,12 +660,25 @@ def mysql_delete(password, tablename, id_min, id_max):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestChromaTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   if tablename == "testgreen":
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
-  else:
+  elif tablename == "chroma":
     table = ChromaTrees
+  else:
+    table = TestChromaTrees
 
   found = table.select().where(table.model_id >= id_min, table.model_id <= id_max)
   for t in found:
