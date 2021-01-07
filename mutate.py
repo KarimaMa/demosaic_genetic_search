@@ -154,12 +154,6 @@ class Mutator():
 
           if self.accept_tree(new_tree):    
             break      
-          else:
-            if mutation_type is MutationType.INSERTION:
-              if "Downsample" in self.current_mutation_info.insert_ops:
-                self.downsample_rejects += 1
-                with open("rejected.txt", "a+") as f:
-                  f.write(f"===\n{new_tree.dump()}\n")
 
           # tree was pruned
           self.failed_mutation_info.append(self.current_mutation_info)
@@ -173,10 +167,6 @@ class Mutator():
       # mutation failed
       except (AssertionError, AttributeError, TypeError) as e: 
         if mutation_type is MutationType.INSERTION:
-          if "Downsample" in self.current_mutation_info.insert_ops:
-            with open(f"{self.args.save}/downsample_fails.txt", "a+") as f:
-              f.write(f"failed insert {self.current_mutation_info.insert_ops} above node {self.current_mutation_info.node_id}\n")
-              f.write(f"in model{parent_id}\n{tree.dump()}\n--------\n")
           self.debug_logger.debug(f'insertion mutation failed on parent model {parent_id}')
         elif mutation_type is MutationType.DELETION:
           self.debug_logger.debug(f'deletion mutation failed on parent model {parent_id}')
@@ -232,6 +222,16 @@ class Mutator():
           seen_rejections += 1
           continue
       
+def collect_green_nodes(tree):
+  green_nodes = []
+  nodes = tree.preorder()
+  for n in nodes:
+    if type(n) is Input:
+      if n.name == "Input(GreenExtractor)":
+        green_nodes += [n]
+      elif hasattr(n, 'node'):
+        green_nodes += collect_green_nodes(n.node)
+  return green_nodes
 
 @extclass(Mutator)
 def green_model_change_mutation(self, tree):
@@ -240,15 +240,9 @@ def green_model_change_mutation(self, tree):
 
   nodes = tree.preorder()
 
-  for n in nodes:
-    if type(n) is Input:
-      if n.name == "Input(GreenExtractor)":
-        green_nodes += [n]
-        if green_model_id is None:  
-          green_model_id = n.green_model_id
-        else:
-          assert green_model_id == n.green_model_id, "chroma DAG must use only one type of green model"
-  
+  green_model_id = get_green_model_id(tree)
+  green_nodes = collect_green_nodes(tree)
+
   green_model_options = [i for i in range(len(self.args.green_model_asts))]
   green_model_options.remove(green_model_id)
   new_green_model_id = random.choice(green_model_options)
@@ -1217,8 +1211,9 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
   tries = 0
   while True:
     # use poisson with small lambda to favor locations farther away (i.e. smaller index)
-    insert_above_node_loc = np.random.poisson(len(insertion_child_options)//3)
+    insert_above_node_loc = np.random.poisson(float(len(insertion_child_options)/4))
     insert_above_node_loc = min(len(insertion_child_options)-1, insert_above_node_loc)
+
     insert_child = insertion_child_options[insert_above_node_loc]
     insert_child_res = spatial_resolution(insert_child)
     if resolution is None or insert_child_res == resolution:
