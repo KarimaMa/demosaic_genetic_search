@@ -52,7 +52,7 @@ class InputOp(nn.Module):
   def run(self, model_inputs):
     if self.output is None:
       if hasattr(self, "model"):
-        if self.model.output:
+        if not self.model.output is None:
           self.output = self.model.output
           return self.output
         else:
@@ -924,7 +924,12 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   if hasattr(self, "node"):
-    node_model = self.node.ast_to_model()
+    if id(self.node) in shared_children:
+      node_model = shared_children[id(self.node)]
+    else:
+      node_model = self.node.ast_to_model(shared_children)
+      shared_children[id(self.node)] = node_model
+
     if hasattr(self, "weight_file"):
       input_op = InputOp(self.name, model=node_model, model_name=self.name, no_grad=self.no_grad, weights=self.weight_file)
     else:
