@@ -137,6 +137,9 @@ class Node:
     elif self.num_children == 1:
       printstr = self.child.dump(indent+tab, printstr, nodeid)
 
+    elif hasattr(self, 'node'):
+      printstr = self.node.dump(indent+tab, printstr, nodeid)
+      
     return printstr
 
   """
