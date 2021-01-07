@@ -682,6 +682,7 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None):
         extra_kwargs["no_grad"] = node_info["no_grad"]
     if len(extra_kwargs) > 0:
       new_node = node_class(node_info["in_c"], name=node_name, **extra_kwargs)
+      new_node.compute_input_output_channels()
     else:
       new_node = node_class(node_info["in_c"], name=node_name)
   
