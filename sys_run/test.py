@@ -251,15 +251,63 @@ class Searcher():
           return None
         return model_ast
 
+  """
+  Builds valid input nodes for a chroma model given the model's designated green model choice
+  """
+  def construct_chroma_inputs(self, green_model_id):
+    bayer = demosaic_ast.Input(4, "Bayer")
+    green_GrGb = demosaic_ast.Input(2, "Green@GrGb")
+    rb = demosaic_ast.Input(2, "RedBlueBayer")
+    
+    flat_green = demosaic_ast.Input(1, "GreenExtractor", no_grad=True, green_model_id=green_model_id)
+
+    green_quad = demosaic_ast.Flat2Quad(flat_green)
+    green_quad.compute_input_output_channels()
+    green_quad_input = demosaic_ast.Input(4, "GreenQuad", node=green_quad)
+
+    green_rb = demosaic_ast.GreenRBExtractor(flat_green)
+    green_rb.compute_input_output_channels()
+    green_rb_input = demosaic_ast.Input(2, "Green@RB", node=green_rb)
+
+    rb_min_g = demosaic_ast.Sub(rb, green_rb)
+    rb_min_g_stack_green = demosaic_ast.Stack(rb_min_g, green_quad)
+    rb_min_g_stack_green.compute_input_output_channels()
+    rb_min_g_stack_green_input = demosaic_ast.Input(6, "RBdiffG_GreenQuad", no_grad=True, node=rb_min_g_stack_green)
+
+    return {
+      "Input(Bayer)": bayer,
+      "Input(Green@GrGb)": green_GrGb,
+      "Input(GreenExtractor)": flat_green, # can select this as an input to insert, must pick GreenQuad instead
+      "Input(GreenQuad)": green_quad_input,
+      "Input(Green@RB)": green_rb_input,
+      "Input(RBdiffG_GreenQuad)": rb_min_g_stack_green_input
+    }
+
+  """
+  Builds valid input nodes for a green model
+  """
+  def construct_green_inputs(self):
+    bayer = demosaic_ast.Input(4, "Bayer")
+
+    return {
+      "Input(Bayer)": bayer,
+    }
+
+
   def mutate_model(self, parent_id, new_model_id, model_ast, generation_stats):
     self.mutate_monitor.set_error_msg(f"---\nfailed to mutate model id {parent_id}\n---")
     with self.mutate_monitor:
       try:
         if self.args.full_model:
-          model_inputs = set(("Input(Bayer)", "Input(Green@GrGb)","Input(RedBlueBayer)", "Input(GreenExtractor)"))
+          green_model_id = get_green_model_id(model_ast)
+          model_inputs = self.construct_chroma_inputs(green_model_id)
+          model_input_names = set(model_inputs.keys())
+          #model_inputs = set(("Input(Bayer)", "Input(Green@GrGb)","Input(RedBlueBayer)", "Input(GreenExtractor)"))
         else: 
-          model_inputs = set(("Input(Bayer)",))
-        new_model_ast, shash, mutation_stats = self.mutator.mutate(parent_id, new_model_id, model_ast, model_inputs)
+          model_inputs = self.construct_green_inputs()
+          model_input_names = set(model_inputs.keys())
+          #model_inputs = set(("Input(Bayer)",))
+        new_model_ast, shash, mutation_stats = self.mutator.mutate(parent_id, new_model_id, model_ast, model_input_names)
         generation_stats.update(mutation_stats)
 
         if new_model_ast is None: 
@@ -273,20 +321,19 @@ class Searcher():
         return new_model_ast, shash, mutation_stats
               
 
-
   """
   inserts the green model ast referenced by the green_model_id stored in 
   an input node into the input node.
   NOTE: WE MAKE SURE ONLY ONE GREEN MODEL DAG IS CREATED SO THAT 
   IT IS ONLY RUN ONCE PER RUN OF THE FULL MODEL
   """
-  def insert_green_model(self, new_model_ast):
-    green_model_id = get_green_model_id(new_model_ast)
+  def insert_green_model(self, new_model_ast, green_model=None, green_model_weight_file=None):
+    if green_model is None:
+      green_model_id = get_green_model_id(new_model_ast)
+      green_model_ast_file = self.args.green_model_asts[green_model_id]
+      green_model_weight_file = self.args.green_model_weights[green_model_id]
 
-    green_model_ast_file = self.args.green_model_asts[green_model_id]
-    green_model_weight_file = self.args.green_model_weights[green_model_id]
-
-    green_model = demosaic_ast.load_ast(green_model_ast_file)
+      green_model = demosaic_ast.load_ast(green_model_ast_file)
 
     nodes = new_model_ast.preorder()
     for n in nodes:
@@ -294,6 +341,8 @@ class Searcher():
         if n.name == "Input(GreenExtractor)":
           n.node = green_model
           n.weight_file = green_model_weight_file
+        elif hasattr(n, "node"): # other input ops my run submodels that also require the green model
+          self.insert_green_model(n.node, green_model, green_model_weight_file)
 
 
   def lower_model(self, new_model_id, new_model_ast):
@@ -496,6 +545,7 @@ class Searcher():
     for seed_model_i, seed_model_file in enumerate(seed_model_files):
       print(f"seed model id {seed_model_id}")
       seed_ast = demosaic_ast.load_ast(seed_model_file)
+      print(seed_ast.dump())
       seed_ast.compute_input_output_channels()
       if self.args.full_model:
         self.insert_green_model(seed_ast)
@@ -703,6 +753,9 @@ class Searcher():
       print(f"number of killed mutations {generation_stats.generational_killed} caused by:")
       print(f"seen_rejections {generation_stats.seen_rejections} prune_rejections {generation_stats.pruned_mutations}" 
             + f" structural_rejections {generation_stats.structural_rejections} failed_mutations {generation_stats.failed_mutations}")
+
+      print(f"downsample\ntries: {self.mutator.downsample_tries} loc select fails {self.mutator.downsample_loc_selection_failures} \
+        insert fail {self.mutator.downsample_insertion_failures} reject {self.mutator.downsample_rejects} success {self.mutator.downsample_success}")
 
     return cost_tiers
 
