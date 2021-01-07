@@ -736,6 +736,12 @@ def get_green_model_id(full_model_ast):
           green_model_id = n.green_model_id
         else:
           assert green_model_id == n.green_model_id, "chroma DAG must use only one type of green model"
+      elif hasattr(n, 'node'):
+        submodel_green_model_id = get_green_model_id(n.node)
+        if green_model_id is None:
+          green_model_id = submodel_green_model_id
+        else:
+          assert submodel_green_model_id == green_model_id, "chroma DAG must use only one type of green model"
   return green_model_id
 
 
@@ -961,7 +967,7 @@ def find_closest_ancestor(node, OpClasses):
     parent_type = type(node.parent)
     if parent_type is tuple or any([issubclass(parent_type, oc) for oc in OpClasses]):
       break
-    nodes += [node]
+    nodes = [node] + nodes
     node = node.parent
   return nodes
 
