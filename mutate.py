@@ -74,6 +74,12 @@ class Mutator():
     if self.args.full_model:  
       self.mutation_type_cdf = [0.10, 0.56, 0.66, 0.78, 0.90, 1.0]
 
+    self.downsample_tries = 0
+    self.downsample_success = 0
+    self.downsample_insertion_failures = 0
+    self.downsample_loc_selection_failures = 0
+    self.downsample_rejects = 0
+
   def add_seen_model(self, tree, model_id):
     self.seen_models[tree] = {"model_ids":[int(model_id)], "hash": hash(tree), "ast_str": tree.dump()}
 
@@ -148,6 +154,12 @@ class Mutator():
 
           if self.accept_tree(new_tree):    
             break      
+          else:
+            if mutation_type is MutationType.INSERTION:
+              if "Downsample" in self.current_mutation_info.insert_ops:
+                self.downsample_rejects += 1
+                with open("rejected.txt", "a+") as f:
+                  f.write(f"===\n{new_tree.dump()}\n")
 
           # tree was pruned
           self.failed_mutation_info.append(self.current_mutation_info)
@@ -1070,6 +1082,11 @@ def accept_insertion_loc(child, parent, insert_op):
     if type(parent) is Stack:
       assert False, "rejecting insert location for downsample directly below Stack"
 
+  # don't allow insertion below a border op - this is only a problem with chroma prediction
+  # where we have Flat2Quad above an Input node 
+  if type(parent) in border_ops:
+    assert False, "rejecting insert location upstream from border op {type(parent)}"
+
   # reject two UnopIIdivs in a row (i.e. InterleavedSum / GroupedSum)
   if isinstance(insert_op, UnopIIdiv):
     if isinstance(parent, UnopIIdiv) or isinstance(child, UnopIIdiv):
@@ -1184,7 +1201,7 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
   # decide where to insert partner node
   if OpClass is LogSub:
     # don't insert AddExp as parent of a Softmax or a binary op
-    insertion_child_options = find_closest_ancestor(op_node, set((Binop,Softmax)))[1:] 
+    insertion_child_options = find_closest_ancestor(op_node, set((Binop,Softmax)))
     resolution = spatial_resolution(op_node.rchild)
   else:
     # don't insert upsample above any node with multiple parents 
@@ -1192,7 +1209,9 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
     # allow upsamples to be parent of certain binops: Subs Adds Muls --> requires fixing resolution of children
     # because we may subtract or add downsampled Green from/to downsampled Bayer
     # upsample cannot be inserted above a pre-existing downsample or Upsample op or a Softmax, or Stack
-    insertion_child_options = find_closest_ancestor(op_node, set((Downsample, Upsample, Softmax, Stack)))[1:]       
+    insertion_child_options = find_closest_ancestor(op_node, set((Downsample, Upsample, Softmax, Stack)))    
+    if len(insertion_child_options) == 0:
+      assert False, f"unable to find an insertion location for partner op of {op_node}"
     resolution = None
 
   tries = 0
@@ -1224,18 +1243,17 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
 
 
 """
-fixes the resolution of children downstream from newly inserted
-Upsample when upsample is inserted above a Binop
+fixes the resolution of children upstream from newly inserted
+master Upsample when upsample is inserted above a Binop by inserting Downsamples
+where needed.
 prev_node is the parent that we traversed to arrive at the current node 
-in the case where a node has multiple parents and not all of them need a 
-Downsample inserted between it and the curr_node
+upstream_from_upsample_ids is the list of node ids reachable by going upstream
+from the master Upsample we inserted. None of these nodes need another upsample
+inserted above them if a downsample is inserted below them
 """
 @extclass(Mutator)
-def fix_res(self, tree, parent_upsample, input_set, curr_node, prev_node, path=None):
-  if path is None:
-    path = []
-  
-  path += [id(curr_node)]
+def fix_res(self, tree, parent_upsample, input_set, curr_node, prev_node, upstream_from_upsample_ids):
+ 
   if isinstance(curr_node, Upsample) or isinstance(curr_node, Input):
     # insert downsample between curr_node and all curr_node's parents
     new_nodes, tree = self.insert(tree, [(Downsample, None, None)], prev_node, curr_node, input_set)
@@ -1243,10 +1261,10 @@ def fix_res(self, tree, parent_upsample, input_set, curr_node, prev_node, path=N
     add_partner(parent_upsample, inserted_downsample)
     add_partner(inserted_downsample, parent_upsample)
 
-    # make sure if upstream paths are affected by this downsample insertion, and they need an upsample that we add it 
-    # go up the DAG from the newly inserted Downsample until you either find an Upsample or you find a node with multiple
-    # parents. If you find a node with multiple parents first, insert an Upsample right above the node with multiple parents 
-    # between the node and all of its parents EXCEPT the parent from the path we just came down
+    # make sure if upstream paths are affected by this downsample insertion (they need an upsample) that we add it 
+    # go downstream in the DAG from the newly inserted Downsample until you either find an Upsample or you find a node with multiple
+    # parents. If you find a node with multiple parents first, if any of its parents are not reachable by going upstream from the master 
+    # upsample inserted above, then insert an Upsample 
     root = prev_node
     while not root is None:
       if type(root) is Upsample:
@@ -1254,7 +1272,7 @@ def fix_res(self, tree, parent_upsample, input_set, curr_node, prev_node, path=N
       if type(root.parent) is tuple:
         root_parents = root.parent # must store local copy of parent tuple because insert operation can change the root.parent tuple
         for p in root_parents:
-          if not id(p) in path:
+          if not id(p) in upstream_from_upsample_ids:
             new_nodes, tree = self.insert(tree, [(Upsample, None, None)], p, root, input_set)
             inserted_upsample = new_nodes[0]
             add_partner(inserted_downsample, inserted_upsample)
@@ -1264,15 +1282,24 @@ def fix_res(self, tree, parent_upsample, input_set, curr_node, prev_node, path=N
     return tree 
 
   elif isinstance(curr_node, Unop):
-    return self.fix_res(tree, parent_upsample, input_set, curr_node.child, curr_node, path)
+    return self.fix_res(tree, parent_upsample, input_set, curr_node.child, curr_node, upstream_from_upsample_ids)
   elif isinstance(curr_node, Binop):
     lres = spatial_resolution(curr_node.lchild)
     if lres != Resolution.DOWNSAMPLED:
-      tree = self.fix_res(tree, parent_upsample, input_set, curr_node.lchild, curr_node, path)
+      tree = self.fix_res(tree, parent_upsample, input_set, curr_node.lchild, curr_node, upstream_from_upsample_ids)
     rres = spatial_resolution(curr_node.rchild)
     if rres != Resolution.DOWNSAMPLED:
-      tree = self.fix_res(tree, parent_upsample, input_set, curr_node.rchild, curr_node, path)
+      tree = self.fix_res(tree, parent_upsample, input_set, curr_node.rchild, curr_node, upstream_from_upsample_ids)
     return tree
+
+
+"""
+returns ids of all nodes reachable by traveling upstream from the given node
+"""
+def upstream_reachable_node_ids(root):
+  nodes = root.preorder()
+  ids = [id(n) for n in nodes]
+  return ids
 
 """
 inserts the partner op of the given op_node with class op_class
@@ -1290,12 +1317,13 @@ def insert_partner_op(self, tree, input_set, op_class, op_node):
   insert_nodes, tree = self.insert(tree, insert_op, insert_parent, insert_child, input_set)
   
   partner_node = insert_nodes[0]
- 
+
   if op_partner_class is Upsample:
     # fix spatial resolution of downstream children if Upsample inserted above binary op 
     if find_type_between(partner_node, op_node, Binop):
       inserted_upsample = partner_node
-      self.fix_res(tree, inserted_upsample, input_set, partner_node.child, partner_node) 
+      upstream_from_upsample_ids = upstream_reachable_node_ids(inserted_upsample)
+      self.fix_res(tree, inserted_upsample, input_set, partner_node.child, partner_node, upstream_from_upsample_ids) 
    
   # assign pointers to partner nodes
   add_partner(op_node, partner_node)
@@ -1400,6 +1428,8 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
     # pick an op to insert
     if not insert_op:
       insert_op = random.sample(all_insert_ops, 1)[0]
+      if insert_op is Downsample:
+        self.downsample_tries += 1
 
     location_selection_failures = 0 
 
@@ -1417,13 +1447,17 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
 
       try:
         insert_ops = accept_insertion_loc(insert_child, insert_parent, insert_op)
-        
+                
       except AssertionError:
         insert_above_node_id = None
         location_selection_failures += 1
+
         if location_selection_failures >= self.args.insert_location_tries:
           insert_op = None 
-  
+        
+          if insert_op is Downsample:
+            self.downsample_loc_selection_failures += 1
+
         continue
      
       new_ops = [format_for_insert(o) for o in insert_ops]
@@ -1434,6 +1468,8 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
       try:
         new_nodes, tree = self.insert(tree, new_ops, insert_parent, insert_child, input_set)
       except AssertionError:
+        if insert_op is Downsample:
+          self.downsample_insertion_failures += 1
         assert False, "insertion mutation failed"
       
       """
@@ -1445,6 +1481,9 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
           _, tree = self.insert_activation_under_mul(tree, input_set, new_node)
         if OpClass in sandwich_ops:
           _, tree = self.insert_partner_op(tree, input_set, OpClass, new_node)
+
+      if insert_op is Downsample:
+        self.downsample_success += 1
 
       return tree
 

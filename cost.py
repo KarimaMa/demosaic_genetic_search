@@ -191,7 +191,7 @@ class ModelEvaluator():
 		if isinstance(root, Input):
 			if hasattr(root, "node"):
 				if not id(root.node) in seen:
-					cost += self.compute_cost_helper(root.node, set())
+					cost += self.compute_cost_helper(root.node, seen)
 					seen.add(id(root.node))
 		elif isinstance(root, Add) or isinstance(root, Sub):
 			cost += root.in_c[0] * ADD_COST

@@ -106,9 +106,11 @@ class Special(ABC):
 """----------------------------------------------------------------------"""
 
 class Input(Const, Special, Node):
-  def __init__(self, out_c, name="Input", node=None, no_grad=None, green_model_id=None):
+  def __init__(self, out_c, name=None, node=None, no_grad=None, green_model_id=None):
     if node:
-      name = node.name
+      if name is None:
+        name = node.name
+
       self.node = node
       assert(out_c == node.out_c), "output channels of node to input doesn't match given out_c"
     
@@ -608,8 +610,11 @@ def structure_to_array(self):
     if hasattr(n, 'groups'):
       node_info["groups"] = n.groups
 
-    if hasattr(n, 'green_model_id'):
-      node_info['green_model_id'] = n.green_model_id # only has meaning given the current search run's choice of green models
+    if hasattr(n, 'node'):
+      if hasattr(n, 'green_model_id'):
+        node_info['green_model_id'] = n.green_model_id # only has meaning given the current search run's choice of green models
+      # store info needed to reconstruct model referenced by the input node
+      node_info['node_ast_info'] = n.node.structure_to_array()
 
     if hasattr(n, "no_grad"):
       node_info['no_grad'] = n.no_grad
@@ -667,10 +672,14 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None):
     extra_kwargs = {}
     # made the choice to not save the node ast if input node is a sub model
     # just save the model id and assume upon reloading this model id is understood
-    if "green_model_id" in node_info:
-      extra_kwargs["green_model_id"] = node_info["green_model_id"]
-    if "no_grad" in node_info:
-      extra_kwargs["no_grad"] = node_info["no_grad"]
+    if "node_ast_info" in node_info:
+      if "green_model_id" in node_info: # don't build the green model here, let search code insert it later
+        extra_kwargs["green_model_id"] = node_info["green_model_id"]
+      else: # Input op references a model that isn't a green model, build it here
+        input_ast = build_tree_from_data(0, node_info["node_ast_info"])
+        extra_kwargs["node"] = input_ast
+      if "no_grad" in node_info:
+        extra_kwargs["no_grad"] = node_info["no_grad"]
     if len(extra_kwargs) > 0:
       new_node = node_class(node_info["in_c"], name=node_name, **extra_kwargs)
     else:
@@ -928,25 +937,23 @@ def reassign_partners_in_copy(oldtree, newtree, partner_dic={}):
 
 
 """
-Finds the closest ancestor of the given node that inherits from any
-class in the set OpClasses.
+Returns all ancestors up to the closest ancestor of the given node 
+that inherits from any class in the set OpClasses.
 If we reach a node with multiple parents before we find the ancestor,
-stop and return the tuple of parents istead.
-NOTE: currently if a node has multiple parents it is always the 
-case that the parents are Binops but this might not be true
-in the future.
+stop and return the list of nodes 
+
 Assumes assign_parents() has already been called on the full tree.
 Returns all the nodes between the found ancestor and the node 
-including the ancestor and the node
+NOT including the ancestor that is a member of OpClasses or has a tuple of parents
 
 """
 def find_closest_ancestor(node, OpClasses):
-  nodes = [node]
+  nodes = []
   while (not node.parent is None):
-    nodes = [node.parent] + nodes
     parent_type = type(node.parent)
     if parent_type is tuple or any([issubclass(parent_type, oc) for oc in OpClasses]):
       break
+    nodes += [node]
     node = node.parent
   return nodes
 
