@@ -927,7 +927,7 @@ def ChromaSeedModel1(depth, width, no_grad, green_model, green_model_id):
   green_rb.compute_input_output_channels()
   green_rb_input = Input(2, "Green@RB", node=green_rb, no_grad=True)
 
-  rb_min_g = Sub(rb, green_rb)
+  rb_min_g = Sub(rb, green_rb_input)
   rb_min_g_stack_green = Stack(rb_min_g, green_quad_input)
   rb_min_g_stack_green.compute_input_output_channels()
   chroma_input = Input(6, "RBdiffG_GreenQuad", no_grad=True, node=rb_min_g_stack_green)
@@ -990,7 +990,7 @@ def ChromaSeedModel2(depth, width, no_grad, green_model, green_model_id):
   green_rb.compute_input_output_channels()
   green_rb_input = Input(2, "Green@RB", node=green_rb, no_grad=True)
 
-  rb_min_g = Sub(rb, green_rb)
+  rb_min_g = Sub(rb, green_rb_input)
   rb_min_g_stack_green = Stack(rb_min_g, green_quad_input)
   rb_min_g_stack_green.compute_input_output_channels()
   chroma_input = Input(6, "RBdiffG_GreenQuad", no_grad=True, node=rb_min_g_stack_green)
@@ -1070,7 +1070,7 @@ def ChromaSeedModel3(depth, width, no_grad, green_model, green_model_id):
   green_rb.compute_input_output_channels()
   green_rb_input = Input(2, "Green@RB", node=green_rb, no_grad=True)
 
-  rb_min_g = Sub(rb, green_rb)
+  rb_min_g = Sub(rb, green_rb_input)
   rb_min_g_stack_green = Stack(rb_min_g, green_quad_input)
   rb_min_g_stack_green.compute_input_output_channels()
   chroma_input = Input(6, "RBdiffG_GreenQuad", no_grad=True, node=rb_min_g_stack_green)

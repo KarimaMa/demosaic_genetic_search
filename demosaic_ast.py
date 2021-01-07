@@ -632,9 +632,12 @@ def save_ast(self, filename):
     pickle.dump(tree_data, f)
     
 
-def build_tree_from_data(node_id, preorder_nodes, shared_children=None):
+def build_tree_from_data(node_id, preorder_nodes, shared_children=None, shared_input_models=None):
   if shared_children is None:
     shared_children = {}
+  if shared_input_models is None:
+    shared_input_models = {}
+
   node_info = preorder_nodes[node_id]
   node_type = node_info["type"]
   node_class = str_to_class(node_type)
@@ -648,10 +651,10 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None):
         if children_ids[i] in shared_children:
           child_node = shared_children[children_ids[i]]
         else:
-          child_node = build_tree_from_data(children_ids[i], preorder_nodes, shared_children)
+          child_node = build_tree_from_data(children_ids[i], preorder_nodes, shared_children, shared_input_models)
           shared_children[children_ids[i]] = child_node
       else:
-        child_node = build_tree_from_data(children_ids[i], preorder_nodes, shared_children)
+        child_node = build_tree_from_data(children_ids[i], preorder_nodes, shared_children, shared_input_models)
       child_nodes.append(child_node)
 
     if issubclass(node_class, UnopIJ) or issubclass(node_class, UnopIIdiv):
@@ -676,13 +679,17 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None):
       if "green_model_id" in node_info: # don't build the green model here, let search code insert it later
         extra_kwargs["green_model_id"] = node_info["green_model_id"]
       else: # Input op references a model that isn't a green model, build it here
-        input_ast = build_tree_from_data(0, node_info["node_ast_info"])
+        if node_name in shared_input_models:
+          input_ast = shared_input_models[node_name]
+        else:
+          input_ast = build_tree_from_data(0, node_info["node_ast_info"], shared_input_models=shared_input_models)
+          input_ast.compute_input_output_channels()
+          shared_input_models[node_name] = input_ast
         extra_kwargs["node"] = input_ast
       if "no_grad" in node_info:
         extra_kwargs["no_grad"] = node_info["no_grad"]
     if len(extra_kwargs) > 0:
       new_node = node_class(node_info["in_c"], name=node_name, **extra_kwargs)
-      new_node.compute_input_output_channels()
     else:
       new_node = node_class(node_info["in_c"], name=node_name)
   

@@ -137,7 +137,7 @@ class Node:
     elif self.num_children == 1:
       printstr = self.child.dump(indent+tab, printstr, nodeid)
 
-    elif hasattr(self, 'node'):
+    elif hasattr(self, 'node') and not hasattr(self, 'green_model_id'):
       printstr = self.node.dump(indent+tab, printstr, nodeid)
       
     return printstr
