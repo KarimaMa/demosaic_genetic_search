@@ -29,7 +29,7 @@ import util
 from database import Database 
 from monitor import Monitor, TimeoutError
 from train import run_model, train_model
-from demosaic_ast import load_ast
+from demosaic_ast import load_ast, get_green_model_id
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import ctypes
@@ -111,7 +111,29 @@ class Trainer():
     else:
       return model_ast
 
-              
+  """
+  inserts the green model ast referenced by the green_model_id stored in 
+  an input node into the input node.
+  NOTE: WE MAKE SURE ONLY ONE GREEN MODEL DAG IS CREATED SO THAT 
+  IT IS ONLY RUN ONCE PER RUN OF THE FULL MODEL
+  """
+  def insert_green_model(self, new_model_ast):
+    green_model_id = get_green_model_id(new_model_ast)
+
+    green_model_ast_file = self.args.green_model_asts[green_model_id]
+    green_model_weight_file = self.args.green_model_weights[green_model_id]
+
+    green_model = demosaic_ast.load_ast(green_model_ast_file)
+
+    nodes = new_model_ast.preorder()
+    for n in nodes:
+      if type(n) is demosaic_ast.Input:
+        if n.name == "Input(GreenExtractor)":
+          n.node = green_model
+          n.weight_file = green_model_weight_file
+
+
+
   def lower_model(self, new_model_id, new_model_ast):
     try:
       new_models = [new_model_ast.ast_to_model() for i in range(self.args.model_initializations)]
@@ -233,6 +255,7 @@ class Trainer():
       model_ast_file = os.path.join(model_info_dir, "model_ast")
       model_ast = load_ast(model_ast_file)
      
+      self.insert_green_model(model_ast)
       pytorch_models = self.lower_model(model_id, model_ast)
     
       compute_cost = self.model_evaluator.compute_cost(model_ast)
@@ -282,11 +305,10 @@ if __name__ == "__main__":
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
 
   # training full chroma + green parameters
-  parser.add_argument('--use_green_input', action="store_true")
   parser.add_argument('--full_model', action="store_true")
-  parser.add_argument('--use_green_pred', action="store_true", help="whether to use precomputed green predictions")
-  parser.add_argument('--green_training_file', type=str, help="filename of file with list of precomputed green for training data")
-  parser.add_argument('--green_validation_file', type=str, help="filename of file with list of precomputed green for validation data")
+
+  parser.add_argument('--green_model_asts', type=str, help="file with list of filenames of green model asts")
+  parser.add_argument('--green_model_weights', type=str, help="file with list of filenames of green model weights")
 
   parser.add_argument('--pretrained', action='store_true')
   parser.add_argument('--infer', action='store_true')
@@ -294,6 +316,11 @@ if __name__ == "__main__":
 
   if not torch.cuda.is_available():
     sys.exit(1)
+
+  if args.full_model:
+    args.green_model_asts = [l.strip() for l in open(args.green_model_asts)]
+    args.green_model_weights = [l.strip() for l in open(args.green_model_weights)]
+
 
   random.seed(args.seed)
   np.random.seed(args.seed)
