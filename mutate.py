@@ -23,9 +23,16 @@ from tree import *
 from restrictions import *
 from util import extclass, get_factors, get_closest_factor
 from enum import Enum
-from footprint import compute_footprint
+from footprint import compute_footprint, compute_lowres_branch_footprint
 
 channel_options = [8, 10, 12, 16, 20, 24, 28, 32]
+
+
+
+class BinopOperandType(Enum):
+  INPUTOP = 1 # take subtree from input op set
+  RECURRENT = 2 # take subtree from mutating tree
+  CROSSTREE = 3 # take subtree from partner tree
 
 
 class MutationType(Enum):
@@ -48,10 +55,12 @@ class MutationInfo():
   def __init__(self):
     self.mutation_type = None
     self.insert_ops = None
+    self.binop_operand_choice = None
     self.node_id = -1
     self.new_output_channels = -1
     self.new_grouping = -1
     self.green_model_id = -1
+
 
 """
 mutates the given tree 
@@ -70,15 +79,23 @@ class Mutator():
     self.seen_structures = set()
 
     self.failed_mutation_info = []
-    
+
     if self.args.full_model:  
       self.mutation_type_cdf = [0.10, 0.56, 0.66, 0.78, 0.90, 1.0]
+    else:
+      if self.args.insertion_bias:
+        self.mutation_type_cdf = [0.15, 0.55, 0.70, 0.85, 1.0]
+
+    if self.args.binop_change: # cdf for whether binop operand is taken from mutating subtree or partner tree or input ops
+      self.binop_operand_cdf = [0.25, 0.75, 1.0]
 
     self.downsample_tries = 0
     self.downsample_success = 0
     self.downsample_insertion_failures = 0
     self.downsample_loc_selection_failures = 0
     self.downsample_rejects = 0
+    self.downsample_seen = 0
+    self.partner_loc_fails = 0
 
   def add_seen_model(self, tree, model_id):
     self.seen_models[tree] = {"model_ids":[int(model_id)], "hash": hash(tree), "ast_str": tree.dump()}
@@ -92,14 +109,23 @@ class Mutator():
 
   def pick_mutation_type(self, tree):
     tree_size = tree.compute_size(set(), count_all_inputs=True)
+    if self.args.full_model:
+      min_tree_size = 5
+    else:
+      min_tree_size = 3
     if tree_size > self.args.max_nodes:
       mutation_type = MutationType.DELETION
-    elif tree_size <= 3:
+    elif tree_size <= min_tree_size:
       mutation_type = MutationType.INSERTION
     else:
-      if self.args.full_model:
+      if self.args.full_model or self.args.insertion_bias:
         rv = random.uniform(0,1)
-        for i, mtype in enumerate(list(MutationType)):
+        if self.args.full_model:
+          mutation_type_list = list(MutationType)
+        else:
+          mutation_type_list = list(MutationType)[:-1]
+
+        for i, mtype in enumerate(mutation_type_list):
           if rv <= self.mutation_type_cdf[i]:
             mutation_type = mtype
             break
@@ -107,7 +133,7 @@ class Mutator():
         mutation_type = random.choice(list(MutationType)[:-1])
     return mutation_type
 
-  def mutate(self, parent_id, model_id, tree, input_set):
+  def mutate(self, parent_id, model_id, tree, input_set, partner_ast=None):
     self.debug_logger.debug(f"---- ENTERING MUTATION of {parent_id} ----")
     failures = 0
     prune_rejections = 0
@@ -122,6 +148,8 @@ class Mutator():
           mutation_type = self.pick_mutation_type(tree)
           try:
             tree_copy = copy_subtree(tree)
+            if self.args.binop_change:
+              partner_copy = copy_subtree(partner_ast)
           except AssertionError:
             self.debug_logger.debug(f"failed to copy model {parent_id}")
             failures += 1
@@ -133,7 +161,10 @@ class Mutator():
           #self.debug_logger.debug(f"the tree before mutation:\n{tree_copy.dump()}")
           if mutation_type is MutationType.INSERTION:  
             self.debug_logger.debug(f"attempting insertion")
-            new_tree = self.insert_mutation(tree_copy, input_set)
+            if self.args.binop_change:
+              new_tree = self.insert_mutation(tree_copy, input_set, partner_ast=partner_copy)
+            else:
+              new_tree = self.insert_mutation(tree_copy, input_set)
           elif mutation_type is MutationType.DELETION:
             self.debug_logger.debug(f"attempting deletion")
             new_tree = self.delete_mutation(tree_copy)
@@ -152,9 +183,16 @@ class Mutator():
 
           self.debug_logger.debug(f"--- finished mutation ---")
 
-          if self.accept_tree(new_tree):    
-            break      
+          tree_accepted, accept_err = self.accept_tree(new_tree)
 
+          if tree_accepted: 
+            break      
+          else:
+            if mutation_type is MutationType.INSERTION:
+              if "Downsample" in self.current_mutation_info.insert_ops:
+                self.downsample_rejects += 1     
+              #   with open("rejects.txt", "a+") as f:
+              #     f.write(f"mutated model {parent_id} {accept_err}\ninsert child {self.current_mutation_info.node_id}\nparent tree \n{tree.dump()}\nnew tree\n{new_tree.dump()}\n----\n")
           # tree was pruned
           self.failed_mutation_info.append(self.current_mutation_info)
           prune_rejections += 1
@@ -167,7 +205,7 @@ class Mutator():
       # mutation failed
       except (AssertionError, AttributeError, TypeError) as e: 
         if mutation_type is MutationType.INSERTION:
-          self.debug_logger.debug(f'insertion mutation failed on parent model {parent_id}')
+          self.debug_logger.debug(f'insertion mutation failed on parent model {parent_id} tried to insert {self.current_mutation_info.insert_ops}')
         elif mutation_type is MutationType.DELETION:
           self.debug_logger.debug(f'deletion mutation failed on parent model {parent_id}')
         elif mutation_type is MutationType.DECOUPLE:
@@ -218,6 +256,11 @@ class Mutator():
             return new_tree, h, stats
 
         else: # we've seen and evaluated this exact tree before
+          if mutation_type is MutationType.INSERTION:
+            self.debug_logger.debug(f'insertion mutation failed on parent model {parent_id}')
+            if "Downsample" in self.current_mutation_info.insert_ops:
+              self.downsample_seen += 1
+
           self.seen_models[new_tree]["model_ids"].append(int(model_id))
           seen_rejections += 1
           continue
@@ -439,7 +482,6 @@ def channel_mutation(self, tree, chosen_conv_id=None):
     closest_factor = get_closest_factor(factors, chosen_conv.groups)
     chosen_conv.groups = closest_factor # if current groups is already a factor, this does nothing
 
-    #print(f"changed channel count of {chosen_conv.dump()} to {new_out_c} full tree {tree.dump()}")
     return tree
   else:
     self.debug_logger.debug(f"Unable to perturb output channel of {chosen_conv} from {chosen_conv.out_c} to {new_out_c}")
@@ -928,7 +970,7 @@ def link_insertion_parent_to_new_child(self, insert_parent, insert_child, node):
     assert False, "Should not be inserting after an input node"
 
 @extclass(Mutator)
-def insert_binop(self, tree, input_set, insert_op, insert_parent, insert_child, make_copy=False):
+def insert_binop(self, tree, input_set, insert_op, insert_parent, insert_child, make_copy=False, partner_ast=None):
   OpClass, use_child, use_right = insert_op
   if not hasattr(tree, "size"):
     tree.compute_size(set(), count_all_inputs=True)
@@ -940,7 +982,7 @@ def insert_binop(self, tree, input_set, insert_op, insert_parent, insert_child, 
       if tree.size < self.args.min_subtree_size + 2:
         self.debug_logger.debug(f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}")
         assert False, f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}"
-      subtree = self.pick_subtree(tree, input_set, insert_child, target_out_c=insert_child.out_c, resolution=spatial_resolution(insert_child), make_copy=make_copy)
+      subtree = self.pick_subtree(tree, input_set, insert_child, target_out_c=insert_child.out_c, resolution=spatial_resolution(insert_child), make_copy=make_copy, partner_ast=partner_ast)
     else:
       subtree = use_child
       # make channel count of insert_child agree with required use_child since we cannot change the required child
@@ -952,13 +994,15 @@ def insert_binop(self, tree, input_set, insert_op, insert_parent, insert_child, 
     if tree.size < self.args.min_subtree_size + 2:
       self.debug_logger.debug(f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}")
       assert False, f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}"
-    subtree = self.pick_subtree(tree, input_set, insert_child, resolution=spatial_resolution(insert_child), make_copy=make_copy)
+    subtree = self.pick_subtree(tree, input_set, insert_child, resolution=spatial_resolution(insert_child), make_copy=make_copy, partner_ast=partner_ast)
   
   # check spatial resolutions of subtree and insert_child match 
   subtree_res = spatial_resolution(subtree)
   insert_child_res = spatial_resolution(insert_child)
 
   if subtree_res != insert_child_res:
+    # NOTE: if we're inserting an InputOp as the subtree, it will always be rejected if the resolution 
+    # is Downsampled ll input ops are set to full res
     self.debug_logger.debug(f"resolution of chosen subtree for binary op does not match insert_child resolution")
     assert False, f"resolution of chosen subtree for binary op does not match insert_child resolution"
   elif subtree_res == Resolution.DOWNSAMPLED:
@@ -1069,8 +1113,14 @@ def accept_insertion_loc(child, parent, insert_op):
     found_node, found_level = find_type(child, Downsample, 0, ignore_root=False)
     if any(found_node): 
       assert False, "rejecting insert location for downsample above another Downsample"
-    if found_downsample_above(parent):
-      assert False, "rejecting insert location for downsample below another Downsample"
+
+    if type(child.parent) is tuple:
+      if any([found_downsample_above(p) for p in child.parent]):
+        # don't allow insertion of downsample above a child with ANY parents that
+        # are Downsamples - not just the chosen insertion parent
+        assert False, "rejecting insert location for downsample below another Downsample"
+      elif found_downsample_above(parent):
+        assert False, "rejecting insert location for downsample below another Downsample"
     if type(parent) in border_ops:
       assert False, "rejecting insert location for downsample directly below a border op"
     if type(parent) is Stack:
@@ -1206,18 +1256,27 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
     insertion_child_options = find_closest_ancestor(op_node, set((Downsample, Upsample, Softmax, Stack)))    
     if len(insertion_child_options) == 0:
       assert False, f"unable to find an insertion location for partner op of {op_node}"
+
+    linear_instances = sum([1 for n in insertion_child_options if isinstance(n, Linear)])
+    if linear_instances == 0:
+      assert False, f"unable to find insertion location for Upsample with at least one linear op in between it and the partner Downsample"
+
     resolution = None
 
   tries = 0
   while True:
     # use poisson with small lambda to favor locations farther away (i.e. smaller index)
-    insert_above_node_loc = np.random.poisson(float(len(insertion_child_options)/4))
+    insert_above_node_loc = np.random.poisson(float(len(insertion_child_options)/5))
     insert_above_node_loc = min(len(insertion_child_options)-1, insert_above_node_loc)
 
     insert_child = insertion_child_options[insert_above_node_loc]
     insert_child_res = spatial_resolution(insert_child)
-    if resolution is None or insert_child_res == resolution:
+
+    footprint = compute_lowres_branch_footprint(insert_child)
+
+    if footprint <= self.args.max_footprint and (resolution is None or insert_child_res == resolution):
       break
+
     tries += 1
     if tries > self.args.partner_insert_loc_tries:
       self.debug_logger.debug(f"unable to find an insertion location for partner op of {op_node} with resolution {resolution}")
@@ -1307,6 +1366,7 @@ def insert_partner_op(self, tree, input_set, op_class, op_node):
     insert_op, insert_parent, insert_child = self.choose_partner_op_loc(op_node, op_class, op_partner_class)
   except AssertionError:
     self.debug_logger.debug(f"failed to find insertion location for partner of {op_node}")
+    self.partner_loc_fails += 1
     assert False, f"failed to find insertion location for partner of {op_node}"
   
   insert_nodes, tree = self.insert(tree, insert_op, insert_parent, insert_child, input_set)
@@ -1355,7 +1415,7 @@ input_set: the inputs that the resulting subtree is allowed to use
 returns the new nodes in the same order as their corresponding insert_ops
 """
 @extclass(Mutator)
-def insert(self, tree, insert_ops, insert_parent, insert_child, input_set):
+def insert(self, tree, insert_ops, insert_parent, insert_child, input_set, partner_ast=None):
   cur_child = insert_child
   new_nodes = [] 
 
@@ -1364,7 +1424,7 @@ def insert(self, tree, insert_ops, insert_parent, insert_child, input_set):
     if issubclass(OpClass, Binop):
       params = list(signature(OpClass).parameters.items())
       assert len(params) == 3, f"Invalid number of parameters {len(params)} for Binary op"
-      new_node = self.insert_binop(tree, input_set, (OpClass, use_child, use_right), insert_parent, cur_child)
+      new_node = self.insert_binop(tree, input_set, (OpClass, use_child, use_right), insert_parent, cur_child, partner_ast=partner_ast)
      
     elif issubclass(OpClass, Unop):
       new_node = self.insert_unary_op(OpClass, insert_parent, cur_child)
@@ -1416,7 +1476,7 @@ Tries to mutate tree by inserting random op(s) at a random location
 If op is a binary op, picks a subtree to add as the other child
 """
 @extclass(Mutator)
-def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=None):
+def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=None, partner_ast=None):
   preorder_nodes = tree.preorder()
 
   while True:
@@ -1448,10 +1508,9 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
         location_selection_failures += 1
 
         if location_selection_failures >= self.args.insert_location_tries:
-          insert_op = None 
-        
           if insert_op is Downsample:
             self.downsample_loc_selection_failures += 1
+          insert_op = None 
 
         continue
      
@@ -1461,7 +1520,7 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
       self.current_mutation_info.node_id = insert_above_node_id
 
       try:
-        new_nodes, tree = self.insert(tree, new_ops, insert_parent, insert_child, input_set)
+        new_nodes, tree = self.insert(tree, new_ops, insert_parent, insert_child, input_set, partner_ast=partner_ast)
       except AssertionError:
         if insert_op is Downsample:
           self.downsample_insertion_failures += 1
@@ -1481,64 +1540,6 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
         self.downsample_success += 1
 
       return tree
-
-  # while True:
-  #   # randomly pick an op type to insert
-  #   all_insert_ops
-  #   # insert above the selected node
-  #   if not insert_above_node_id:
-  #     insert_above_node_id = random.randint(1, len(preorder_nodes)-1)
-  #   insert_child = preorder_nodes[insert_above_node_id]
-  #   insert_parent = insert_child.parent
-
-  #   if type(insert_parent) is tuple:
-  #     self.debug_logger.debug(f"insert parents {insert_parent}")
-  #     parent_types = [type(p) for p in insert_parent]
-  #     if not LogSub in parent_types and not AddExp in parent_types:
-  #       insert_parent = random.sample(insert_parent, 1)[0]
-
-  #   # pick op(s) to insert
-  #   insert_types = self.get_insert_types(insert_parent, insert_child)
-   
-  #   while True:
-  #     if not insert_op:
-  #       new_ops = []
-  #       for n in range(len(insert_types)):
-  #         OpClass = random.sample(insert_types[n], 1)[0]
-  #         new_ops += [OpClass]
-  #     else:
-  #       new_ops = [insert_op]
-  #     # allow at most one sandwich op to be inserted
-  #     if sum(map(lambda x : x in sandwich_ops, new_ops)) <= 1: 
-  #       break
-
-  #   if self.accept_insertion_choice(insert_child, insert_parent, new_ops):
-  #     self.debug_logger.debug(f"accepted insertion choice insert child: {insert_child.dump()} new ops {new_ops}")
-  #     break
-
-  # new_ops = [format_for_insert(o) for o in new_ops]
-
-  # self.current_mutation_info.insert_ops = ";".join([new_op[0].__name__ for new_op in new_ops])
-  # self.current_mutation_info.node_id = insert_above_node_id
-
-  # try:
-  #   new_nodes, tree = self.insert(tree, new_ops, insert_parent, insert_child, input_set)
-  # except AssertionError:
-  #   if Downsample in new_ops:
-  #     self.debug_logger.debug(f"failed to insert downsample into tree:\n{tree.dump()}\nwith insert_child\n{insert_child.dump()}")
-  #   assert False, "insertion mutation failed"
-    
-  # # if we inserted a sandwich op, we must insert its partner node as well
-  # # if we inserted Mul, and neither child is Softmax or Relu, add Softmax or Relu as a child
-  # """
-  #  NOTE: not ideal that this pruning rule is being muddled in as an insertion rule
-  # """
-  # for (OpClass,_,_), new_node in zip(new_ops, new_nodes):
-  #   if OpClass is Mul:
-  #     _, tree = self.insert_activation_under_mul(tree, input_set, new_node)
-  #   if OpClass in sandwich_ops:
-  #     _, tree = self.insert_partner_op(tree, input_set, OpClass, new_node)
-  # return tree
 
 
 def has_downsample(tree):
@@ -1694,15 +1695,36 @@ selects a subtree from the given tree at root.
 Returns a copy of that subtree without any pointers to its parent tree
 """
 @extclass(Mutator)
-def pick_subtree(self, root, input_set, insert_child, target_out_c=None, resolution=None, root_id=None, make_copy=False):
+def pick_subtree(self, root, input_set, insert_child, target_out_c=None, resolution=None, root_id=None, make_copy=False, partner_ast=None):
   preorder = root.preorder()
   failures = 0
   while True:
     if root_id and failures == 0:
       subtree_id = root_id
     else:
-      subtree_id = random.randint(1, len(preorder)-1)
-    subtree = preorder[subtree_id]
+      if self.args.binop_change:        
+        rv = random.uniform(0,1)
+        for i, operandtype in enumerate(list(BinopOperandType)):
+          if rv <= self.binop_operand_cdf[i]:
+            chosen_operand_type = operandtype
+            break
+
+        if chosen_operand_type is BinopOperandType.INPUTOP:
+          subtree = copy_subtree(random.sample(list(self.args.input_ops), 1)[0])
+        elif chosen_operand_type is BinopOperandType.RECURRENT:
+          subtree_id = random.randint(1, len(preorder)-1)
+          subtree = preorder[subtree_id]
+        elif chosen_operand_type is BinopOperandType.CROSSTREE:
+          partner_tree_preorder = partner_ast.preorder()
+          subtree_id = random.randint(1, len(partner_tree_preorder)-1)
+          subtree = partner_tree_preorder[subtree_id]
+
+        self.current_mutation_info.binop_operand_choice = chosen_operand_type.name
+
+      else:
+        subtree_id = random.randint(1, len(preorder)-1)
+        subtree = preorder[subtree_id]
+
     subtree.compute_input_output_channels()
     try: 
       chosen_subtree = self.allow_subtree(subtree, input_set, insert_child, target_out_c, resolution, make_copy)
@@ -1726,62 +1748,60 @@ rejects stupid trees
 def accept_tree(self, tree):
   if len(tree.preorder()) > self.args.max_nodes:
     self.debug_logger.debug(f"rejecting tree with size {len(tree.preorder())} larger than max tree size")
-    return False
+    return False, f"rejecting tree with size {len(tree.preorder())} larger than max tree size"
 
   if spatial_resolution(tree) == Resolution.INVALID:
     self.debug_logger.debug("rejecting invalid spatial resolution")
-    return False
+    return False, "rejecting invalid spatial resolution"
     
   # reject DAGs with receptive fields larger than threshold
   footprint = tree.compute_footprint()
   if footprint > self.args.max_footprint:
     self.debug_logger.debug(f"rejecting DAG with footprint {footprint}")
-    return False
+    return False, f"rejecting DAG with footprint {footprint}"
 
   # reject DAGs with channel counts larger than threshold
   max_channels = get_max_channels(tree)
   if max_channels > self.args.max_channels:
     self.debug_logger.debug(f"rejecting tree with max channels {max_channels}")
-    return False
+    return False, f"rejecting tree with max channels {max_channels}"
 
   tree_type = type(tree) 
   if tree_type is InterleavedSum or tree_type is GroupedSum: 
     # don't sum reduce over one channel
     if tree.child.out_c == 1:
       self.debug_logger.debug("rejecting sum over one channel")
-      return False
+      return False, "rejecting sum over one channel"
+    if type(tree.child) is InterleavedSum and tree_type is InterleavedSum:
+      return False, "rejecting adjacent InterleavedSum"
+    if type(tree.child) is GroupedSum and tree_type is GroupedSum:
+      return False, "rejecting adjacent GroupedSum"
 
   # don't allow subtraction or addition of same trees
   if tree_type is Sub or tree_type is Add:
     if tree.lchild.is_same_as_wrapper(tree.rchild):
       self.debug_logger.debug("Rejecting sub or add same tree")
-      return False
+      return False, "Rejecting sub or add same tree"
     # don't allow addition or subtraction of linear subtrees
     if is_linear(tree):
       self.debug_logger.debug("Rejecting sub or add linear trees")
-      return False
+      return False, "Rejecting sub or add linear trees"
   
   # don't allow LogSub of same trees
   if tree_type is LogSub:
     if tree.lchild.is_same_as_wrapper(tree.rchild):
       self.debug_logger.debug("rejecting LogSub same tree")
-      return False
+      return False, "rejecting LogSub same tree"
 
   # output channels of Conv1D must be divisible by 2
   if tree_type is Conv1D:
     if tree.out_c % 2 != 0:
       self.debug_logger.debug("rejecting Conv1D with odd output channels")
-      return False
-      
-  # don't allow stacking of same trees
-  # if tree_type is Stack:
-  #   if tree.lchild.is_same_as(tree.rchild):
-  #     self.debug_logger.debug("rejecting stacking same children")
-  #     return False
+      return False, "rejecting Conv1D with odd output channels"
 
   # don't allow softmax over a single channel
   if tree_type is Softmax and tree.out_c == 1:
-    return False
+    return False, "rejecting softmax over one channel"
 
   # don't allow two upsamples / downsamples or two softmaxes in same branch
   if tree_type is Upsample or tree_type is Softmax:
@@ -1789,48 +1809,70 @@ def accept_tree(self, tree):
     instances = sum([1 for n in ancestors_from_binop_to_node if type(n) is tree_type])
     if instances > 1:
       self.debug_logger.debug("Rejecting sub or add linear trees")
-      return False
+      return False, "Rejecting sub or add linear trees"
 
   # don't allow adjacent LogSub / AddExp or adjacent Downsample / Upsample
   if tree_type is LogSub:
     if type(tree.parent) is AddExp:
       self.debug_logger.debug("rejecting adjacent LogSub / AddExp")
-      return False
+      return False, "rejecting adjacent LogSub / AddExp"
   if tree_type is Downsample:
     if type(tree.parent) is Upsample:
       self.debug_logger.debug(f"rejecting adjacent Down / Up in {tree.parent.dump()}")
-      return False
+      return False, f"rejecting adjacent Down / Up in {tree.parent.dump()}"
 
     # downsample cannot be parent of any conv
     found_node, found_level = find_type(tree.child, Linear, 0, ignore_root=False)
     if any(found_node):
       self.debug_logger.debug("rejecting downsample with a Conv child")
-      return False
+      return False, "rejecting downsample with a Conv child"
 
     # downsample cannot be parent of an upsample
     found_node, found_level = find_type(tree.child, Upsample, 0, ignore_root=False)
     if any(found_node):
       self.debug_logger.debug("rejecting downsample with an Upsample child")
-      return False 
+      return False, "rejecting downsample with an Upsample child"
 
   # Mul must have either Softmax or Relu as one of its children
   # and do not allow two Mul in a row
   if tree_type is Mul:
     if type(tree.rchild) is Mul or type(tree.lchild) is Mul:
       self.debug_logger.debug("rejecting two consecutive Mul")
-      return False
+      return False, "rejecting two consecutive Mul"
+
     relu_or_softmax = set((Relu, Softmax))
     childtypes = set((type(tree.lchild), type(tree.rchild)))
+    if type(tree.lchild) is Upsample: # allow upsamples between Mul and relu or softmax
+      childtypes.add(type(tree.lchild.child))
+    if type(tree.rchild) is Upsample:
+      childtypes.add(type(tree.rchild.child))
+
     if len(relu_or_softmax.intersection(childtypes)) == 0:
       self.debug_logger.debug("rejecting Mul without ReLU or Softmax child")
-      return False
+      return False, "rejecting Mul without ReLU or Softmax child"
 
   if tree.num_children == 0:
-    return True
+    return True, ""
   elif tree.num_children == 2:
-    return self.accept_tree(tree.lchild) and self.accept_tree(tree.rchild)
+    leftok, lefterr = self.accept_tree(tree.lchild)
+    if leftok:
+      return self.accept_tree(tree.rchild)
+    else:
+      return leftok, lefterr
   elif tree.num_children == 1:
     return self.accept_tree(tree.child)
   elif tree.num_children == 3:
-    return self.accept_tree(tree.child1) and self.accept_tree(tree.child2) and self.accept_tree(tree.child3)
+    child1ok, child1err = self.accept_tree(tree.child1)
+    if child1ok:
+      child2ok, child2err = self.accept_tree(tree.child2)
+      if child2ok:
+        return self.accept_tree(tree.child3)
+      else:
+        return child2ok, child2err
+    else:
+      return child1ok, child1err
+
+
+
+
  
