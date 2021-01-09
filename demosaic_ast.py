@@ -746,6 +746,20 @@ def get_green_model_id(full_model_ast):
 
 
 """
+given a full model, sets the green model id used by the full model
+to the given green model id
+"""
+def set_green_model_id(full_model_ast, green_model_id):
+  nodes = full_model_ast.preorder()
+  for n in nodes:
+    if type(n) is Input:
+      if n.name == "Input(GreenExtractor)":
+        n.green_model_id = green_model_id
+      elif hasattr(n, 'node'):
+        set_green_model_id(n.node, green_model_id)
+
+
+"""
 returns an integer that represents high level structural 
 information of the given tree
 """
@@ -823,6 +837,9 @@ def copy_subtree_helper(root, seen_children=None):
     copy_children()
 
     new_root.child = children_copies[0]
+
+  if hasattr(new_root, 'node'):
+    new_root.node = copy_subtree(new_root.node)
 
   seen_children[id(root)] = new_root
   return new_root
