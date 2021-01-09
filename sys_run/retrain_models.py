@@ -29,7 +29,7 @@ import util
 from database import Database 
 from monitor import Monitor, TimeoutError
 from train import run_model, train_model
-from demosaic_ast import load_ast, get_green_model_id
+from demosaic_ast import load_ast, get_green_model_id, Input
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import ctypes
@@ -123,11 +123,11 @@ class Trainer():
     green_model_ast_file = self.args.green_model_asts[green_model_id]
     green_model_weight_file = self.args.green_model_weights[green_model_id]
 
-    green_model = demosaic_ast.load_ast(green_model_ast_file)
+    green_model = load_ast(green_model_ast_file)
 
     nodes = new_model_ast.preorder()
     for n in nodes:
-      if type(n) is demosaic_ast.Input:
+      if type(n) is Input:
         if n.name == "Input(GreenExtractor)":
           n.node = green_model
           n.weight_file = green_model_weight_file
