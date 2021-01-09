@@ -17,8 +17,8 @@ from tree import has_loop
 import cost
 import pareto_util
 from cost import ModelEvaluator, CostTiers
-import demosaic_ast 
-from demosaic_ast import get_green_model_id
+import demosaic_ast
+from demosaic_ast import get_green_model_id, set_green_model_id
 from mutate import Mutator, has_downsample, MutationType
 import util
 from database import Database 
@@ -42,15 +42,15 @@ def build_model_database(args):
              "prune_rejections", "structural_rejections", "seen_rejections"]
   field_types += [float, int, int, int, int, int, int]
 
-  fields += ["mutation_type", "insert_ops", "mutation_node_id", "new_output_channels", "new_grouping", "green_model_id"]
-  field_types += [str, str, int, int, int, int]
+  fields += ["mutation_type", "insert_ops", "binop_operand_choice", "mutation_node_id", "new_output_channels", "new_grouping", "green_model_id"]
+  field_types += [str, str, str, int, int, int, int]
 
   return Database("ModelDatabase", fields, field_types, args.model_database_dir)
 
 def build_failure_database(args):
-  fields = ["model_id", "hash", "mutation_type", "insert_ops", \
+  fields = ["model_id", "hash", "mutation_type", "insert_ops", "binop_operand_choice", \
             "node_id", "new_output_channels", "new_grouping", "green_model_id"]
-  field_types = [int, int, str, str, int, int, int, int]
+  field_types = [int, int, str, str, str, int, int, int, int]
   failure_database = Database("FailureDatabase", fields, field_types, args.failure_database_dir)
   failure_database.cntr = 0
   return failure_database
@@ -72,6 +72,7 @@ def model_database_entry(model_id, id_str, model_ast, shash, generation, \
          'seen_rejections': mutation_stats.seen_rejections,
          'mutation_type': mutation_stats.used_mutation.mutation_type,
          'insert_ops': mutation_stats.used_mutation.insert_ops,
+         'binop_operand_choice': mutation_stats.used_mutation.binop_operand_choice,
          'mutation_node_id': mutation_stats.used_mutation.node_id,
          'new_output_channels': mutation_stats.used_mutation.new_output_channels,
          'new_grouping': mutation_stats.used_mutation.new_grouping,
@@ -87,7 +88,6 @@ def run_train(task_id, train_args, gpu_ids, model_id, pytorch_models, model_dir,
     for m in pytorch_models:
       m._initialize_parameters()
   except RuntimeError:
-    self.debug_logger.debug(f"Failed to initialize model {model_id}")
     print(f"Failed to initialize model {model_id}")
   else:
     util.create_dir(model_dir)
@@ -213,9 +213,11 @@ class Searcher():
                     "hash" : hash(model_ast),
                     "mutation_type" : failure.mutation_type,
                     "insert_ops" : failure.insert_ops,
+                    "binop_operand_choice": failure.binop_operand_choice,
                     "node_id" : failure.node_id,
                     "new_output_channels" : failure.new_output_channels,
-                    "new_grouping" : failure.new_grouping}
+                    "new_grouping" : failure.new_grouping,
+                    "green_model_id": failure.green_model_id}
 
       self.failure_database.add(self.failure_database.cntr, failure_data)
       self.failure_database.cntr += 1
@@ -251,15 +253,68 @@ class Searcher():
           return None
         return model_ast
 
-  def mutate_model(self, parent_id, new_model_id, model_ast, generation_stats):
+
+  """
+  Builds valid input nodes for a chroma model given the model's designated green model choice
+  """
+  def construct_chroma_inputs(self, green_model_id):
+    bayer = demosaic_ast.Input(4, "Bayer")
+    green_GrGb = demosaic_ast.Input(2, "Green@GrGb")
+    rb = demosaic_ast.Input(2, "RedBlueBayer")
+    
+    flat_green = demosaic_ast.Input(1, "GreenExtractor", no_grad=True, green_model_id=green_model_id)
+
+    green_quad = demosaic_ast.Flat2Quad(flat_green)
+    green_quad.compute_input_output_channels()
+    green_quad_input = demosaic_ast.Input(4, "GreenQuad", node=green_quad, no_grad=True)
+
+    green_rb = demosaic_ast.GreenRBExtractor(flat_green)
+    green_rb.compute_input_output_channels()
+    green_rb_input = demosaic_ast.Input(2, "Green@RB", node=green_rb, no_grad=True)
+
+    rb_min_g = demosaic_ast.Sub(rb, green_rb)
+    rb_min_g_stack_green = demosaic_ast.Stack(rb_min_g, green_quad)
+    rb_min_g_stack_green.compute_input_output_channels()
+    rb_min_g_stack_green_input = demosaic_ast.Input(6, "RBdiffG_GreenQuad", no_grad=True, node=rb_min_g_stack_green)
+
+    return {
+      "Input(Bayer)": bayer,
+      "Input(Green@GrGb)": green_GrGb,
+      "Input(GreenExtractor)": flat_green, # can select this as an input to insert, must pick GreenQuad instead
+      "Input(GreenQuad)": green_quad_input,
+      "Input(Green@RB)": green_rb_input,
+      "Input(RBdiffG_GreenQuad)": rb_min_g_stack_green_input
+    }
+
+  """
+  Builds valid input nodes for a green model
+  """
+  def construct_green_inputs(self):
+    bayer = demosaic_ast.Input(4, "Bayer")
+
+    return {
+      "Input(Bayer)": bayer,
+    }
+
+
+  def mutate_model(self, parent_id, new_model_id, model_ast, generation_stats, partner_ast=None):
     self.mutate_monitor.set_error_msg(f"---\nfailed to mutate model id {parent_id}\n---")
     with self.mutate_monitor:
       try:
         if self.args.full_model:
-          model_inputs = set(("Input(Bayer)", "Input(Green@GrGb)","Input(RedBlueBayer)", "Input(GreenExtractor)"))
-        else:
-          model_inputs = set(("Input(Bayer)",))
-        new_model_ast, shash, mutation_stats = self.mutator.mutate(parent_id, new_model_id, model_ast, model_inputs)
+          green_model_id = get_green_model_id(model_ast)
+          if partner_ast:
+            set_green_model_id(partner_ast, green_model_id)
+          model_inputs = self.construct_chroma_inputs(green_model_id)
+          model_input_names = set(model_inputs.keys())
+          self.args.input_ops = set([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
+
+        else: 
+          model_inputs = self.construct_green_inputs()
+          model_input_names = set(model_inputs.keys())
+          self.args.input_ops = set(list(model_inputs.values()))
+
+        new_model_ast, shash, mutation_stats = self.mutator.mutate(parent_id, new_model_id, model_ast, model_input_names, partner_ast=partner_ast)
         generation_stats.update(mutation_stats)
 
         if new_model_ast is None: 
@@ -271,8 +326,7 @@ class Searcher():
         return None, None, None
       else:
         return new_model_ast, shash, mutation_stats
-   
-
+              
 
   """
   inserts the green model ast referenced by the green_model_id stored in 
@@ -280,13 +334,13 @@ class Searcher():
   NOTE: WE MAKE SURE ONLY ONE GREEN MODEL DAG IS CREATED SO THAT 
   IT IS ONLY RUN ONCE PER RUN OF THE FULL MODEL
   """
-  def insert_green_model(self, new_model_ast):
-    green_model_id = get_green_model_id(new_model_ast)
+  def insert_green_model(self, new_model_ast, green_model=None, green_model_weight_file=None):
+    if green_model is None:
+      green_model_id = get_green_model_id(new_model_ast)
+      green_model_ast_file = self.args.green_model_asts[green_model_id]
+      green_model_weight_file = self.args.green_model_weights[green_model_id]
 
-    green_model_ast_file = self.args.green_model_asts[green_model_id]
-    green_model_weight_file = self.args.green_model_weights[green_model_id]
-
-    green_model = demosaic_ast.load_ast(green_model_ast_file)
+      green_model = demosaic_ast.load_ast(green_model_ast_file)
 
     nodes = new_model_ast.preorder()
     for n in nodes:
@@ -294,6 +348,8 @@ class Searcher():
         if n.name == "Input(GreenExtractor)":
           n.node = green_model
           n.weight_file = green_model_weight_file
+        elif hasattr(n, "node"): # other input ops my run submodels that also require the green model
+          self.insert_green_model(n.node, green_model, green_model_weight_file)
 
 
   def lower_model(self, new_model_id, new_model_ast):
@@ -512,8 +568,6 @@ class Searcher():
       cost_tiers.add(seed_model_id, compute_cost, model_accuracy)
 
       seed_green_model_id = get_green_model_id(seed_ast)
-      if seed_green_model_id is None:
-        seed_green_model_id = -1
 
       self.model_database.add(seed_model_id,\
               {'model_id': seed_model_id,
@@ -535,6 +589,7 @@ class Searcher():
                'seen_rejections': 0,
                'mutation_type': 'N/A',
                'insert_ops': 'N/A',
+               'binop_operand_choice': 'N/A',
                'mutation_node_id': -1,
                'new_output_channels': -1,
                'new_grouping': -1,
@@ -593,11 +648,22 @@ class Searcher():
           if model_ast is None:
             continue
 
+          if self.args.binop_change:
+            other_model_ids = model_ids.copy()
+            other_model_ids.remove(model_id)
+
+            partner_model_id = random.sample(other_model_ids, 1)[0]
+            partner_model_ast = self.load_model(partner_model_id)
+
           new_model_id = self.model_manager.get_next_model_id()
-          new_model_ast, shash, mutation_stats = self.mutate_model(model_id, new_model_id, model_ast, generation_stats)
+          if self.args.binop_change:
+            new_model_ast, shash, mutation_stats = self.mutate_model(model_id, new_model_id, model_ast, generation_stats, partner_ast=partner_model_ast)
+          else:
+            new_model_ast, shash, mutation_stats = self.mutate_model(model_id, new_model_id, model_ast, generation_stats)
+
           if new_model_ast is None:
             continue
-          
+
           if self.args.full_model:
             self.insert_green_model(new_model_ast)
 
@@ -635,6 +701,11 @@ class Searcher():
           else:
             training_tasks.append((new_model_ast, task_info))
         
+        # hack for now remove later
+        for new_model_ast, task_info in training_tasks:
+          util.create_dir(task_info.model_dir)
+          self.save_model_ast(new_model_ast, task_info.model_id, task_info.model_dir)
+
         for ast, task_info in training_tasks:
           task = self.create_train_process(task_info, gpu_ids, train_psnrs, valid_psnrs)
           process_queue.add((task, task_info))
@@ -643,13 +714,12 @@ class Searcher():
 
         # update model database 
         for new_model_ast, task_info in training_tasks:
-          if task_info.task_id in failed_tasks:
-            self.debug_logger.info(f"failed to train model {task_info.model_id} \n{new_mode_ast.dump()}")
           model_inits = self.args.model_initializations
           task_id = task_info.task_id 
           index = task_id * model_inits
 
           model_psnrs = valid_psnrs[index:(index+model_inits)]
+
           self.update_model_database(task_info, model_psnrs)
 
           # training subprocess handles saving the model weights - save the ast here in the master process
@@ -688,12 +758,9 @@ class Searcher():
       print(f"seen_rejections {generation_stats.seen_rejections} prune_rejections {generation_stats.pruned_mutations}" 
             + f" structural_rejections {generation_stats.structural_rejections} failed_mutations {generation_stats.failed_mutations}")
 
-  
-    print(self.model_database.table[10])
-    # try re-loading model database
-    self.model_database.load(self.model_database.database_path)
-    print("--- re-loaded database ---")
-    print(self.model_database.table[10])
+    print(f"downsample\ntries: {self.mutator.downsample_tries} loc select fails {self.mutator.downsample_loc_selection_failures} partner loc fails {self.mutator.partner_loc_fails} \
+        insert fail {self.mutator.downsample_insertion_failures} reject {self.mutator.downsample_rejects} success {self.mutator.downsample_success} seen {self.mutator.downsample_seen}")
+
     return cost_tiers
 
   """
@@ -713,11 +780,12 @@ def parse_cost_tiers(s):
   print(ranges)
   return ranges
 
+
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
   parser.add_argument('--max_channels', type=int, default=32, help='max channel count')
   parser.add_argument('--default_channels', type=int, default=12, help='initial channel count for Convs')
-  parser.add_argument('--max_nodes', type=int, default=35, help='max number of nodes in a tree')
+  parser.add_argument('--max_nodes', type=int, default=40, help='max number of nodes in a tree')
   parser.add_argument('--min_subtree_size', type=int, default=1, help='minimum size of subtree in insertion')
   parser.add_argument('--max_subtree_size', type=int, default=15, help='maximum size of subtree in insertion')
   parser.add_argument('--structural_sim_reject', type=float, default=0.2, help='rejection probability threshold for structurally similar trees')
@@ -756,7 +824,7 @@ if __name__ == "__main__":
   parser.add_argument('--mutation_failure_threshold', type=int, default=500, help='max number of tries to mutate a tree')
   parser.add_argument('--delete_failure_threshold', type=int, default=25, help='max number of tries to find a node to delete')
   parser.add_argument('--subtree_selection_tries', type=int, default=50, help='max number of tries to find a subtree when inserting a binary op')
-  parser.add_argument('--partner_insert_loc_tries', type=int, default=10, help='max number of tries to find a insert location for a partner op')
+  parser.add_argument('--partner_insert_loc_tries', type=int, default=25, help='max number of tries to find a insert location for a partner op')
   parser.add_argument('--insert_location_tries', type=int, default=20, help='max number of tries to find an insert location for a chosen insert op')
 
   parser.add_argument('--load_timeout', type=int, default=10)
@@ -778,15 +846,15 @@ if __name__ == "__main__":
   parser.add_argument('--epochs', type=int, default=3, help='num of training epochs')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
   parser.add_argument('--train_portion', type=int, default=1e5, help='portion of training data to use')
-  # parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
-  # parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of validation data image files')
-  
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
 
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
+  parser.add_argument('--binop_change', action="store_true")
+  parser.add_argument('--insertion_bias', action="store_true")
+
   parser.add_argument('--tablename', type=str)
   parser.add_argument('--mysql_auth', type=str)
   parser.add_argument("--machine", type=str)
