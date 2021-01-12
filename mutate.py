@@ -81,10 +81,10 @@ class Mutator():
     self.failed_mutation_info = []
 
     if self.args.full_model:  
-      self.mutation_type_cdf = [0.10, 0.56, 0.66, 0.78, 0.90, 1.0]
+      self.mutation_type_cdf = [0.20, 0.65, 0.75, 0.85, 0.9, 1.0]
     else:
       if self.args.insertion_bias:
-        self.mutation_type_cdf = [0.14, 0.58, 0.72, 0.86, 1.0]
+        self.mutation_type_cdf = [0.25, 0.75, 0.85, 0.95, 1.0]
 
     if self.args.binop_change: # cdf for whether binop operand is taken from mutating subtree or partner tree or input ops
       self.binop_operand_cdf = [0.25, 0.75, 1.0]
