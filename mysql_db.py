@@ -47,6 +47,17 @@ def drop_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class DnetGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class ChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -73,6 +84,8 @@ def drop_table(password, tablename):
     table_to_drop = TestGreenTrees
   elif tablename == "green":
     table_to_drop = GreenTrees
+  elif tablename == "dnetgreen":
+    table_to_drop = DnetGreenTrees
   elif tablename == "chroma":
     table_to_drop = ChromaTrees
   else:
@@ -127,6 +140,17 @@ def create_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class DnetGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class ChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -157,6 +181,10 @@ def create_table(password, tablename):
     table = GreenTrees
     models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
     psnrs = [34.10, 34.19]
+  elif tablename == "dnetgreen":
+    table = DnetGreenTrees
+    models = [GreenDemosaicknet(3,8)]
+    psnrs = [34.19]
   elif tablename == "chroma":
     table = ChromaTrees
     green_model = demosaic_ast.load_ast("SELECTED_GREEN_MODELS_12-30/3331/model_ast")
@@ -233,6 +261,17 @@ def select(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class DnetGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class ChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -259,6 +298,8 @@ def select(password, tablename):
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
+  elif tablename == "dnetgreen":
+    table = DnetGreenTrees
   elif tablename == "chroma":
     table = ChromaTrees
   else:
@@ -312,6 +353,17 @@ def select_range(password, tablename, id_min, id_max):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class DnetGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class ChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -338,6 +390,8 @@ def select_range(password, tablename, id_min, id_max):
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
+  elif tablename == "dnetgreen":
+    table = DnetGreenTrees
   elif tablename == "chroma":
     table = ChromaTrees
   else:
@@ -393,6 +447,17 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class DnetGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class ChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -419,6 +484,8 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
+  elif tablename == "dnetgreen":
+    table = DnetGreenTrees
   elif tablename == "chroma":
     table = ChromaTrees
   else:
@@ -485,6 +552,17 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class DnetGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class ChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -511,6 +589,8 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
+  elif tablename == "dnetgreen":
+    table = DnetGreenTrees
   elif tablename == "chroma":
     table = ChromaTrees
   else:
@@ -560,6 +640,17 @@ def mysql_delete_all(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class DnetGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class ChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -597,6 +688,8 @@ def mysql_delete_all(password, tablename):
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
+  elif tablename == "dnetgreen":
+    table = DnetGreenTrees
   elif tablename == "chroma":
     table = ChromaTrees
   else:
@@ -638,6 +731,17 @@ def mysql_delete(password, tablename, id_min, id_max):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class DnetGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class ChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -675,6 +779,8 @@ def mysql_delete(password, tablename, id_min, id_max):
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
+  elif tablename == "dnetgreen":
+    table = DnetGreenTrees
   elif tablename == "chroma":
     table = ChromaTrees
   else:
