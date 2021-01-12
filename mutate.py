@@ -84,19 +84,21 @@ class Mutator():
       self.mutation_type_cdf = [0.20, 0.65, 0.75, 0.85, 0.9, 1.0]
     else:
       if self.args.insertion_bias:
-        self.mutation_type_cdf = [0.25, 0.75, 0.85, 0.95, 1.0, 1.0]
+        self.early_mutation_type_cdf = [0.4, 1.0, 1.0, 1.0, 1.0]
+        self.late_mutation_type_cdf = [0.35, 0.70, 0.80, 0.95, 1.0, 1.0]
+
       if self.args.demosaicnet_search:
         self.mutation_type_cdf = [0.30, 0.6, 0.6, 0.8, 1.0, 1.0]
 
     if self.args.binop_change: # cdf for whether binop operand is taken from mutating subtree or partner tree or input ops
       self.binop_operand_cdf = [0.25, 0.75, 1.0]
 
-    self.downsample_tries = 0
-    self.downsample_success = 0
-    self.downsample_insertion_failures = 0
-    self.downsample_loc_selection_failures = 0
-    self.downsample_rejects = 0
-    self.downsample_seen = 0
+    self.binop_tries = 0
+    self.binop_success = 0
+    self.binop_insertion_failures = 0
+    self.binop_loc_selection_failures = 0
+    self.binop_rejects = 0
+    self.binop_seen = 0
     self.partner_loc_fails = 0
 
   def add_seen_model(self, tree, model_id):
@@ -109,7 +111,7 @@ class Mutator():
     else:
       return False      
 
-  def pick_mutation_type(self, tree):
+  def pick_mutation_type(self, tree, generation):
     tree_size = tree.compute_size(set(), count_all_inputs=True)
     if self.args.full_model:
       min_tree_size = 5
@@ -121,6 +123,12 @@ class Mutator():
       mutation_type = MutationType.INSERTION
     else:
       if self.args.full_model or self.args.insertion_bias or self.args.demosaicnet_search:
+        if self.args.insertion_bias:
+          if generation <= self.args.late_cdf_gen:
+            self.mutation_type_cdf = self.early_mutation_type_cdf
+          else:
+            self.mutation_type_cdf = self.late_mutation_type_cdf
+
         rv = random.uniform(0,1)
         for i, mtype in enumerate(list(MutationType)):
           if rv <= self.mutation_type_cdf[i]:
@@ -130,7 +138,7 @@ class Mutator():
         mutation_type = random.choice(list(MutationType)[:-1])
     return mutation_type
 
-  def mutate(self, parent_id, model_id, tree, input_set, partner_ast=None):
+  def mutate(self, parent_id, model_id, tree, input_set, generation, partner_ast=None):
     self.debug_logger.debug(f"---- ENTERING MUTATION of {parent_id} ----")
     failures = 0
     prune_rejections = 0
@@ -142,7 +150,7 @@ class Mutator():
     while True: # loop to keep trying over assertion errors
       try:
         while True: # loop to keep trying over tree pruning 
-          mutation_type = self.pick_mutation_type(tree)
+          mutation_type = self.pick_mutation_type(tree, generation)
           try:
             tree_copy = copy_subtree(tree)
             if self.args.binop_change:
@@ -186,10 +194,11 @@ class Mutator():
             break      
           else:
             if mutation_type is MutationType.INSERTION:
-              if "Downsample" in self.current_mutation_info.insert_ops:
-                self.downsample_rejects += 1     
-              #   with open("rejects.txt", "a+") as f:
-              #     f.write(f"mutated model {parent_id} {accept_err}\ninsert child {self.current_mutation_info.node_id}\nparent tree \n{tree.dump()}\nnew tree\n{new_tree.dump()}\n----\n")
+              if "Add" in self.current_mutation_info.insert_ops or "Sub" in self.current_mutation_info.insert_ops \
+              or "Mul" in self.current_mutation_info.insert_ops or "Stack" in self.current_mutation_info.insert_ops:
+                self.binop_rejects += 1     
+                # with open("rejects.txt", "a+") as f:
+                #   f.write(f"mutated model {parent_id} {accept_err}\ninsert child {self.current_mutation_info.node_id}\nparent tree \n{tree.dump()}\nnew tree\n{new_tree.dump()}\n----\n")
           # tree was pruned
           self.failed_mutation_info.append(self.current_mutation_info)
           prune_rejections += 1
@@ -255,8 +264,9 @@ class Mutator():
         else: # we've seen and evaluated this exact tree before
           if mutation_type is MutationType.INSERTION:
             self.debug_logger.debug(f'insertion mutation failed on parent model {parent_id}')
-            if "Downsample" in self.current_mutation_info.insert_ops:
-              self.downsample_seen += 1
+            if "Add" in self.current_mutation_info.insert_ops or "Sub" in self.current_mutation_info.insert_ops \
+              or "Mul" in self.current_mutation_info.insert_ops or "Stack" in self.current_mutation_info.insert_ops:
+                self.binop_seen += 1
 
           self.seen_models[new_tree]["model_ids"].append(int(model_id))
           seen_rejections += 1
@@ -1129,9 +1139,13 @@ def accept_insertion_loc(child, parent, insert_op):
     assert False, "rejecting insert location upstream from border op {type(parent)}"
 
   # reject two UnopIIdivs in a row (i.e. InterleavedSum / GroupedSum)
-  if isinstance(insert_op, UnopIIdiv):
+  if issubclass(insert_op, UnopIIdiv):
     if isinstance(parent, UnopIIdiv) or isinstance(child, UnopIIdiv):
       assert False, "rejecting insert location for UnopIIdiv next to another UnopIIdiv"
+
+  if insert_op is Mul:
+    if isinstance(parent, Mul) or isinstance(child, Mul):
+      assert False, "rejecting insert location for Mul next to another Mul"
 
   if isinstance(parent, Linear):
     if isinstance(child, NonLinear):
@@ -1483,8 +1497,8 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
         insert_op = random.sample(demosaicnet_ops, 1)[0]
       else:
         insert_op = random.sample(all_insert_ops, 1)[0]
-      if insert_op is Downsample:
-        self.downsample_tries += 1
+      if insert_op is Add or insert_op is Sub or insert_op is Stack or insert_op is Mul:
+        self.binop_tries += 1
 
     location_selection_failures = 0 
 
@@ -1508,8 +1522,8 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
         location_selection_failures += 1
 
         if location_selection_failures >= self.args.insert_location_tries:
-          if insert_op is Downsample:
-            self.downsample_loc_selection_failures += 1
+          if insert_op is Add or insert_op is Sub or insert_op is Stack or insert_op is Mul:
+            self.binop_loc_selection_failures += 1
           insert_op = None 
 
         continue
@@ -1522,8 +1536,8 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
       try:
         new_nodes, tree = self.insert(tree, new_ops, insert_parent, insert_child, input_set, partner_ast=partner_ast)
       except AssertionError:
-        if insert_op is Downsample:
-          self.downsample_insertion_failures += 1
+        if insert_op is Add or insert_op is Sub or insert_op is Stack or insert_op is Mul:
+          self.binop_insertion_failures += 1
         assert False, "insertion mutation failed"
       
       """
@@ -1536,8 +1550,8 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
         if OpClass in sandwich_ops:
           _, tree = self.insert_partner_op(tree, input_set, OpClass, new_node)
 
-      if insert_op is Downsample:
-        self.downsample_success += 1
+      if insert_op is Add or insert_op is Sub or insert_op is Stack or insert_op is Mul:
+        self.binop_success += 1
 
       return tree
 
@@ -1816,6 +1830,7 @@ def accept_tree(self, tree):
     if type(tree.parent) is AddExp:
       self.debug_logger.debug("rejecting adjacent LogSub / AddExp")
       return False, "rejecting adjacent LogSub / AddExp"
+
   if tree_type is Downsample:
     if type(tree.parent) is Upsample:
       self.debug_logger.debug(f"rejecting adjacent Down / Up in {tree.parent.dump()}")

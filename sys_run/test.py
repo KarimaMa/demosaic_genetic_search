@@ -297,7 +297,7 @@ class Searcher():
     }
 
 
-  def mutate_model(self, parent_id, new_model_id, model_ast, generation_stats, partner_ast=None):
+  def mutate_model(self, parent_id, new_model_id, model_ast, generation, generation_stats, partner_ast=None):
     self.mutate_monitor.set_error_msg(f"---\nfailed to mutate model id {parent_id}\n---")
     with self.mutate_monitor:
       try:
@@ -314,7 +314,7 @@ class Searcher():
           model_input_names = set(model_inputs.keys())
           self.args.input_ops = set(list(model_inputs.values()))
 
-        new_model_ast, shash, mutation_stats = self.mutator.mutate(parent_id, new_model_id, model_ast, model_input_names, partner_ast=partner_ast)
+        new_model_ast, shash, mutation_stats = self.mutator.mutate(parent_id, new_model_id, model_ast, model_input_names, generation, partner_ast=partner_ast)
         generation_stats.update(mutation_stats)
 
         if new_model_ast is None: 
@@ -657,9 +657,9 @@ class Searcher():
 
           new_model_id = self.model_manager.get_next_model_id()
           if self.args.binop_change:
-            new_model_ast, shash, mutation_stats = self.mutate_model(model_id, new_model_id, model_ast, generation_stats, partner_ast=partner_model_ast)
+            new_model_ast, shash, mutation_stats = self.mutate_model(model_id, new_model_id, model_ast, generation, generation_stats, partner_ast=partner_model_ast)
           else:
-            new_model_ast, shash, mutation_stats = self.mutate_model(model_id, new_model_id, model_ast, generation_stats)
+            new_model_ast, shash, mutation_stats = self.mutate_model(model_id, new_model_id, model_ast, generation, generation_stats)
 
           if new_model_ast is None:
             continue
@@ -766,8 +766,8 @@ class Searcher():
       print(f"seen_rejections {generation_stats.seen_rejections} prune_rejections {generation_stats.pruned_mutations}" 
             + f" structural_rejections {generation_stats.structural_rejections} failed_mutations {generation_stats.failed_mutations}")
 
-    print(f"downsample\ntries: {self.mutator.downsample_tries} loc select fails {self.mutator.downsample_loc_selection_failures} partner loc fails {self.mutator.partner_loc_fails} \
-        insert fail {self.mutator.downsample_insertion_failures} reject {self.mutator.downsample_rejects} success {self.mutator.downsample_success} seen {self.mutator.downsample_seen}")
+    print(f"downsample\ntries: {self.mutator.binop_tries} loc select fails {self.mutator.binop_loc_selection_failures} \
+        insert fail {self.mutator.binop_insertion_failures} reject {self.mutator.binop_rejects} success {self.mutator.binop_success} seen {self.mutator.binop_seen}")
 
     return cost_tiers
 
@@ -862,6 +862,8 @@ if __name__ == "__main__":
   parser.add_argument('--full_model', action="store_true")
   parser.add_argument('--binop_change', action="store_true")
   parser.add_argument('--insertion_bias', action="store_true")
+  parser.add_argument('--demosaicnet_search', action="store_true", help='whether to run search over demosaicnet space')
+  parser.add_argument('--late_cdf_gen', type=int, help='generation to switch to late mutation type cdf')
 
   parser.add_argument('--tablename', type=str)
   parser.add_argument('--mysql_auth', type=str)
