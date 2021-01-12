@@ -255,7 +255,8 @@ class Trainer():
       model_ast_file = os.path.join(model_info_dir, "model_ast")
       model_ast = load_ast(model_ast_file)
      
-      self.insert_green_model(model_ast)
+      if self.args.full_model:
+        self.insert_green_model(model_ast)
       pytorch_models = self.lower_model(model_id, model_ast)
     
       compute_cost = self.model_evaluator.compute_cost(model_ast)

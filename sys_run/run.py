@@ -567,7 +567,10 @@ class Searcher():
 
       cost_tiers.add(seed_model_id, compute_cost, model_accuracy)
 
-      seed_green_model_id = get_green_model_id(seed_ast)
+      if self.args.full_model:
+        seed_green_model_id = get_green_model_id(seed_ast)
+      else:
+        seed_green_model_id = -1
 
       self.model_database.add(seed_model_id,\
               {'model_id': seed_model_id,
