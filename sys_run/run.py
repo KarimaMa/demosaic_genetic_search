@@ -854,6 +854,7 @@ if __name__ == "__main__":
   parser.add_argument('--full_model', action="store_true")
   parser.add_argument('--binop_change', action="store_true")
   parser.add_argument('--insertion_bias', action="store_true")
+  parser.add_argument('--demosaicnet_search', action="store_true", help='whether to run search over demosaicnet space')
 
   parser.add_argument('--tablename', type=str)
   parser.add_argument('--mysql_auth', type=str)

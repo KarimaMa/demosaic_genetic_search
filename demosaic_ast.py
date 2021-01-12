@@ -1061,3 +1061,5 @@ nl_and_sp = nonlinear_ops.union(special_ops)
 l_and_sp = linear_ops.union(special_ops)
 all_ops = nl_and_sp.union(l_and_sp)
 
+demosaicnet_ops = set((Conv1x1, Conv2D, Relu))
+

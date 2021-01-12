@@ -84,7 +84,9 @@ class Mutator():
       self.mutation_type_cdf = [0.20, 0.65, 0.75, 0.85, 0.9, 1.0]
     else:
       if self.args.insertion_bias:
-        self.mutation_type_cdf = [0.25, 0.75, 0.85, 0.95, 1.0]
+        self.mutation_type_cdf = [0.25, 0.75, 0.85, 0.95, 1.0, 1.0]
+      if self.args.demosaicnet_search:
+        self.mutation_type_cdf = [0.30, 0.6, 0.6, 0.8, 1.0, 1.0]
 
     if self.args.binop_change: # cdf for whether binop operand is taken from mutating subtree or partner tree or input ops
       self.binop_operand_cdf = [0.25, 0.75, 1.0]
@@ -118,14 +120,9 @@ class Mutator():
     elif tree_size <= min_tree_size:
       mutation_type = MutationType.INSERTION
     else:
-      if self.args.full_model or self.args.insertion_bias:
+      if self.args.full_model or self.args.insertion_bias or self.args.demosaicnet_search:
         rv = random.uniform(0,1)
-        if self.args.full_model:
-          mutation_type_list = list(MutationType)
-        else:
-          mutation_type_list = list(MutationType)[:-1]
-
-        for i, mtype in enumerate(mutation_type_list):
+        for i, mtype in enumerate(list(MutationType)):
           if rv <= self.mutation_type_cdf[i]:
             mutation_type = mtype
             break
@@ -1482,7 +1479,10 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
   while True:
     # pick an op to insert
     if not insert_op:
-      insert_op = random.sample(all_insert_ops, 1)[0]
+      if self.args.demosaicnet_search:
+        insert_op = random.sample(demosaicnet_ops, 1)[0]
+      else:
+        insert_op = random.sample(all_insert_ops, 1)[0]
       if insert_op is Downsample:
         self.downsample_tries += 1
 
