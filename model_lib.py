@@ -877,6 +877,18 @@ def GradientHalideModel(width, k):
   return green
 
 
+def Bilinear(width, k):
+  bayer = Input(4, "Bayer")
+
+  conv = Conv2D(bayer, width, kwidth=k)
+  green_rb = GroupedSum(conv, 2)
+  green = GreenExtractor(bayer, green_rb)
+  green.assign_parents()
+  green.compute_input_output_channels()
+
+  return green
+
+
 def RGBGradientHalideModel(width, k):
   bayer = Input(4, "Bayer")
   
@@ -1027,7 +1039,6 @@ def ChromaSeedModel2(depth, width, no_grad, green_model, green_model_id):
 
   downsampled.partner_set = set( [(lowres_interp, id(lowres_interp))] )
   lowres_interp.partner_set = set( [(downsampled, id(downsampled))] )
-
 
   # fullres interp trunk
   for i in range(depth):
