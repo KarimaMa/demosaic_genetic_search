@@ -174,7 +174,7 @@ class Searcher():
 
     self.search_logger = util.create_logger('search_logger', logging.INFO, self.log_format, \
                                   os.path.join(args.save, 'search_log'))
-    self.debug_logger = util.create_logger('debug_logger', logging.INFO, self.log_format, \
+    self.debug_logger = util.create_logger('debug_logger', logging.DEBUG, self.log_format, \
                                   os.path.join(args.save, 'debug_log'))
     self.mysql_logger = util.create_logger('mysql_logger', logging.INFO, self.log_format, \
                                   os.path.join(args.save, 'mysql_log'))
@@ -824,14 +824,14 @@ if __name__ == "__main__":
   parser.add_argument('--pareto_factor', type=float, help='discount factor per pareto frontier')
   parser.add_argument('--mutations_per_generation', type=int, default=12, help='how many mutations produced by each tier per generation')
 
-  parser.add_argument('--mutation_failure_threshold', type=int, default=500, help='max number of tries to mutate a tree')
+  parser.add_argument('--mutation_failure_threshold', type=int, default=100, help='max number of tries to mutate a tree')
   parser.add_argument('--delete_failure_threshold', type=int, default=25, help='max number of tries to find a node to delete')
   parser.add_argument('--subtree_selection_tries', type=int, default=50, help='max number of tries to find a subtree when inserting a binary op')
   parser.add_argument('--partner_insert_loc_tries', type=int, default=25, help='max number of tries to find a insert location for a partner op')
-  parser.add_argument('--insert_location_tries', type=int, default=20, help='max number of tries to find an insert location for a chosen insert op')
+  parser.add_argument('--insert_location_tries', type=int, default=25, help='max number of tries to find an insert location for a chosen insert op')
 
   parser.add_argument('--load_timeout', type=int, default=10)
-  parser.add_argument('--mutate_timeout', type=int, default=30)
+  parser.add_argument('--mutate_timeout', type=int, default=60)
   parser.add_argument('--lowering_timeout', type=int, default=10)
   parser.add_argument('--train_timeout', type=int, default=2400)
   parser.add_argument('--save_timeout', type=int, default=10)
