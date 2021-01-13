@@ -25,7 +25,8 @@ def drop_table(password, tablename):
     class Meta:
       database = db
 
-  class TestGreenTrees(BaseModel):
+
+  class GreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
@@ -36,7 +37,7 @@ def drop_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  class GreenTrees(BaseModel):
+  class AdobeGreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
@@ -69,6 +70,17 @@ def drop_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -84,6 +96,8 @@ def drop_table(password, tablename):
     table_to_drop = TestGreenTrees
   elif tablename == "green":
     table_to_drop = GreenTrees
+  elif tablename == "adobegreen":
+    table_to_drop = AdobeGreenTrees
   elif tablename == "dnetgreen":
     table_to_drop = DnetGreenTrees
   elif tablename == "chroma":
@@ -129,7 +143,7 @@ def create_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  class TestGreenTrees(BaseModel):
+  class AdobeGreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
@@ -162,6 +176,17 @@ def create_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -179,6 +204,10 @@ def create_table(password, tablename):
     psnrs = [34.10, 34.19]
   elif tablename == "green":
     table = GreenTrees
+    models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
+    psnrs = [34.10, 34.19]
+  elif tablename == "adobegreen":
+    table = AdobeGreenTrees
     models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
     psnrs = [34.10, 34.19]
   elif tablename == "dnetgreen":
@@ -239,7 +268,8 @@ def select(password, tablename):
     class Meta:
       database = db
 
-  class TestGreenTrees(BaseModel):
+
+  class GreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
@@ -250,7 +280,7 @@ def select(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  class GreenTrees(BaseModel):
+  class AdobeGreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
@@ -283,6 +313,17 @@ def select(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -298,6 +339,8 @@ def select(password, tablename):
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
+  elif tablename == "adobegreen":
+    table = AdobeGreenTrees
   elif tablename == "dnetgreen":
     table = DnetGreenTrees
   elif tablename == "chroma":
@@ -331,7 +374,7 @@ def select_range(password, tablename, id_min, id_max):
     class Meta:
       database = db
 
-  class TestGreenTrees(BaseModel):
+  class GreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
@@ -342,7 +385,7 @@ def select_range(password, tablename, id_min, id_max):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  class GreenTrees(BaseModel):
+  class AdobeGreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
@@ -375,6 +418,17 @@ def select_range(password, tablename, id_min, id_max):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -390,6 +444,8 @@ def select_range(password, tablename, id_min, id_max):
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
+  elif tablename == "adobegreen":
+    table = AdobeGreenTrees
   elif tablename == "dnetgreen":
     table = DnetGreenTrees
   elif tablename == "chroma":
@@ -425,7 +481,8 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     class Meta:
       database = db
 
-  class TestGreenTrees(BaseModel):
+
+  class GreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
@@ -436,7 +493,7 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  class GreenTrees(BaseModel):
+  class AdobeGreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
@@ -469,6 +526,17 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -484,6 +552,8 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
+  elif tablename == "adobegreen":
+    table = AdobeGreenTrees
   elif tablename == "dnetgreen":
     table = DnetGreenTrees
   elif tablename == "chroma":
@@ -530,7 +600,7 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     class Meta:
       database = db
 
-  class TestGreenTrees(BaseModel):
+  class GreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
@@ -541,7 +611,7 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
-  class GreenTrees(BaseModel):
+  class AdobeGreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
@@ -574,6 +644,17 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class TestGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -589,6 +670,8 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
+  elif tablename == "adobegreen":
+    table = AdobeGreenTrees
   elif tablename == "dnetgreen":
     table = DnetGreenTrees
   elif tablename == "chroma":
@@ -640,6 +723,17 @@ def mysql_delete_all(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class AdobeGreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class DnetGreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -688,6 +782,8 @@ def mysql_delete_all(password, tablename):
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
+  elif tablename == "adobegreen":
+    table = AdobeGreenTrees
   elif tablename == "dnetgreen":
     table = DnetGreenTrees
   elif tablename == "chroma":
@@ -720,7 +816,19 @@ def mysql_delete(password, tablename, id_min, id_max):
     class Meta:
       database = db
 
+
   class GreenTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
+  class AdobeGreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
@@ -779,6 +887,8 @@ def mysql_delete(password, tablename, id_min, id_max):
     table = TestGreenTrees
   elif tablename == "green":
     table = GreenTrees
+  elif tablename == "adobegreen":
+    table = AdobeGreenTrees
   elif tablename == "dnetgreen":
     table = DnetGreenTrees
   elif tablename == "chroma":
