@@ -989,7 +989,7 @@ def insert_binop(self, tree, input_set, insert_op, insert_parent, insert_child, 
       if tree.size < self.args.min_subtree_size + 2:
         self.debug_logger.debug(f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}")
         assert False, f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}"
-      subtree = self.pick_subtree(tree, input_set, insert_child, target_out_c=insert_child.out_c, resolution=spatial_resolution(insert_child), make_copy=make_copy, partner_ast=partner_ast)
+      subtree = self.pick_subtree(tree, input_set, insert_child, OpClass, target_out_c=insert_child.out_c, resolution=spatial_resolution(insert_child), make_copy=make_copy, partner_ast=partner_ast)
     else:
       subtree = use_child
       # make channel count of insert_child agree with required use_child since we cannot change the required child
@@ -1001,7 +1001,7 @@ def insert_binop(self, tree, input_set, insert_op, insert_parent, insert_child, 
     if tree.size < self.args.min_subtree_size + 2:
       self.debug_logger.debug(f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}")
       assert False, f"Impossible to find subtree of size {self.args.min_subtree_size} or greater from tree of size {tree.size}"
-    subtree = self.pick_subtree(tree, input_set, insert_child, resolution=spatial_resolution(insert_child), make_copy=make_copy, partner_ast=partner_ast)
+    subtree = self.pick_subtree(tree, input_set, insert_child, OpClass, resolution=spatial_resolution(insert_child), make_copy=make_copy, partner_ast=partner_ast)
   
   # check spatial resolutions of subtree and insert_child match 
   subtree_res = spatial_resolution(subtree)
@@ -1653,8 +1653,8 @@ if resolution is given, checks spatial resolution of subtree matches
 Returns a copy of the subtree with channels appropriately modified if necessary
 """
 @extclass(Mutator)
-def allow_subtree(self, root, input_set, insert_child, target_out_c=None, resolution=None, make_copy=False):
-  if id(insert_child) == id(root):
+def allow_subtree(self, root, input_set, insert_child, binop_class, target_out_c=None, resolution=None, make_copy=False):
+  if insert_child.is_same_as_wrapper(root) and not binop_class is Mul: # only allow Mul to operate on the same subtrees, Add, Sub, and Stack must use distinct operands 
     self.debug_logger.debug(f"chosen subtree cannot be the same tree as other child of binop")
     assert False, f"chosen subtree cannot be the same tree as other child of binop "
 
@@ -1707,9 +1707,10 @@ def allow_subtree(self, root, input_set, insert_child, target_out_c=None, resolu
 """
 selects a subtree from the given tree at root.
 Returns a copy of that subtree without any pointers to its parent tree
+binop_class is the binop that we're picking a subtree for
 """
 @extclass(Mutator)
-def pick_subtree(self, root, input_set, insert_child, target_out_c=None, resolution=None, root_id=None, make_copy=False, partner_ast=None):
+def pick_subtree(self, root, input_set, insert_child, binop_class, target_out_c=None, resolution=None, root_id=None, make_copy=False, partner_ast=None):
   preorder = root.preorder()
   failures = 0
   while True:
@@ -1741,7 +1742,7 @@ def pick_subtree(self, root, input_set, insert_child, target_out_c=None, resolut
 
     subtree.compute_input_output_channels()
     try: 
-      chosen_subtree = self.allow_subtree(subtree, input_set, insert_child, target_out_c, resolution, make_copy)
+      chosen_subtree = self.allow_subtree(subtree, input_set, insert_child, binop_class, target_out_c, resolution, make_copy)
     except AssertionError:
       failures += 1
       self.debug_logger.debug("selected subtree is invalid")
@@ -1791,6 +1792,12 @@ def accept_tree(self, tree):
     if type(tree.child) is GroupedSum and tree_type is GroupedSum:
       return False, "rejecting adjacent GroupedSum"
 
+  # don't allow stacking of the same tree
+  if tree_type is Stack:
+    if tree.lchild.is_same_as_wrapper(tree.rchild):
+      self.debug_logger.debug("Rejecting stacking the same tree")
+      return False, "Rejecting stacking the same tree"
+
   # don't allow subtraction or addition of same trees
   if tree_type is Sub or tree_type is Add:
     if tree.lchild.is_same_as_wrapper(tree.rchild):
@@ -1806,6 +1813,12 @@ def accept_tree(self, tree):
     if tree.lchild.is_same_as_wrapper(tree.rchild):
       self.debug_logger.debug("rejecting LogSub same tree")
       return False, "rejecting LogSub same tree"
+
+  # reject invalid groups
+  if issubclass(tree_type, Linear):
+    if tree.out_c % tree.groups != 0 or tree.in_c % tree.groups != 0:
+      self.debug_logger.debug("rejecting convolution with invalid grouping")
+      assert False, "rejecting convolution with invalid grouping"
 
   # output channels of Conv1D must be divisible by 2
   if tree_type is Conv1D:
