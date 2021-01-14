@@ -200,16 +200,16 @@ def create_table(password, tablename):
 
   if tablename == "testgreen":
     table = TestGreenTrees
-    models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
-    psnrs = [34.10, 34.19]
+    models = [GradientHalideModel(10,3), GreenDemosaicknet(3,8)]
+    psnrs = [33.07, 34.19]
   elif tablename == "green":
     table = GreenTrees
-    models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
-    psnrs = [34.10, 34.19]
+    models = [GradientHalideModel(10,3), GreenDemosaicknet(3,8)]
+    psnrs = [33.07, 34.19]
   elif tablename == "adobegreen":
     table = AdobeGreenTrees
-    models = [MultiresQuadGreenModel(2,10), GreenDemosaicknet(3,8)]
-    psnrs = [34.10, 34.19]
+    models = [GradientHalideModel(10,3), GreenDemosaicknet(3,8)]
+    psnrs = [33.07, 34.19]
   elif tablename == "dnetgreen":
     table = DnetGreenTrees
     models = [GreenDemosaicknet(3,8)]
