@@ -675,10 +675,10 @@ class UpsampleOp(nn.Module):
 
 
 class Conv1x1Op(nn.Module):
-  def __init__(self, operand, C_in, C_out, param_name):
+  def __init__(self, operand, C_in, C_out, groups, param_name):
     super(Conv1x1Op, self).__init__()
     self._operands = nn.ModuleList([operand])
-    f = nn.Conv2d(C_in, C_out, (1, 1), bias=False, padding=0)
+    f = nn.Conv2d(C_in, C_out, (1, 1), groups=groups, bias=False, padding=0)
     self.param_name = param_name
     setattr(self, param_name, f)
     self.output = None
@@ -757,7 +757,7 @@ class DiagRLConv(nn.Module):
 
 
 class Conv1DOp(nn.Module):
-  def __init__(self, operand, C_in, C_out, param_name, kwidth):
+  def __init__(self, operand, C_in, C_out, groups, param_name, kwidth):
     super(Conv1DOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.param_name_v = f"{param_name}_v"
@@ -765,8 +765,8 @@ class Conv1DOp(nn.Module):
 
     num_vfilters = C_out // 2
     num_hfilters = C_out - num_vfilters
-    v = nn.Conv2d(C_in, num_vfilters, (kwidth, 1), bias=False, padding=(kwidth//2, 0))
-    h = nn.Conv2d(C_in, num_hfilters, (1, kwidth), bias=False, padding=(0, kwidth//2))
+    v = nn.Conv2d(C_in, num_vfilters, (kwidth, 1), groups=groups, bias=False, padding=(kwidth//2, 0))
+    h = nn.Conv2d(C_in, num_hfilters, (1, kwidth), groups=groups, bias=False, padding=(0, kwidth//2))
   
     setattr(self, self.param_name_v, v)
     setattr(self, self.param_name_h, h)
@@ -800,11 +800,11 @@ class Conv1DOp(nn.Module):
 
 
 class Conv2DOp(nn.Module):
-  def __init__(self, operand, C_in, C_out, param_name, kwidth):
+  def __init__(self, operand, C_in, C_out, groups, param_name, kwidth):
     super(Conv2DOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.param_name = param_name
-    f = nn.Conv2d(C_in, C_out, (kwidth,kwidth), bias=False, padding=kwidth//2)
+    f = nn.Conv2d(C_in, C_out, (kwidth,kwidth), groups=groups, bias=False, padding=kwidth//2)
     setattr(self, self.param_name, f)
     self.output = None
 
@@ -1163,7 +1163,7 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = Conv1x1Op(child_model, self.in_c, self.out_c, self.name)
+  model = Conv1x1Op(child_model, self.in_c, self.out_c, self.groups, self.name)
 
   shared_children[id(self)] = model 
   return model
@@ -1176,7 +1176,7 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = Conv1DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth)
+  model = Conv1DOp(child_model, self.in_c, self.out_c, self.groups, self.name, self.kwidth)
 
   shared_children[id(self)] = model 
   return model
@@ -1190,7 +1190,7 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = Conv2DOp(child_model, self.in_c, self.out_c, self.name, self.kwidth)
+  model = Conv2DOp(child_model, self.in_c, self.out_c, self.groups, self.name, self.kwidth)
 
   shared_children[id(self)] = model 
   return model
