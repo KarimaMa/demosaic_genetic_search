@@ -1,0 +1,14 @@
+universe              = docker
+docker_image          = docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v00
+
+should_transfer_files = no
+transfer_executable   = false
+
+arguments             = $(process)
+executable            = cluster/lpips_sampler_sr2.sh
+
+output                = log/lpips.$(process).out
+error                 = log/lpips.$(process).err
+log                   = log/lpips.$(process).log
+
+queue 25

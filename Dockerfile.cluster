@@ -1,0 +1,174 @@
+# FROM nvidia/cuda:11.0-devel-ubuntu20.04
+FROM nvidia/cuda:9.0-cudnn7-devel-ubuntu16.04
+
+MAINTAINER Michael Gharbi <mgharbi@adobe.com>
+
+SHELL ["/bin/bash", "-c"]
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV TZ=America/Los_Angeles
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        kmod \
+        openssh-server \
+        curl \
+        rsync \
+        build-essential \
+        sudo \
+        locales \
+        tmux \
+        screen \
+        tree \
+        libncurses-dev \
+        net-tools \
+        htop \
+        ctags \
+        cmake \
+        apt-utils \
+        nano \
+        libfreetype6-dev \
+        libpng-dev \
+        libjpeg-dev \
+        libzmq3-dev \
+        pkg-config \
+        autoconf \
+        libtool \
+        python3 \
+        python3-dev \
+        python3-pip \
+        software-properties-common \
+        unzip \
+        libgl1-mesa-glx \
+        git \
+        wget \
+        silversearcher-ag \
+        zsh \
+        npm \
+        && \
+        apt-get -y autoremove && apt-get -y clean && \
+        rm -rf /var/lib/apt/lists/*
+
+# Modern Vim
+RUN add-apt-repository ppa:jonathonf/vim -y && \
+        apt-get update && apt-get install -y --no-install-recommends vim
+
+RUN echo 'root:root' |chpasswd
+
+RUN mkdir /var/run/sshd
+
+# User and SSH access
+RUN addgroup -gid 5000 researcher
+RUN useradd -ms /bin/zsh -u 10395 -g 5000 mgharbi
+RUN adduser mgharbi sudo
+RUN chown -R mgharbi:researcher /etc/ssh
+RUN mkdir /home/mgharbi/.ssh
+RUN echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC66TTMiWbBM2r1R66jNu9vJnHyF/iU0UdIP0JEe8Iz9D6KxZ4sYoqxNvHzB86BpMejCRd9q4PcxMC0/J27vOmnEvrMQEV4RKs5fNFv5QMEClPLTkSwW7rnHoBLofXfUbuv3i6qCy4IG0f+A0nvTIG43VGf20F6YwG+hDtVg1DP5qYlES2Pn8rORrv/RQzA8jzRXJ77oACCxrIIH19nwKKP5Op/weALlaN82Zz4JY/iCAoOm18tTiqT/3371bVHLkG/qp976+A3qAso+qKFFyIiNtKifN54bBPnMnCQG6CBbG9M0LkaU2hvEp7i3fNpnEfOXToNdmIbyCsjhjLyWGg5 mgharbi@mgharbis-MacBook-Pro.local" > /home/mgharbi/.ssh/authorized_keys
+
+RUN mkdir -p /workspace
+
+# # Modern CMake
+# RUN wget -qO- "https://github.com/Kitware/CMake/releases/download/v3.19.0-rc1/cmake-3.19.0-rc1-Linux-x86_64.tar.gz" | tar --strip-components=1 -xz -C /usr/local
+# RUN cmake --version
+#
+# # LLVM
+# WORKDIR /tmp
+# RUN apt-get install apt-transport-https
+# RUN wget "https://apt.llvm.org/llvm.sh" && \
+#         chmod +x llvm.sh && \
+#         ./llvm.sh 10
+# ENV LLVM_CONFIG /usr/bin/llvm-config-10
+# ENV CLANG /usr/bin/clang-10
+# RUN apt install libclang-10-dev
+
+# # Halide
+# WORKDIR /workspace
+# RUN git clone https://github.com/halide/Halide.git && cd Halide && \
+#         mkdir -p build
+# WORKDIR /workspace/Halide/build
+# RUN cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=/usr/lib/llvm-10/cmake .. && \
+#         cmake --build . && make install
+# RUN rm -rf /workspace/Halide
+
+# Set locale
+RUN locale-gen en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
+
+RUN chown -R mgharbi /workspace
+
+# Nvidia driver
+RUN cd /tmp && \
+    curl -fsSL -O http://us.download.nvidia.com/XFree86/Linux-x86_64/410.78/NVIDIA-Linux-x86_64-410.78.run && \
+    sh NVIDIA-Linux-x86_64-410.78.run -s --no-kernel-module && \
+    rm NVIDIA-Linux-x86_64-410.78.run
+ENV LD_LIBRARY_PATH /usr/local/nvidia/lib:/usr/local/nvidia/lib64
+
+# -- User stuff ---------------------------------------------------------------
+USER mgharbi
+WORKDIR /workspace
+
+RUN cd $HOME && git clone https://github.com/mgharbi/.dotfiles.git && \
+        git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf && \
+        $HOME/.fzf/install
+
+RUN cd $HOME && \
+        rm .zshrc && ln -s .dotfiles/zshrc .zshrc  && \
+        ln -s .dotfiles/vimrc .vimrc  && \
+        ln -s .dotfiles/gdbinit .gdbinit  && \
+        ln -s .dotfiles/gitconfig .gitconfig  && \
+        ln -s .dotfiles/tmux.conf .tmux.conf
+
+# ZSH prompt
+RUN mkdir -p "$HOME/.zsh"
+RUN git clone https://github.com/sindresorhus/pure.git "$HOME/.zsh/pure"
+
+# Python
+RUN curl -o $HOME/miniconda.sh -O  https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+        chmod +x $HOME/miniconda.sh && \
+        $HOME/miniconda.sh -b -p $HOME/anaconda && \
+        rm $HOME/miniconda.sh
+RUN $HOME/anaconda/bin/conda install conda-build
+RUN $HOME/anaconda/bin/conda init zsh
+RUN $HOME/anaconda/bin/conda install pytorch torchvision torchaudio cudatoolkit=9.2 -c pytorch
+# -----------------------------------------------------------------------------
+
+# -- Project stuff ------------------------------------------------------------
+USER mgharbi
+ENV PATH /home/mgharbi/anaconda/bin:$PATH
+RUN source activate
+
+# Install python dependencies (see acr/requirements.txt)
+RUN pip install \
+        scikit-image \
+        ttools \
+        demosaicnet \
+        easydict \
+        gitpython \
+        opencv-python \
+        pyaml
+
+# COPY requirements.txt /workspace/requirements.txt
+# RUN pip install -r /workspace/requirements.txt
+ 
+# Install timproc
+# COPY timproc/build/python/dist/timproc-0.0.1-cp38-cp38-linux_x86_64.whl /workspace
+# RUN pip install /workspace/timproc-0.0.1-cp38-cp38-linux_x86_64.whl
+# -----------------------------------------------------------------------------
+
+USER ""
+
+RUN apt-get install -y mysql-server libmysqlclient-dev
+
+# Shortcuts
+RUN ln -s /mnt/ilcompf9d1/user/mgharbi /home/mgharbi/shared_home
+# RUN ln -s /mnt/ilcompf9d1/user/mgharbi/code/acr_superres/acr /home/mgharbi/acr
+# RUN ln -s /mnt/ilcompf2d1/data/yfcc100m/ /home/mgharbi/flickr
+# RUN ln -s /mnt/ilcompf2d0/data/stock/images /home/mgharbi/stock_images
+
+# Link to private SSH key on distributed storage (for github, etc)
+RUN ln -s /mnt/ilcompf9d1/user/mgharbi/.ssh/id_rsa /home/mgharbi/.ssh/id_rsa
+RUN ln -s /mnt/ilcompf9d1/user/mgharbi/.ssh/id_rsa.pub /home/mgharbi/.ssh/id_rsa.pub
+RUN ln -s /mnt/ilcompf9d1/user/mgharbi/.ssh/known_hosts /home/mgharbi/.ssh/known_hosts
+
+CMD ["/usr/sbin/sshd", "-D", "-p", "2000"]
