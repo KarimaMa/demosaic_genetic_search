@@ -285,7 +285,8 @@ class Searcher():
       "Input(Green@RB)": green_rb_input,
       "Input(RBdiffG_GreenQuad)": rb_min_g_stack_green_input
     }
-
+    
+ 
   """
   Builds valid input nodes for a green model
   """
@@ -308,7 +309,10 @@ class Searcher():
           model_inputs = self.construct_chroma_inputs(green_model_id)
           model_input_names = set(model_inputs.keys())
           self.args.input_ops = set([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
-
+        elif self.args.rgb8chan: # full rgb model search uses same inputs as green search
+          model_inputs = self.construct_green_inputs()
+          model_input_names = set(model_inputs.keys())
+          self.args.input_ops = set(list(model_inputs.values()))
         else: 
           model_inputs = self.construct_green_inputs()
           model_input_names = set(model_inputs.keys())
@@ -356,8 +360,6 @@ class Searcher():
     self.lowering_monitor.set_error_msg(f"---\nfailed to lower model {new_model_id}\n---")
     with self.lowering_monitor:
       try:
-        # if self.args.full_model:
-        #   self.insert_green_model(new_model_ast)
         new_models = [new_model_ast.ast_to_model() for i in range(self.args.model_initializations)]
       except TimeoutError:
         return None
@@ -811,6 +813,9 @@ if __name__ == "__main__":
   parser.add_argument('--green_seed_model_files', type=str, help='file with list of filenames of green seed model asts')
   parser.add_argument('--green_seed_model_psnrs', type=str, help='file with list of psnrs of green seed models')
 
+  parser.add_argument('--rgb8chan_seed_model_files', type=str, help='file with list of filenames of rgb8chan seed model asts')
+  parser.add_argument('--rgb8chan_seed_model_psnrs', type=str, help='file with list of psnrs of rgb8chan seed models')
+
   parser.add_argument('--chroma_seed_model_files', type=str, help='file with list of filenames of chroma seed model asts')
   parser.add_argument('--chroma_seed_model_psnrs', type=str, help='file with list of psnrs of chroma seed models')
   
@@ -855,6 +860,7 @@ if __name__ == "__main__":
 
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
+  parser.add_argument('--rgb8chan', action="store_true")
   parser.add_argument('--binop_change', action="store_true")
   parser.add_argument('--insertion_bias', action="store_true")
   parser.add_argument('--demosaicnet_search', action="store_true", help='whether to run search over demosaicnet space')
@@ -884,6 +890,10 @@ if __name__ == "__main__":
     args.seed_model_psnrs = args.chroma_seed_model_psnrs
     args.green_model_asts = [l.strip() for l in open(args.green_model_asts)]
     args.green_model_weights = [l.strip() for l in open(args.green_model_weights)]
+    args.task_out_c = 3
+  elif args.rgb8chan:
+    args.seed_model_files = args.rgb8chan_seed_model_files
+    args.seed_model_psnrs = args.rgb8chan_seed_model_psnrs
     args.task_out_c = 3
   else:
     args.seed_model_files = args.green_seed_model_files

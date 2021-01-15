@@ -209,6 +209,26 @@ class RGBExtractor(TernaryHcIcJcKc, Special, Node):
     return 3 # full rgb image
 
 
+# Takes bayer quad, 8 channel predction
+# spits out full RGB Image at full resolution
+class RGB8ChanExtractor(BinopIcJcKc, Special, Node):
+  def __init__(self, lchild, rchild, name=None):
+    if name is None:
+      name = "RGB8ChanExtractor"
+    Node.__init__(self, name, 2)
+    self.lchild = lchild
+    self.rchild = rchild
+    self.in_c = (4, 8) # bayer quad, 8 channel prediction
+    self.out_c = 3
+
+  def Ic(self):
+    return 4 
+  def Jc(self):
+    return 8 
+  def Kc(self): 
+    return 3 # full rgb image
+
+
 """
 Takes BayerQuad and 2 channel green prediction 
 Spits out full Green image at full resolution  
@@ -427,6 +447,12 @@ def compute_input_output_channels(self):
   self.child1.compute_input_output_channels()
   self.child2.compute_input_output_channels()
   self.child3.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(RGB8ChanExtractor)
+def compute_input_output_channels(self):
+  self.lchild.compute_input_output_channels()
+  self.rchild.compute_input_output_channels()
   return self.in_c, self.out_c
 
 @extclass(GreenExtractor)
@@ -772,7 +798,7 @@ def structural_hash(tree):
 
   op_list = [Conv1x1, Conv1D, Conv2D, Softmax, Relu, Mul, Add, Sub, \
             AddExp, LogSub, Stack, Upsample, Downsample, InterleavedSum, \
-            GroupedSum, RGBExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input]
+            GroupedSum, RGBExtractor, RGB8ChanExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input]
 
   ops_used = set([type(n) for n in nodes])
   op_coverage = 0
@@ -1056,7 +1082,7 @@ sandwich_pairs = {
   Downsample: Upsample
 }
 
-border_ops = set((RGBExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input))
+border_ops = set((RGBExtractor, RGB8ChanExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input))
 nl_and_sp = nonlinear_ops.union(special_ops)
 l_and_sp = linear_ops.union(special_ops)
 all_ops = nl_and_sp.union(l_and_sp)

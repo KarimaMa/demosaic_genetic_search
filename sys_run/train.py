@@ -9,7 +9,7 @@ import os
 import random 
 import numpy as np
 import sys
-from dataset import FullPredictionQuadDataset, GreenQuadDataset, ids_from_file, FastDataLoader
+from dataset import FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, ids_from_file, FastDataLoader
 
 sys.path.append(sys.path[0].split("/")[0])
 sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
@@ -36,10 +36,12 @@ def create_loggers(model_dir, model_id, num_models, mode):
 
 
 def create_validation_dataset(args):
-  if not args.full_model:
-    validation_data = GreenQuadDataset(data_file=args.validation_file)
-  else:
+  if args.full_model:
     validation_data = FullPredictionQuadDataset(data_file=args.validation_file)
+  elif args.rgb8chan:
+    validation_data = RGB8ChanDataset(data_file=args.validation_file)
+  else:
+    validation_data = GreenQuadDataset(data_file=args.validation_file)
 
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
@@ -55,10 +57,12 @@ def create_train_dataset(args):
   full_data_filenames = ids_from_file(args.training_file)
   used_filenames = full_data_filenames[0:int(args.train_portion)]
 
-  if not args.full_model:
-    train_data = GreenQuadDataset(data_file=args.training_file) 
-  else:
+  if args.full_model:
     train_data = FullPredictionQuadDataset(data_file=args.training_file)
+  elif args.rgb8chan:
+    train_data = RGB8ChanDataset(data_file=args.training_file)
+  else:
+    train_data = GreenQuadDataset(data_file=args.training_file) 
 
   num_train = len(train_data)
   train_indices = list(range(num_train))
@@ -212,7 +216,6 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
         model_inputs = {"Input(Bayer)": bayer, 
                         "Input(Green@GrGb)": green_grgb, 
                         "Input(RedBlueBayer)": redblue_bayer}
-        pred = model.run(model_inputs)
       else:
         model_inputs = {"Input(Bayer)": bayer}
 
@@ -230,10 +233,10 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
       valid_losses, valid_psnrs = infer(args, gpu_id, validation_queue, models, criterion)
       batchwise_valid_psnrs = [util.compute_psnr(l) for l in valid_losses]
       variance_tracker.update(batchwise_valid_psnrs)
-      
+
       for i in range(len(models)):
         validation_loggers[i].info(f'validation step {step} {valid_losses[i]} {valid_psnrs[i]:2.3f}')
-      
+
   return [loss_tracker.avg for loss_tracker in loss_trackers], variance_tracker.validation_variance()
 
 
@@ -266,7 +269,6 @@ def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_
         model_inputs = {"Input(Bayer)": bayer, 
                         "Input(Green@GrGb)": green_grgb, 
                         "Input(RedBlueBayer)": redblue_bayer}
-        pred = model.run(model_inputs)
       else:
         model_inputs = {"Input(Bayer)": bayer}
 

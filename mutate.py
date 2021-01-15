@@ -85,13 +85,13 @@ class Mutator():
     else:
       if self.args.insertion_bias:
         self.early_mutation_type_cdf = [0.4, 1.0, 1.0, 1.0, 1.0]
-        self.late_mutation_type_cdf = [0.35, 0.70, 0.80, 0.95, 1.0, 1.0]
+        self.late_mutation_type_cdf = [0.50, 0.50, 0.60, 0.80, 1.0, 1.0]
 
       if self.args.demosaicnet_search:
         self.mutation_type_cdf = [0.30, 0.6, 0.6, 0.8, 1.0, 1.0]
 
     if self.args.binop_change: # cdf for whether binop operand is taken from mutating subtree or partner tree or input ops
-      self.binop_operand_cdf = [0.25, 0.75, 1.0]
+      self.binop_operand_cdf = [0.20, 0.80, 1.0]
 
     self.binop_tries = 0
     self.binop_success = 0
@@ -484,7 +484,12 @@ def channel_mutation(self, tree, chosen_conv_id=None):
     # if the mutated convolution's new output channels is not divisible by its groups,
     # set the groups to the factor of its in and out channels closest to its current groups
     in_c_factors = get_factors(chosen_conv.in_c)
-    out_c_factors = get_factors(chosen_conv.out_c)
+    if type(chosen_conv) is Conv1D:
+      out_c = chosen_conv.out_c // 2
+    else:
+      out_c = chosen_conv.out_c 
+
+    out_c_factors = get_factors(out_c)
     factors = in_c_factors.intersection(out_c_factors)
     closest_factor = get_closest_factor(factors, chosen_conv.groups)
     chosen_conv.groups = closest_factor # if current groups is already a factor, this does nothing
@@ -514,8 +519,13 @@ def group_mutation(self, tree):
       break
   self.current_mutation_info.node_id = chosen_conv_id
 
+  if type(chosen_conv) is Conv1D:
+    out_c = chosen_conv.out_c // 2
+  else:
+    out_c = chosen_conv.out_c
+
   in_c_factors = get_factors(chosen_conv.in_c)
-  out_c_factors = get_factors(chosen_conv.out_c)
+  out_c_factors = get_factors(out_c)
   factors = in_c_factors.intersection(out_c_factors)
   factors.remove(chosen_conv.groups)
   if len(factors) == 0:
@@ -1816,7 +1826,11 @@ def accept_tree(self, tree):
 
   # reject invalid groups
   if issubclass(tree_type, Linear):
-    if tree.out_c % tree.groups != 0 or tree.in_c % tree.groups != 0:
+    if tree_type is Conv2D: 
+      out_c = tree.out_c // 2
+    else:
+      out_c = tree.out_c
+    if out_c % tree.groups != 0 or tree.in_c % tree.groups != 0:
       self.debug_logger.debug("rejecting convolution with invalid grouping")
       assert False, "rejecting convolution with invalid grouping"
 

@@ -375,6 +375,70 @@ class RGBExtractorOp(nn.Module):
     self._operands[2].to_gpu(gpu_id)
 
 
+class RGB8ChanExtractorOp(nn.Module):
+  def __init__(self, operand1, operand2):
+    super(RGB8ChanExtractorOp, self).__init__()
+    self._operands = nn.ModuleList([operand1, operand2])
+    self.pixel_shuffle = nn.PixelShuffle(upscale_factor=2)
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+    self._operands[1]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand1 = self._operands[0].run(model_inputs)
+      operand2 = self._operands[1].run(model_inputs)
+      self.output = self.forward(operand1, operand2)
+    return self.output
+
+  """
+  Takes bayer quad and 2 channel green prediction
+  Spits out full green channel 
+  """
+  def forward(self, bayer_quad, rgb_pred):
+    # input: bayer an rgb missing values
+    # output: full image
+    bayer_quad_shape = list(bayer_quad.shape)
+    N = bayer_quad_shape[0]
+    img_h = bayer_quad_shape[2] * 2
+    img_w = img_h
+    out_shape = [N, 3, img_h, img_w]
+
+    flat_bayer = self.pixel_shuffle(bayer_quad)
+    flat_pred = self.pixel_shuffle(rgb_pred)
+
+    output = torch.empty(torch.Size(out_shape), device=bayer_quad.device)
+    
+    output[:,0,0::2,0::2] =  flat_pred[:,0,0::2,0::2] # R at Gr
+    output[:,1,0::2,0::2] = flat_bayer[:,0,0::2,0::2]
+    output[:,2,0::2,0::2] =  flat_pred[:,1,0::2,0::2] # B at Gr
+
+    output[:,0,0::2,1::2] = flat_bayer[:,0,0::2,1::2] 
+    output[:,1,0::2,1::2] =  flat_pred[:,0,0::2,1::2] # G at R
+    output[:,2,0::2,1::2] =  flat_pred[:,1,0::2,1::2] # B at R
+
+    output[:,0,1::2,0::2] =  flat_pred[:,0,1::2,0::2] # R at B
+    output[:,1,1::2,0::2] =  flat_pred[:,1,1::2,0::2] # G at B
+    output[:,2,1::2,0::2] = flat_bayer[:,0,1::2,0::2] 
+
+    output[:,0,1::2,1::2] =  flat_pred[:,0,1::2,1::2] # R at Gb
+    output[:,1,1::2,1::2] = flat_bayer[:,0,1::2,1::2] 
+    output[:,2,1::2,1::2] =  flat_pred[:,1,1::2,1::2] # B at Gb
+
+    return output
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+
+
 class GreenExtractorOp(nn.Module):
   def __init__(self, operand1, operand2):
     super(GreenExtractorOp, self).__init__()
@@ -1034,6 +1098,20 @@ def ast_to_model(self, shared_children=None):
   child3_model = self.child3.ast_to_model(shared_children)
   model = RGBExtractorOp(child1_model, child2_model, child3_model)
 
+  shared_children[id(self)] = model 
+  return model
+
+@extclass(RGB8ChanExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
+  model = RGB8ChanExtractorOp(lmodel, rmodel)
+  
   shared_children[id(self)] = model 
   return model
 

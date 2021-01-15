@@ -212,6 +212,9 @@ class ModelEvaluator():
 			cost += self.compute_cost_helper(root.child1, seen)
 			cost += self.compute_cost_helper(root.child2, seen)
 			cost += self.compute_cost_helper(root.child3, seen)
+		elif isinstance(root, RGB8ChanExtractor):
+			cost += self.compute_cost_helper(root.lchild, seen)
+			cost += self.compute_cost_helper(root.rchild, seen) 
 		elif isinstance(root, GreenExtractor):
 			cost += self.compute_cost_helper(root.lchild, seen)
 			cost += self.compute_cost_helper(root.rchild, seen) 
