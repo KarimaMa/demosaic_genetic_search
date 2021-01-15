@@ -1,23 +1,25 @@
-from peewee import *
+import peewee as pw
 
 if __name__ == "__main__":
-    db_host = 'mysql.csail.mit.edu'
-    db_name = 'ModelSearch'
-    db_user = 'karima'
-    db_password = 'trisan4th' #password
-    db_charset = 'utf8mb4'
-
     db_conn = {
-        'host': db_host,
-        'user': db_user,
-        'passwd': db_password,
+        'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+        'user': 'admin',
+        'passwd': 'trisan4th',
         'port': 3306,
     }
 
-    db = MySQLDatabase(db_name, **db_conn)
+    db = pw.MySQLDatabase('modelsearch', **db_conn)
+    print("Created DB")
 
-    db.connect()
+    class MySQLModel(pw.Model):
+        """A base model that will use our MySQL database"""
+        class Meta:
+            database = db
 
-    # print(db)
-    # import ipdb; ipdb.set_trace()
+    class User(MySQLModel):
+        username = pw.CharField()
 
+    print("connecting")
+    conn = db.connect()
+    db.close()
+    print("done")

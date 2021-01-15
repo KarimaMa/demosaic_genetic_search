@@ -16,8 +16,8 @@ DATA=/mnt/ilcompf9d1/user/mgharbi/code/karima/data
 DATA_LOCAL=/dev/shm/data/sample_files.txt
 rsync -av $DATA /dev/shm
 
-# always use tablename=adobegreen or tablename=adobechroma depending on whether you're running green or chroma search 
 echo "Running search"
+# always use tablename=adobegreen or tablename=adobechroma depending on whether you're running green or chroma search 
 python sys_run/run.py --training_file=$DATA_LOCAL \
     --validation_file=$DATA_LOCAL \
     --save=$ROOT/search_results \
