@@ -325,7 +325,10 @@ def fix_channel_count_downwards(root, parent, out_c, fixed_nodes=None):
       root.out_c = out_c
       # change grouping if old groups is no longer divisible by the new input channels
       in_c_factors = get_factors(root.in_c)
-      out_c_factors = get_factors(root.out_c)
+      if type(root) is Conv1D:
+        out_c_factors = get_factors(root.out_c)
+      else:
+        out_c_factors = get_factors(root.out_c // 2)
       factors = in_c_factors.intersection(out_c_factors)
       closest_factor = get_closest_factor(factors, root.groups)
       root.groups = closest_factor # if current groups is already a factor, this does nothing
@@ -438,7 +441,10 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c, fixed_nodes=None):
     parent.in_c = in_c
     # change grouping if old groups is no longer divisible by the new input channels
     in_c_factors = get_factors(parent.in_c)
-    out_c_factors = get_factors(parent.out_c)
+    if type(parent) is Conv1D:
+      out_c_factors = get_factors(parent.out_c // 2)
+    else:
+      out_c_factors = get_factors(parent.out_c)
     factors = in_c_factors.intersection(out_c_factors)
     closest_factor = get_closest_factor(factors, parent.groups)
     parent.groups = closest_factor # if current groups is already a factor, this does nothing
