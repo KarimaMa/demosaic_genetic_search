@@ -85,7 +85,7 @@ class Mutator():
     else:
       if self.args.insertion_bias:
         self.early_mutation_type_cdf = [0.4, 1.0, 1.0, 1.0, 1.0]
-        self.late_mutation_type_cdf = [0.50, 0.50, 0.60, 0.80, 1.0, 1.0]
+        self.late_mutation_type_cdf = [0.30, 0.60, 0.70, 0.85, 1.0, 1.0]
 
       if self.args.demosaicnet_search:
         self.mutation_type_cdf = [0.30, 0.6, 0.6, 0.8, 1.0, 1.0]
