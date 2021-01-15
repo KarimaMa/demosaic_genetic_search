@@ -537,15 +537,7 @@ class Searcher():
         return True
 
 
-  # searches over program mutations within tiers of computational cost
-  def search(self, compute_cost_tiers, tier_size):
-    cost_tiers = CostTiers(self.args.tier_database_dir, compute_cost_tiers, self.search_logger)
-    if self.args.restart_generation is not None:
-      cost_tiers.load_generation_from_database(self.args.tier_snapshot, self.args.restart_generation-1)
-
-    if self.args.model_db_snapshot is not None:
-      self.model_database.load(self.args.model_db_snapshot)
-
+  def load_seed_models(self, cost_tiers):
     # load all seed models
     seed_model_id = self.model_manager.start_id
     seed_model_files = [l.strip() for l in open(self.args.seed_model_files)]
@@ -602,18 +594,29 @@ class Searcher():
 
       seed_model_id = self.model_manager.get_next_model_id()
 
-    # CHANGE TO NOT BE FIXED - SHOULD BE INFERED FROM TASK
-    if self.args.restart_generation is None:
+
+  # searches over program mutations within tiers of computational cost
+  def search(self, compute_cost_tiers, tier_size):
+    cost_tiers = CostTiers(self.args.tier_database_dir, compute_cost_tiers, self.search_logger)
+
+    if self.args.restart_generation is not None:
+      cost_tiers.load_from_snapshot(self.args.tier_db_snapshot, self.args.tier_snapshot)
+      self.model_database.load(self.args.model_db_snapshot)
+      start_generation = self.args.restart_generation
+      end_generation = start_generation + self.args.generations
+    else:
+      self.load_seed_models(cost_tiers)
       start_generation = 0
       end_generation = self.args.generations 
-    else:
-      start_generation = self.args.restart_generation
-      end_generation = start_generation + self.args.generations 
 
-    self.search_logger.info(f"   --- STARTING SEARCH AT GENERATION {start_generation} AND ENDING AT {end_generation} ---")
+    self.search_logger.info(f"--- STARTING SEARCH AT GENERATION {start_generation} AND ENDING AT {end_generation} ---")
+
     for generation in range(start_generation, end_generation):
       generational_tier_sizes = [len(tier.items()) for tier in cost_tiers.tiers]
-      self.search_logger.info(f"--- STARTING GENERATION {generation} ---")
+      if self.args.restart_generation and (generation == self.args.restart_generation):
+        self.search_logger.info(f"--- STARTING GENERATION {generation} at tier {self.args.restart_tier} ---")
+      else:
+        self.search_logger.info(f"--- STARTING GENERATION {generation} ---")
       printstr = "tier sizes: "
       for t in generational_tier_sizes:
         printstr += f"{t} "
@@ -625,6 +628,8 @@ class Searcher():
       new_cost_tiers = copy.deepcopy(cost_tiers) 
 
       for tid, tier in enumerate(cost_tiers.tiers):
+        if self.args.restart_generation and (generation == self.args.restart_generation) and (tid < self.args.restart_tier):
+          continue
         if len(tier) == 0:
           continue
 
@@ -745,7 +750,8 @@ class Searcher():
                                 self.args.save, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
 
         self.model_database.save()
-
+        new_cost_tiers.save_snapshot(generation, tid)
+        
       if self.args.pareto_sampling:
         new_cost_tiers.pareto_keep_topk(tier_size)
       else:
@@ -803,8 +809,11 @@ if __name__ == "__main__":
   parser.add_argument('--failure_database_dir', type=str, default='failure_database', help='path to save mutation failure statistics')
   parser.add_argument('--tier_database_dir', type=str, default='cost_tier_database', help='path to save cost tier snapshot')
   parser.add_argument('--restart_generation', type=int, help='generation to start search from if restarting a prior run')
+  parser.add_argument('--restart_tier', type=int, help='tier to start search from if restarting a prior run')
   parser.add_argument('--tier_snapshot', type=str, help='saved cost tiers to restart from')
   parser.add_argument('--model_db_snapshot', type=str, help='saved model database to restart from')
+  parser.add_argument('--tier_db_snapshot', type=str, help='saved tier database to restart from')
+
   parser.add_argument('--save', type=str, help='experiment name')
 
   parser.add_argument('--seed', type=int, default=1, help='random seed')
