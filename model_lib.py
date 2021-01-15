@@ -889,6 +889,30 @@ def Bilinear(width, k):
   return green
 
 
+"""
+Not to be confused with RGBGradientHalideModel which is the model
+used in the gradient halide paper, this is the seed model we use
+for predicting RGB all in one model
+"""
+def RGB8ChanGradientHalideModel(width, k):
+  bayer = Input(4, "Bayer")
+  
+  weight_conv = Conv2D(bayer, width, kwidth=k)
+  filter_conv = Conv2D(bayer, width, kwidth=k)
+  weights = Softmax(weight_conv)
+
+  mul = Mul(weights, filter_conv)
+  rgb_pred = GroupedSum(mul, 8)
+
+  bayer = Input(4, "Bayer")
+
+  rgb = RGB8ChanExtractor(bayer, rgb_pred)
+  rgb.assign_parents()
+  rgb.compute_input_output_channels()
+
+  return rgb
+
+
 def RGBGradientHalideModel(width, k):
   bayer = Input(4, "Bayer")
   
@@ -1111,3 +1135,32 @@ def ChromaSeedModel3(depth, width, no_grad, green_model, green_model_id):
   rgb.compute_input_output_channels()
 
   return rgb        
+
+
+def RGB8ChanDemosaicknet(depth, width):
+  bayer = Input(4, "Bayer")
+  # interp trunk
+  for i in range(depth):
+    if i == 0:
+      interp = Conv2D(bayer, width, kwidth=3)
+    else:
+      interp = Conv2D(relu, width, kwidth=3)
+    if i != depth-1:
+      relu = Relu(interp)
+
+    residual_prediction = Conv1x1(relu, width)
+  
+  bayer = Input(4, "Bayer")
+  stacked = Stack(bayer, residual_prediction) 
+
+  post_conv = Conv2D(stacked, width, kwidth=3)
+  post_relu = Relu(post_conv)
+  rgb_pred = Conv1x1(post_relu, 8) # 8 predicted missing values 
+
+  bayer = Input(4, "Bayer")
+  rgb = RGB8ChanExtractor(bayer, rgb_pred)
+  rgb.assign_parents()
+  rgb.compute_input_output_channels()
+
+  return rgb        
+
