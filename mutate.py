@@ -148,6 +148,11 @@ class Mutator():
     self.failed_mutation_info = []
 
     while True: # loop to keep trying over assertion errors
+      if self.give_up(structural_rejections, prune_rejections, seen_rejections, failures):
+        stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections, self.current_mutation_info)
+        self.debug_logger.debug(f"giving up mutation to produce model {model_id}")
+        return None, None, stats
+
       try:
         while True: # loop to keep trying over tree pruning 
           mutation_type = self.pick_mutation_type(tree, generation)
@@ -202,11 +207,6 @@ class Mutator():
           # tree was pruned
           self.failed_mutation_info.append(self.current_mutation_info)
           prune_rejections += 1
-
-          if self.give_up(structural_rejections, prune_rejections, seen_rejections, failures):
-            stats = MutationStats(failures, prune_rejections, structural_rejections, seen_rejections, self.current_mutation_info)
-            self.debug_logger.debug(f"giving up mutation to produce model {model_id}")
-            return None, None, stats
 
       # mutation failed
       except (AssertionError, AttributeError, TypeError) as e: 
@@ -1820,12 +1820,11 @@ def accept_tree(self, tree):
       self.debug_logger.debug("rejecting convolution with invalid grouping")
       assert False, "rejecting convolution with invalid grouping"
 
-  # output channels of Conv1D must be divisible by 2
   if tree_type is Conv1D:
     if tree.out_c % 2 != 0:
       self.debug_logger.debug("rejecting Conv1D with odd output channels")
-      return False, "rejecting Conv1D with odd output channels"
-
+      assert False, "rejecting Conv1D with odd output channels"
+  
   # don't allow softmax over a single channel
   if tree_type is Softmax and tree.out_c == 1:
     return False, "rejecting softmax over one channel"
