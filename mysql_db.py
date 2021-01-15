@@ -70,6 +70,17 @@ def drop_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class RGB8ChanTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestGreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -102,6 +113,8 @@ def drop_table(password, tablename):
     table_to_drop = DnetGreenTrees
   elif tablename == "chroma":
     table_to_drop = ChromaTrees
+  elif tablename == "rgb8chan":
+    table_to_drop = RGB8ChanTrees
   else:
     table_to_drop = TestChromaTrees
 
@@ -176,6 +189,17 @@ def create_table(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class RGB8ChanTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestGreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -222,6 +246,10 @@ def create_table(password, tablename):
               ChromaSeedModel2(2, 12, True, green_model, green_model_id), \
               ChromaSeedModel3(3, 12, True, green_model, green_model_id)]
     psnrs = [31.95, 32.05, 32.16]
+  elif tablename == "rgb8chan":
+    table = RGB8ChanTrees
+    models = [RGB8ChanGradientHalideModel(16,3), RGB8ChanDemosaicknet(3,12)]
+    psnrs = [30.03, 31.07]
   else:
     table = TestChromaTrees
     green_model = demosaic_ast.load_ast("SELECTED_GREEN_MODELS_12-30/3331/model_ast")
@@ -324,6 +352,17 @@ def select(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class RGB8ChanTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -345,6 +384,8 @@ def select(password, tablename):
     table = DnetGreenTrees
   elif tablename == "chroma":
     table = ChromaTrees
+  elif tablename == "rgb8chan":
+    table = RGB8ChanTrees
   else:
     table = TestChromaTrees
 
@@ -429,6 +470,17 @@ def select_range(password, tablename, id_min, id_max):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class RGB8ChanTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -450,6 +502,8 @@ def select_range(password, tablename, id_min, id_max):
     table = DnetGreenTrees
   elif tablename == "chroma":
     table = ChromaTrees
+  elif tablename == "rgb8chan":
+    table = RGB8ChanTrees
   else:
     table = TestChromaTrees
 
@@ -537,6 +591,17 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class RGB8ChanTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -558,6 +623,8 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     table = DnetGreenTrees
   elif tablename == "chroma":
     table = ChromaTrees
+  elif tablename == "rgb8chan":
+    table = RGB8ChanTrees
   else:
     table = TestChromaTrees
 
@@ -655,6 +722,17 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class RGB8ChanTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -676,6 +754,8 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     table = DnetGreenTrees
   elif tablename == "chroma":
     table = ChromaTrees
+  elif tablename == "rgb8chan":
+    table = RGB8ChanTrees
   else:
     table = TestChromaTrees
 
@@ -767,6 +847,17 @@ def mysql_delete_all(password, tablename):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class RGB8ChanTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -788,6 +879,8 @@ def mysql_delete_all(password, tablename):
     table = DnetGreenTrees
   elif tablename == "chroma":
     table = ChromaTrees
+  elif tablename == "rgb8chan":
+    table = RGB8ChanTrees
   else:
     table = TestChromaTrees
 
@@ -872,6 +965,17 @@ def mysql_delete(password, tablename, id_min, id_max):
     psnr_1 = FloatField()
     psnr_2 = FloatField()
 
+  class RGB8ChanTrees(BaseModel):
+    model_id = IntegerField(primary_key=True)
+    machine = CharField(index=False, max_length=20)
+    experiment_dir = CharField(index=False, max_length=40)
+    tree_hash = CharField(index=True, max_length=30)
+    tree_id_str = TextField()
+    add_date = DateTimeField(default=datetime.datetime.now)
+    psnr_0 = FloatField()
+    psnr_1 = FloatField()
+    psnr_2 = FloatField()
+
   class TestChromaTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
@@ -893,6 +997,8 @@ def mysql_delete(password, tablename, id_min, id_max):
     table = DnetGreenTrees
   elif tablename == "chroma":
     table = ChromaTrees
+  elif tablename == "rgb8chan":
+    table = RGB8ChanTrees
   else:
     table = TestChromaTrees
 
