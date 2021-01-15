@@ -2,9 +2,11 @@
 
 ### Running jobs on the Adobe cluster
 
+You need to logon to `ilcompm1` from the VPN to launch jobs.
+
 ##### Interactive session (for test and debug)
 
-Start by launching the interactice job:
+Start by launching the interactive job:
 
 ```shell
 condor_submit cluster/interactive.condor
