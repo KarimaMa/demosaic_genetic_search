@@ -1,4 +1,5 @@
 #!/bin/zsh
+# Basic job to test everything works
 
 echo "Starting worker $1"
 
@@ -6,25 +7,16 @@ ROOT=/mnt/ilcompf9d1/user/mgharbi/code/karima
 
 cd $ROOT/demosaic_genetic_search
 
-# echo "Installing python modules"
-# export PYTHONPATH=.:$PYTHONPATH
-
+echo "Installing python modules"
+export PYTHONPATH=.:$PYTHONPATH
 pip install -r requirements.txt
 
-# MODEL=output/checkpoints/sr2_bayer96_aafm 
-# OUTPUT=/mnt/ilcompf9d1/user/mgharbi/data/sr2_bayer_lpips
-#
-# python scripts/image_scraper.py data/flickr $OUTPUT $MODEL \
-#     --chunksize 500000 --worker_id $1 --offset 0 --criterion lpips 
+echo "Copying data to local memory drive"
+DATA=/mnt/ilcompf9d1/user/mgharbi/code/karima/data
+DATA_LOCAL=/dev/shm/data/sample_files.txt
+rsync -av $DATA /dev/shm
 
 # always use tablename=adobegreen or tablename=adobechroma depending on whether you're running green or chroma search 
-
-# echo "Copying data to local memory drive"
-# DATA=/mnt/ilcompf9d1/user/mgharbi/code/karima/data
-# DATA_LOCAL=/dev/shm/data/sample_files.txt
-# rsync -av $DATA /dev/shm
-# exit
-
 echo "Running search"
 python sys_run/run.py --training_file=$DATA_LOCAL \
     --validation_file=$DATA_LOCAL \
