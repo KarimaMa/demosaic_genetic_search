@@ -1826,7 +1826,7 @@ def accept_tree(self, tree):
 
   # reject invalid groups
   if issubclass(tree_type, Linear):
-    if tree_type is Conv2D: 
+    if tree_type is Conv1D: 
       out_c = tree.out_c // 2
     else:
       out_c = tree.out_c
