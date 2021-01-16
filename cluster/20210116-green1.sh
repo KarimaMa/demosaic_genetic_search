@@ -4,20 +4,22 @@ echo "Starting worker $1"
 
 ROOT=/mnt/ilcompf9d1/user/mgharbi/code/karima
 
-cd $ROOT/demosaic_genetic_search
-
 echo "Installing python modules"
 export PYTHONPATH=.:$PYTHONPATH
 pip install -r requirements.txt
 
 echo "Copying data to local memory drive"
-DATA=/mnt/ilcompf9d1/user/mgharbi/code/karima/data
+DATA=$ROOT/data
 DATA_LOCAL=/dev/shm/data
 rsync -av $DATA /dev/shm
 
-echo "Running job"
+echo "Copying code to local memory drive"
+CODE=$ROOT/demosaic_genetic_search
+CODE_LOCAL=/dev/shm/demosaic_genetic_search
+rsync -av $CODE /dev/shm
 
-python sys_run/run.py \
+echo "Running job"
+python $CODE_LOCAL/sys_run/run.py \
     --experiment_name=green-gradhalide-dnet-insert-binop \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
