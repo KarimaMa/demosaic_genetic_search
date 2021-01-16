@@ -1,0 +1,17 @@
+universe                = docker
+docker_image            = docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v10
+
+# We need this to get 64GB of /dev/shm
+environment = "HIGHMEM=1 MULTIGPU=0123"
+
+should_transfer_files = no
+transfer_executable   = false
+
+# arguments             = $(process)
+executable            = cluster/test_job.sh
+
+output                = log/test_job.out
+error                 = log/test_job.err
+log                   = log/test_job.log
+
+queue 1
