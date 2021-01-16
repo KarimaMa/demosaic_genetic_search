@@ -35,8 +35,8 @@ python sys_run/run.py \
     --generations=20 \
     --tablename=adobegreen \
     --tier_size=20 \
-    --green_seed_model_files=seed_model_files/green_seed_multires_dnet_asts.txt \
-    --green_seed_model_psnrs=seed_model_files/green_seed_multires_dnet_psnrs.txt \
+    --green_seed_model_files=seed_model_files/green_seed_asts.txt \
+    --green_seed_model_psnrs=seed_model_files/green_seed_psnrs.txt \
     --insertion_bias \
     --binop_change \
     --late_cdf_gen=9
