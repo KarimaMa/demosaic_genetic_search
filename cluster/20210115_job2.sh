@@ -19,7 +19,7 @@ echo "Running job"
 python sys_run/run.py \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
-    --save=$ROOT/GREEN_MODEL_SEARCH_01-15-MULTIRES-DNET-SEEDS-NODE2 \
+    --save=$ROOT/results/GREEN_MODEL_SEARCH_01-15-MULTIRES-DNET-SEEDS-NODE2 \
     --cost_tiers="0,200 200,400 400,800 800,1600 1600,3200" \
     --pareto_sampling \
     --pareto_factor=3 \

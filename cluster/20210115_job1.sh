@@ -12,14 +12,14 @@ pip install -r requirements.txt
 
 echo "Copying data to local memory drive"
 DATA=/mnt/ilcompf9d1/user/mgharbi/code/karima/data
-DATA_LOCAL=/dev/shm/data/sample_files.txt
+DATA_LOCAL=/dev/shm/data
 rsync -av $DATA /dev/shm
 
 echo "Running job"
 python sys_run/run.py \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
-    --save=$ROOT/GREEN_MODEL_SEARCH_01-15-MULTIRES-DNET-SEEDS \
+    --save=$ROOT/results/GREEN_MODEL_SEARCH_01-15-MULTIRES-DNET-SEEDS \
     --cost_tiers="0,200 200,400 400,800 800,1600 1600,3200" \
     --pareto_sampling \
     --pareto_factor=3 \
