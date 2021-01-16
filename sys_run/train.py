@@ -229,7 +229,7 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
       if step % args.report_freq == 0 or step == len(train_queue)-1:
         train_loggers[i].info('train %03d %e', step, loss.item())
 
-    if step % args.validation_freq == 0 and step > 400:
+    if step % args.validation_freq == 0 and step > args.validation_variance_start_step:
       valid_losses, valid_psnrs = infer(args, gpu_id, validation_queue, models, criterion)
       batchwise_valid_psnrs = [util.compute_psnr(l) for l in valid_losses]
       variance_tracker.update(batchwise_valid_psnrs)

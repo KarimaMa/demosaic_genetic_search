@@ -694,10 +694,8 @@ class Searcher():
           task_info = MutationTaskInfo(task_id, new_model_entry, new_model_dir, pytorch_models, new_model_id)
 
           # consult mysql db for seen models on other machines
-          # DISABLE MYSQL LOGGING FOR NOW
-          # seen_psnrs = mysql_db.find(self.args.mysql_auth, self.args.tablename, hash(new_model_ast), \
-          #                             new_model_ast.id_string(), self.mysql_logger)
-          seen_psnrs = None
+          seen_psnrs = mysql_db.find(self.args.mysql_auth, self.args.tablename, hash(new_model_ast), \
+                                      new_model_ast.id_string(), self.args.experiment_name, self.mysql_logger)
           if not seen_psnrs is None: # model seen on other machine, skip training and use the given psnrs
             self.search_logger.info(f"model {new_model_id} already seen on another machine")
             self.update_model_database(task_info, seen_psnrs)
@@ -749,9 +747,8 @@ class Searcher():
           compute_cost = task_info.database_entry["compute_cost"]
           new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
 
-          # DISABLE MYSQL LOGGING FOR NOW
-          # mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
-          #                       self.args.save, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
+          mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
+                                self.args.save, self.args.experiment_name, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
 
         self.model_database.save()
         new_cost_tiers.save_snapshot(generation, tid)
@@ -798,6 +795,8 @@ def parse_cost_tiers(s):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
+
+  parser.add_argument('--experiment_name', type=str)
   parser.add_argument('--max_channels', type=int, default=32, help='max channel count')
   parser.add_argument('--default_channels', type=int, default=12, help='initial channel count for Convs')
   parser.add_argument('--max_nodes', type=int, default=40, help='max number of nodes in a tree')
@@ -870,6 +869,7 @@ if __name__ == "__main__":
   parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of validation data image files')
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
+  parser.add_argument('--validation_variance_start_step', type=int, default=400, help='training step from which to start sampling validation PSNR for assessing variance')
 
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
