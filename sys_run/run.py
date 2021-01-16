@@ -695,7 +695,7 @@ class Searcher():
 
           # consult mysql db for seen models on other machines
           seen_psnrs = mysql_db.find(self.args.mysql_auth, self.args.tablename, hash(new_model_ast), \
-                                      new_model_ast.id_string(), self.mysql_logger)
+                                      new_model_ast.id_string(), self.args.experiment_name, self.mysql_logger)
           if not seen_psnrs is None: # model seen on other machine, skip training and use the given psnrs
             self.search_logger.info(f"model {new_model_id} already seen on another machine")
             self.update_model_database(task_info, seen_psnrs)
@@ -748,7 +748,7 @@ class Searcher():
           new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
 
           mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
-                                self.args.save, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
+                                self.args.save, self.args.experiment_name, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
 
         self.model_database.save()
         new_cost_tiers.save_snapshot(generation, tid)
@@ -795,6 +795,8 @@ def parse_cost_tiers(s):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
+
+  parser.add_argument('--experiment_name', type=str)
   parser.add_argument('--max_channels', type=int, default=32, help='max channel count')
   parser.add_argument('--default_channels', type=int, default=12, help='initial channel count for Convs')
   parser.add_argument('--max_nodes', type=int, default=40, help='max number of nodes in a tree')
