@@ -600,7 +600,10 @@ class Searcher():
     cost_tiers = CostTiers(self.args.tier_database_dir, compute_cost_tiers, self.search_logger)
 
     if self.args.restart_generation is not None:
-      cost_tiers.load_from_snapshot(self.args.tier_db_snapshot, self.args.tier_snapshot)
+      if self.args.restart_tier == 0:
+        cost_tiers.load_generation_from_database(self.args.tier_db_snapshot, self.args.restart_generation-1)
+      else:
+        cost_tiers.load_from_snapshot(self.args.tier_db_snapshot, self.args.tier_snapshot)
       self.model_database.load(self.args.model_db_snapshot)
       start_generation = self.args.restart_generation
       end_generation = start_generation + self.args.generations
