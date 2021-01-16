@@ -1,25 +1,35 @@
-from peewee import *
 from tree import *
 from model_lib import *
 import datetime
 import argparse
 import demosaic_ast 
+from peewee import *
+
 
 def drop_table(password, tablename):
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
+  db = MySQLDatabase('modelsearch', **db_conn)
 
-  db = MySQLDatabase(db_name, **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -126,20 +136,28 @@ def drop_table(password, tablename):
 
 def create_table(password, tablename):
 
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -277,20 +295,28 @@ def create_table(password, tablename):
 
 
 def select(password, tablename):
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -396,20 +422,28 @@ def select(password, tablename):
 
 
 def select_range(password, tablename, id_min, id_max):
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -516,20 +550,28 @@ def select_range(password, tablename, id_min, id_max):
 
 def find(password, tablename, tree_hash, tree_id_string, logger):
 
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -648,20 +690,28 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
 
 
 def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_str, psnrs, logger):
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -773,20 +823,28 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
 
 
 def mysql_delete_all(password, tablename):
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -890,20 +948,28 @@ def mysql_delete_all(password, tablename):
 
 
 def mysql_delete(password, tablename, id_min, id_max):
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:

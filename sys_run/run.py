@@ -694,10 +694,8 @@ class Searcher():
           task_info = MutationTaskInfo(task_id, new_model_entry, new_model_dir, pytorch_models, new_model_id)
 
           # consult mysql db for seen models on other machines
-          # DISABLE MYSQL LOGGING FOR NOW
-          # seen_psnrs = mysql_db.find(self.args.mysql_auth, self.args.tablename, hash(new_model_ast), \
-          #                             new_model_ast.id_string(), self.mysql_logger)
-          seen_psnrs = None
+          seen_psnrs = mysql_db.find(self.args.mysql_auth, self.args.tablename, hash(new_model_ast), \
+                                      new_model_ast.id_string(), self.mysql_logger)
           if not seen_psnrs is None: # model seen on other machine, skip training and use the given psnrs
             self.search_logger.info(f"model {new_model_id} already seen on another machine")
             self.update_model_database(task_info, seen_psnrs)
@@ -749,9 +747,8 @@ class Searcher():
           compute_cost = task_info.database_entry["compute_cost"]
           new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
 
-          # DISABLE MYSQL LOGGING FOR NOW
-          # mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
-          #                       self.args.save, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
+          mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
+                                self.args.save, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
 
         self.model_database.save()
         new_cost_tiers.save_snapshot(generation, tid)
