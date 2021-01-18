@@ -389,8 +389,9 @@ class Searcher():
 
     while True:
       if process_queue.is_empty() and len(running_processes) == 0:
-        print("No more processes to run, stopping training task")
+        self.task_logger.infor("No more processes to run, stopping training task")
         break
+
       # check for finished tasks and kill any that have exceeded timemout
       running_tasks = [tid for tid in running_processes.keys()]
       self.task_logger.info(f"running tasks {running_tasks}")
@@ -440,6 +441,8 @@ class Searcher():
                 start_times[task_id] = time.time()
                 restarted.add(task_id)
               else: # we've already failed to restart this task, give up 
+                self.task_logger.info(
+                    f"task {task_id} failed to restart, deleting process")
                 failed.add(task_id)
                 available_gpus.add(gpu_ids[task_id])
                 del running_processes[task_id]
@@ -450,16 +453,19 @@ class Searcher():
       available_gpu_list = [g for g in available_gpus]
       for available_gpu in available_gpu_list:
         if process_queue.is_empty():
-          print("process queue is empty, not job to start")
+          self.task_logger.info("process queue is empty, no job to start")
           break
+        self.task_logger.info("taking task from queue")
         task, task_info = process_queue.take()
         task_id = task_info.task_id
+        self.task_logger.info(f"took task {task_id}")
         gpu_ids[task_id] = available_gpu
         self.task_logger.info(f"starting task {task_id} model_id {task_info.model_id} on gpu {available_gpu}")
         task.start()
         running_processes[task_id] = (task, task_info)
         start_times[task_id] = time.time()
         available_gpus.remove(available_gpu)
+        self.task_logger.info(f"added new task {task_id}, available_gpus: {available_gpus}")
 
       time.sleep(20)
 
