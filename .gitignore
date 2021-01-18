@@ -8,3 +8,4 @@ TEST_SCHEDULER/*
 SYS_PERF_DATA/*
 log/*
 !log/.gitkeep
+log
