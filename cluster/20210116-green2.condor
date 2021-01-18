@@ -7,11 +7,12 @@ environment = "HIGHMEM=1 MULTIGPU=0123"
 should_transfer_files = no
 transfer_executable   = false
 
-# arguments             = $(process)
+requirements = TARGET.Machine=="ilcomp28.ilcomp"
+arguments             = $(process)
 executable            = cluster/20210116-green2.sh
 
-output                = log/20210116-green2.out
-error                 = log/20210116-green2.err
-log                   = log/20210116-green2.log
+output                = log/20210116-green2.$(process).out
+error                 = log/20210116-green2.$(process).err
+log                   = log/20210116-green2.$(process).log
 
-queue 1
+queue 4

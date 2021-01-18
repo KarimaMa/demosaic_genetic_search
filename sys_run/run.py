@@ -389,7 +389,9 @@ class Searcher():
 
     while True:
       if process_queue.is_empty() and len(running_processes) == 0:
+        self.task_logger.infor("No more processes to run, stopping training task")
         break
+
       # check for finished tasks and kill any that have exceeded timemout
       running_tasks = [tid for tid in running_processes.keys()]
       self.task_logger.info(f"running tasks {running_tasks}")
@@ -399,9 +401,11 @@ class Searcher():
         # check if process is done
         if not task.is_alive():
           self.task_logger.info(f"task {task_id} model_id {task_info.model_id} process name {task.name} is finished on time")
-          self.task_logger.info(f"tasks still in queue {[tid for tid, t in process_queue.queue]}")
+          self.task_logger.info(f"tasks still in queue {[tid for tid, t in process_queue.queue]}, joining task {task_id}")
           task.join()
           # mark the GPU it used as free
+          self.task_logger.info(
+              f"joined completed task {task_id}, freeing up gpu {gpu_ids[task_id]}")
           available_gpus.add(gpu_ids[task_id])
           del running_processes[task_id]
 
@@ -411,16 +415,24 @@ class Searcher():
           if curr_time - start_time > timeout:
             self.task_logger.info(f"task {task_id} model_id {task_info.model_id} process name {task.name} timed out, killing at {datetime.datetime.now()}")
             task.terminate()
+            self.task_logger.info(f"joining after termination of task {task_id}")
             task.join()
             # mark the GPU it used as free
+            self.task_logger.info(
+                f"joined after killing task {task_id}, freeing up gpu {gpu_ids[task_id]}")
             available_gpus.add(gpu_ids[task_id])
             del running_processes[task_id]
       
           # check if task ran into issues starting up and needs to be restarted
           if curr_time - start_time > bootup_time:
             if not os.path.exists(f"{task_info.model_dir}/v0_train_log"):
+              self.task_logger.info(
+                  f"task {task_id} has no 'v0_train_log', terminating")
               task.terminate()
+              self.task_logger.info(f"joining after termination of task {task_id}")
               task.join()
+              self.task_logger.info(
+                  f"joined after killing task {task_id}")
               if not task_id in restarted:
                 self.task_logger.info(f"task {task_id} model_id {task_info.model_id} process name {task.name} " +
                                       f"unresponsive, restarting on gpu {gpu_ids[task_id]}...")
@@ -429,6 +441,8 @@ class Searcher():
                 start_times[task_id] = time.time()
                 restarted.add(task_id)
               else: # we've already failed to restart this task, give up 
+                self.task_logger.info(
+                    f"task {task_id} failed to restart, deleting process")
                 failed.add(task_id)
                 available_gpus.add(gpu_ids[task_id])
                 del running_processes[task_id]
@@ -439,15 +453,19 @@ class Searcher():
       available_gpu_list = [g for g in available_gpus]
       for available_gpu in available_gpu_list:
         if process_queue.is_empty():
+          self.task_logger.info("process queue is empty, no job to start")
           break
+        self.task_logger.info("taking task from queue")
         task, task_info = process_queue.take()
         task_id = task_info.task_id
+        self.task_logger.info(f"took task {task_id}")
         gpu_ids[task_id] = available_gpu
         self.task_logger.info(f"starting task {task_id} model_id {task_info.model_id} on gpu {available_gpu}")
         task.start()
         running_processes[task_id] = (task, task_info)
         start_times[task_id] = time.time()
         available_gpus.remove(available_gpu)
+        self.task_logger.info(f"added new task {task_id}, available_gpus: {available_gpus}")
 
       time.sleep(20)
 
@@ -485,6 +503,7 @@ class Searcher():
       else:
         print('All training processes finished on time!')
         for p in processes:
+          print('joining process {}'.format(p.name))
           p.join() # make sure things are stopped properly
           print('stopping process {}'.format(p.name))
         break
@@ -499,6 +518,7 @@ class Searcher():
           p.terminate()
         print(f' -> stopping (joining) process {p.name}')
         p.join()
+        print(f' -> joined process {p.name}')
 
     for rank in range(size):
       model_id = rankd2modelId[rank]
@@ -889,6 +909,7 @@ if __name__ == "__main__":
   args = parser.parse_args()
 
   if not torch.cuda.is_available():
+    print("CUDA not found, aborting job.")
     sys.exit(1)
 
   random.seed(args.seed)

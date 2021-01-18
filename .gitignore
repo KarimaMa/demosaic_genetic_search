@@ -1,6 +1,6 @@
 *.pyc
 __pycache__/*
-*.txt
+# *.txt
 DISTILL/*
 DATADUMP/*
 VALIDATION_PSNR_DISTRIBUTION/*
@@ -8,3 +8,5 @@ TEST_SCHEDULER/*
 SYS_PERF_DATA/*
 log/*
 !log/.gitkeep
+log
+seed_model_files
