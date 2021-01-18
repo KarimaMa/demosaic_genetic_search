@@ -1,6 +1,6 @@
 *.pyc
 __pycache__/*
-*.txt
+# *.txt
 DISTILL/*
 DATADUMP/*
 VALIDATION_PSNR_DISTRIBUTION/*

@@ -425,8 +425,8 @@ class Searcher():
           # check if task ran into issues starting up and needs to be restarted
           if curr_time - start_time > bootup_time:
             if not os.path.exists(f"{task_info.model_dir}/v0_train_log"):
-                self.task_logger.info(
-                    f"task {task_id} has no 'v0_train_log', terminating")
+              self.task_logger.info(
+                  f"task {task_id} has no 'v0_train_log', terminating")
               task.terminate()
               self.task_logger.info(f"joining after termination of task {task_id}")
               task.join()

@@ -9,8 +9,8 @@ environment = "HIGHMEM=1 MULTIGPU=0123"
 should_transfer_files = no
 transfer_executable   = false
 
-output                = log/interactive.out
-error                 = log/interactive.err
-log                   = log/interactive.log
+output                = log/interactive.$(process).out
+error                 = log/interactive.$(process).err
+log                   = log/interactive.$(process).log
 
 queue 4
