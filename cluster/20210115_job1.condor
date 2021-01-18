@@ -7,7 +7,7 @@ environment = "HIGHMEM=1 MULTIGPU=0123"
 should_transfer_files = no
 transfer_executable   = false
 
-requirements = TARGET.Machine=="ilcomp47.ilcomp"
+requirements = TARGET.Machine=="ilcomp36.ilcomp"
 arguments             = $(process)
 executable            = cluster/20210115_job1.sh
 

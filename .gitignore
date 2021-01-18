@@ -9,3 +9,4 @@ SYS_PERF_DATA/*
 log/*
 !log/.gitkeep
 log
+seed_model_files
