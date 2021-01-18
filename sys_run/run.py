@@ -389,7 +389,7 @@ class Searcher():
 
     while True:
       if process_queue.is_empty() and len(running_processes) == 0:
-        self.task_logger.infor("No more processes to run, stopping training task")
+        self.task_logger.info("No more processes to run, stopping training task")
         break
 
       # check for finished tasks and kill any that have exceeded timemout
