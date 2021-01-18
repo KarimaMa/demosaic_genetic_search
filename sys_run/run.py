@@ -903,6 +903,7 @@ if __name__ == "__main__":
   args = parser.parse_args()
 
   if not torch.cuda.is_available():
+    print("CUDA not found, aborting job.")
     sys.exit(1)
 
   random.seed(args.seed)
