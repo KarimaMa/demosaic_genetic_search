@@ -723,7 +723,7 @@ class Searcher():
           task = self.create_train_process(task_info, gpu_ids, train_psnrs, valid_psnrs)
           process_queue.add((task, task_info))
 
-        failed_tasks = self.run_training_tasks(gpu_ids, process_queue, training_tasks, valid_psnrs)
+        failed_tasks = self.run_training_tasks(gpu_ids, process_queue, train_psnrs, valid_psnrs)
 
         # update model database 
         for new_model_ast, task_info in training_tasks:
