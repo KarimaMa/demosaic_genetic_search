@@ -24,9 +24,9 @@ from restrictions import *
 from util import extclass, get_factors, get_closest_factor
 from enum import Enum
 from footprint import compute_footprint, compute_lowres_branch_footprint
+from search_mutation_type_pdfs import mutation_types_pdfs
 
 channel_options = [8, 10, 12, 16, 20, 24, 28, 32]
-
 
 
 class BinopOperandType(Enum):
@@ -62,6 +62,7 @@ class MutationInfo():
     self.green_model_id = -1
 
 
+
 """
 mutates the given tree 
 50/50 percent chance of doing an insertion or deletion mutation
@@ -69,6 +70,30 @@ unless tree size exceeds MAX_NODES. If tree size exceeds MAX_NODES
 only performs deletion mutation
 """
 class Mutator():
+  def load_mutation_types_cdf(self, search_mutation_type_pdfs):
+    if self.args.full_model:
+      if self.args.demosaicnet_search:
+        self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["demosaicnet_search"])
+      elif self.args.insertion_bias:
+        self.early_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["insertion_bias"]["early"])
+        self.late_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["insertion_bias"]["late"])
+      else:
+        self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["uniform"])
+    elif self.args.rgb8chan:
+      if self.args.insertion_bias:
+        self.early_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["rgb8chan"]["insertion_bias"]["early"])
+        self.late_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["rgb8chan"]["insertion_bias"]["late"])
+      else:
+        self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["rgb8chan"]["uniform"])
+    else:
+      if self.args.demosaicnet_search:
+        self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["green_model"]["demosaicnet_search"])
+      elif self.args.insertion_bias:
+        self.early_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["green_model"]["insertion_bias"]["early"])
+        self.late_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["green_model"]["insertion_bias"]["late"])
+      else:
+        self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["green_model"]["uniform"])
+
   def __init__(self, args, debug_logger, mysql_logger):
     
     self.args = args
@@ -80,15 +105,7 @@ class Mutator():
 
     self.failed_mutation_info = []
 
-    if self.args.full_model:  
-      self.mutation_type_cdf = [0.20, 0.65, 0.75, 0.85, 0.9, 1.0]
-    else:
-      if self.args.insertion_bias:
-        self.early_mutation_type_cdf = [0.4, 1.0, 1.0, 1.0, 1.0]
-        self.late_mutation_type_cdf = [0.30, 0.60, 0.70, 0.85, 1.0, 1.0]
-
-      if self.args.demosaicnet_search:
-        self.mutation_type_cdf = [0.30, 0.6, 0.6, 0.8, 1.0, 1.0]
+    self.load_mutation_types_cdf(mutation_types_pdfs)
 
     if self.args.binop_change: # cdf for whether binop operand is taken from mutating subtree or partner tree or input ops
       self.binop_operand_cdf = [0.20, 0.80, 1.0]
@@ -122,20 +139,20 @@ class Mutator():
     elif tree_size <= min_tree_size:
       mutation_type = MutationType.INSERTION
     else:
-      if self.args.full_model or self.args.insertion_bias or self.args.demosaicnet_search:
-        if self.args.insertion_bias:
-          if generation <= self.args.late_cdf_gen:
-            self.mutation_type_cdf = self.early_mutation_type_cdf
-          else:
-            self.mutation_type_cdf = self.late_mutation_type_cdf
-
-        rv = random.uniform(0,1)
-        for i, mtype in enumerate(list(MutationType)):
-          if rv <= self.mutation_type_cdf[i]:
-            mutation_type = mtype
-            break
+      if self.args.insertion_bias:
+        if generation <= self.args.late_cdf_gen:
+          mutation_type_cdf = self.early_mutation_type_cdf
+        else:
+          mutation_type_cdf = self.late_mutation_type_cdf
       else:
-        mutation_type = random.choice(list(MutationType)[:-1])
+        mutation_type_cdf = self.mutation_type_cdf
+
+      rv = random.uniform(0,1)
+      for i, mtype in enumerate(list(MutationType)):
+        if rv <= mutation_type_cdf[i]:
+          mutation_type = mtype
+          break
+    self.debug_logger.debug(f"--- mutation type cdf: {mutation_type_cdf} ---")
     return mutation_type
 
   def mutate(self, parent_id, model_id, tree, input_set, generation, partner_ast=None):
