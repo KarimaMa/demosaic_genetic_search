@@ -85,7 +85,8 @@ class Node:
       id_str += f"g{self.groups}-"
     if hasattr(self, "green_model_id"):
       id_str += f"green_model{self.green_model_id}-"
-
+    if hasattr(self, "node"):
+      id_str += f"{self.node.id_string()}-"
     if self.num_children == 3:
       id_str += f"{self.child1.id_string()}-"
       id_str += f"{self.child2.id_string()}-"
@@ -277,6 +278,8 @@ class Node:
         return False
       if hasattr(self, "green_model_id"):
         return self.green_model_id == other.green_model_id
+      if hasattr(self, "node"):
+        return (self.node).is_same_as_wrapper(other.node)
       return True
     elif self.num_children == 1: 
       if self.out_c != other.out_c or self.in_c != other.in_c:
