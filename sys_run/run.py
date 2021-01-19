@@ -88,16 +88,19 @@ def run_train(task_id, train_args, gpu_ids, model_id, pytorch_models, model_dir,
     for m in pytorch_models:
       m._initialize_parameters()
   except RuntimeError:
-    print(f"Failed to initialize model {model_id}")
+    task_logger.info(f"Failed to initialize model {model_id}")
+    # print(f"Failed to initialize model {model_id}")
   else:
     util.create_dir(model_dir)
     training_logger = util.create_logger(f'model_{model_id}_train_logger', logging.INFO, log_format, \
-                                        os.path.join(model_dir, f'model_{model_id}_training_log'))
+                                         os.path.join(model_dir, f'model_{model_id}_training_log'))
     
-    print('Task ', task_id, ' launched on GPU ', gpu_id, ' model id ', model_id)
+    # print('Task ', task_id, ' launched on GPU ', gpu_id, ' model id ', model_id)
+    task_logger.info(f"Task {task_id} launched on GPU {gpu_id}  model id {model_id}")
     model_valid_psnrs, model_train_psnrs = train_model(train_args, gpu_id, model_id, pytorch_models, model_dir, training_logger)
     for i in range(train_args.model_initializations):
       index = train_args.model_initializations * task_id + i 
+      task_logger.info(f"Task {task_id} updating psnr at {index} (of {len(train_psnrs)}) from initialization {i}")
       train_psnrs[index] = model_train_psnrs[i]
       valid_psnrs[index] = model_valid_psnrs[i]
 
