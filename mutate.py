@@ -152,7 +152,7 @@ class Mutator():
         if rv <= mutation_type_cdf[i]:
           mutation_type = mtype
           break
-    self.debug_logger.debug(f"--- mutation type cdf: {mutation_type_cdf} ---")
+      self.debug_logger.debug(f"--- mutation type cdf: {mutation_type_cdf} ---")
     return mutation_type
 
   def mutate(self, parent_id, model_id, tree, input_set, generation, partner_ast=None):
