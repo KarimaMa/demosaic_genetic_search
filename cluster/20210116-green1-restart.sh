@@ -56,6 +56,6 @@ python $CODE_LOCAL/sys_run/run.py \
     --late_cdf_gen=9 \
     --restart_tier=2 \
     --restart_generation=6 \
-    --tier_db_snapshot=$ROOT/results/GREEN_SEARCH_01-16-GRADHALIDE-DNET-SEEDS-INSERT-BINOP/cost_tier_database/gen-6-snapshot-1 \
+    --tier_snapshot=$ROOT/results/GREEN_SEARCH_01-16-GRADHALIDE-DNET-SEEDS-INSERT-BINOP/cost_tier_database/gen-6-snapshot-1 \
     --tier_db_snapshot=$ROOT/results/GREEN_SEARCH_01-16-GRADHALIDE-DNET-SEEDS-INSERT-BINOP/cost_tier_database/TierDatabase-snapshot-20210118-025142 \
     --model_db_snapshot=$ROOT/results/GREEN_SEARCH_01-16-GRADHALIDE-DNET-SEEDS-INSERT-BINOP/model_database/ModelDatabase-snapshot-20210118-025142
