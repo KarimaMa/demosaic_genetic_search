@@ -304,9 +304,11 @@ if __name__ == "__main__":
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
+  parser.add_argument('--validation_variance_start_step', type=int, default=400, help='training step from which to start sampling validation PSNR for assessing variance')
 
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
+  parser.add_argument('--rgb8chan', action="store_true")
 
   parser.add_argument('--green_model_asts', type=str, help="file with list of filenames of green model asts")
   parser.add_argument('--green_model_weights', type=str, help="file with list of filenames of green model weights")
