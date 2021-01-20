@@ -1,0 +1,2 @@
+DATADUMP/GRADIENTHALIDE_GREEN_MODEL_W10K3_SEED/models/seed/model_v2_pytorch
+DATADUMP/GREEN_DEMOSAICNET_D3W8_SEED/models/seed/model_v0_pytorch
