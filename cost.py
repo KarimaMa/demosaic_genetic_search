@@ -5,7 +5,10 @@ import random
 import operator
 import logging
 import argparse
+import pickle
 import numpy as np 
+import time
+import os
 
 from demosaic_ast import *
 from pareto_util import get_pareto_ranks
@@ -76,6 +79,37 @@ class CostTiers():
 					"psnr" : psnr}
 				self.tier_database.add(self.tier_database.cntr, data)
 				self.tier_database.cntr += 1
+
+	"""
+	Keeps track of which models are in each tier PRIOR to pareto filtering
+	at the end of the generation so that we can restart the search in the middle of a generation
+	"""
+	def save_snapshot(self, generation, tier):
+		self.logger.info(f"--- saving tier snapshot for generation {generation} after completeing tier {tier} ---")
+		snapshot_file = 'gen-{}-snapshot-{}'.format(generation, tier, time.strftime("%Y%m%d-%H%M%S"))
+		snapshot_path = os.path.join(self.database_dir, snapshot_file)
+
+		with open(snapshot_path, "wb") as f:     	
+			pickle.dump(self.tiers, f)
+
+
+	"""
+	loads everything from stored snapshot 
+	"""
+	def load_from_snapshot(self, database_file, snapshot_file):
+		self.logger.info(f'--- loading cost tier database from {database_file} ---')
+		self.build_cost_tier_database()
+		self.tier_database.load(database_file)
+		
+		self.tier_database.cntr = max(self.tier_database.table.keys())
+	
+		self.logger.info(f"--- Reloading cost tiers from {snapshot_file} ---")
+		with open(snapshot_file, "rb") as f:
+			self.tiers = pickle.load(f)
+	
+		for tid, tier in enumerate(self.tiers):
+			for model_id in tier:
+				self.logger.info(f"tier {tid} : model {model_id} compute cost {tier[model_id][0]}, psnr {tier[model_id][1]}")
 
 	"""
 	loads everything from stored snapshot up to (not including) the end generation

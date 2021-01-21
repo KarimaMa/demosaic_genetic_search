@@ -88,16 +88,19 @@ def run_train(task_id, train_args, gpu_ids, model_id, pytorch_models, model_dir,
     for m in pytorch_models:
       m._initialize_parameters()
   except RuntimeError:
-    print(f"Failed to initialize model {model_id}")
+    task_logger.info(f"Failed to initialize model {model_id}")
+    # print(f"Failed to initialize model {model_id}")
   else:
     util.create_dir(model_dir)
     training_logger = util.create_logger(f'model_{model_id}_train_logger', logging.INFO, log_format, \
-                                        os.path.join(model_dir, f'model_{model_id}_training_log'))
+                                         os.path.join(model_dir, f'model_{model_id}_training_log'))
     
-    print('Task ', task_id, ' launched on GPU ', gpu_id, ' model id ', model_id)
+    # print('Task ', task_id, ' launched on GPU ', gpu_id, ' model id ', model_id)
+    task_logger.info(f"Task {task_id} launched on GPU {gpu_id}  model id {model_id}")
     model_valid_psnrs, model_train_psnrs = train_model(train_args, gpu_id, model_id, pytorch_models, model_dir, training_logger)
     for i in range(train_args.model_initializations):
       index = train_args.model_initializations * task_id + i 
+      task_logger.info(f"Task {task_id} updating psnr at {index} (of {len(train_psnrs)}) from initialization {i}")
       train_psnrs[index] = model_train_psnrs[i]
       valid_psnrs[index] = model_valid_psnrs[i]
 
@@ -389,7 +392,9 @@ class Searcher():
 
     while True:
       if process_queue.is_empty() and len(running_processes) == 0:
+        self.task_logger.info("No more processes to run, stopping training task")
         break
+
       # check for finished tasks and kill any that have exceeded timemout
       running_tasks = [tid for tid in running_processes.keys()]
       self.task_logger.info(f"running tasks {running_tasks}")
@@ -399,9 +404,11 @@ class Searcher():
         # check if process is done
         if not task.is_alive():
           self.task_logger.info(f"task {task_id} model_id {task_info.model_id} process name {task.name} is finished on time")
-          self.task_logger.info(f"tasks still in queue {[tid for tid, t in process_queue.queue]}")
+          self.task_logger.info(f"tasks still in queue {[tid for tid, t in process_queue.queue]}, joining task {task_id}")
           task.join()
           # mark the GPU it used as free
+          self.task_logger.info(
+              f"joined completed task {task_id}, freeing up gpu {gpu_ids[task_id]}")
           available_gpus.add(gpu_ids[task_id])
           del running_processes[task_id]
 
@@ -411,16 +418,24 @@ class Searcher():
           if curr_time - start_time > timeout:
             self.task_logger.info(f"task {task_id} model_id {task_info.model_id} process name {task.name} timed out, killing at {datetime.datetime.now()}")
             task.terminate()
+            self.task_logger.info(f"joining after termination of task {task_id}")
             task.join()
             # mark the GPU it used as free
+            self.task_logger.info(
+                f"joined after killing task {task_id}, freeing up gpu {gpu_ids[task_id]}")
             available_gpus.add(gpu_ids[task_id])
             del running_processes[task_id]
       
           # check if task ran into issues starting up and needs to be restarted
           if curr_time - start_time > bootup_time:
             if not os.path.exists(f"{task_info.model_dir}/v0_train_log"):
+              self.task_logger.info(
+                  f"task {task_id} has no 'v0_train_log', terminating")
               task.terminate()
+              self.task_logger.info(f"joining after termination of task {task_id}")
               task.join()
+              self.task_logger.info(
+                  f"joined after killing task {task_id}")
               if not task_id in restarted:
                 self.task_logger.info(f"task {task_id} model_id {task_info.model_id} process name {task.name} " +
                                       f"unresponsive, restarting on gpu {gpu_ids[task_id]}...")
@@ -429,6 +444,8 @@ class Searcher():
                 start_times[task_id] = time.time()
                 restarted.add(task_id)
               else: # we've already failed to restart this task, give up 
+                self.task_logger.info(
+                    f"task {task_id} failed to restart, deleting process")
                 failed.add(task_id)
                 available_gpus.add(gpu_ids[task_id])
                 del running_processes[task_id]
@@ -439,15 +456,19 @@ class Searcher():
       available_gpu_list = [g for g in available_gpus]
       for available_gpu in available_gpu_list:
         if process_queue.is_empty():
+          self.task_logger.info("process queue is empty, no job to start")
           break
+        self.task_logger.info("taking task from queue")
         task, task_info = process_queue.take()
         task_id = task_info.task_id
+        self.task_logger.info(f"took task {task_id}")
         gpu_ids[task_id] = available_gpu
         self.task_logger.info(f"starting task {task_id} model_id {task_info.model_id} on gpu {available_gpu}")
         task.start()
         running_processes[task_id] = (task, task_info)
         start_times[task_id] = time.time()
         available_gpus.remove(available_gpu)
+        self.task_logger.info(f"added new task {task_id}, available_gpus: {available_gpus}")
 
       time.sleep(20)
 
@@ -485,6 +506,7 @@ class Searcher():
       else:
         print('All training processes finished on time!')
         for p in processes:
+          print('joining process {}'.format(p.name))
           p.join() # make sure things are stopped properly
           print('stopping process {}'.format(p.name))
         break
@@ -499,6 +521,7 @@ class Searcher():
           p.terminate()
         print(f' -> stopping (joining) process {p.name}')
         p.join()
+        print(f' -> joined process {p.name}')
 
     for rank in range(size):
       model_id = rankd2modelId[rank]
@@ -537,15 +560,7 @@ class Searcher():
         return True
 
 
-  # searches over program mutations within tiers of computational cost
-  def search(self, compute_cost_tiers, tier_size):
-    cost_tiers = CostTiers(self.args.tier_database_dir, compute_cost_tiers, self.search_logger)
-    if self.args.restart_generation is not None:
-      cost_tiers.load_generation_from_database(self.args.tier_snapshot, self.args.restart_generation-1)
-
-    if self.args.model_db_snapshot is not None:
-      self.model_database.load(self.args.model_db_snapshot)
-
+  def load_seed_models(self, cost_tiers):
     # load all seed models
     seed_model_id = self.model_manager.start_id
     seed_model_files = [l.strip() for l in open(self.args.seed_model_files)]
@@ -602,18 +617,32 @@ class Searcher():
 
       seed_model_id = self.model_manager.get_next_model_id()
 
-    # CHANGE TO NOT BE FIXED - SHOULD BE INFERED FROM TASK
-    if self.args.restart_generation is None:
+
+  # searches over program mutations within tiers of computational cost
+  def search(self, compute_cost_tiers, tier_size):
+    cost_tiers = CostTiers(self.args.tier_database_dir, compute_cost_tiers, self.search_logger)
+
+    if self.args.restart_generation is not None:
+      if self.args.restart_tier == 0:
+        cost_tiers.load_generation_from_database(self.args.tier_db_snapshot, self.args.restart_generation-1)
+      else:
+        cost_tiers.load_from_snapshot(self.args.tier_db_snapshot, self.args.tier_snapshot)
+      self.model_database.load(self.args.model_db_snapshot)
+      start_generation = self.args.restart_generation
+      end_generation = start_generation + self.args.generations
+    else:
+      self.load_seed_models(cost_tiers)
       start_generation = 0
       end_generation = self.args.generations 
-    else:
-      start_generation = self.args.restart_generation
-      end_generation = start_generation + self.args.generations 
 
-    self.search_logger.info(f"   --- STARTING SEARCH AT GENERATION {start_generation} AND ENDING AT {end_generation} ---")
+    self.search_logger.info(f"--- STARTING SEARCH AT GENERATION {start_generation} AND ENDING AT {end_generation} ---")
+
     for generation in range(start_generation, end_generation):
       generational_tier_sizes = [len(tier.items()) for tier in cost_tiers.tiers]
-      self.search_logger.info(f"--- STARTING GENERATION {generation} ---")
+      if self.args.restart_generation and (generation == self.args.restart_generation):
+        self.search_logger.info(f"--- STARTING GENERATION {generation} at tier {self.args.restart_tier} ---")
+      else:
+        self.search_logger.info(f"--- STARTING GENERATION {generation} ---")
       printstr = "tier sizes: "
       for t in generational_tier_sizes:
         printstr += f"{t} "
@@ -625,6 +654,8 @@ class Searcher():
       new_cost_tiers = copy.deepcopy(cost_tiers) 
 
       for tid, tier in enumerate(cost_tiers.tiers):
+        if self.args.restart_generation and (generation == self.args.restart_generation) and (tid < self.args.restart_tier):
+          continue
         if len(tier) == 0:
           continue
 
@@ -689,8 +720,11 @@ class Searcher():
           task_info = MutationTaskInfo(task_id, new_model_entry, new_model_dir, pytorch_models, new_model_id)
 
           # consult mysql db for seen models on other machines
+          """
           seen_psnrs = mysql_db.find(self.args.mysql_auth, self.args.tablename, hash(new_model_ast), \
-                                      new_model_ast.id_string(), self.mysql_logger)
+                                      new_model_ast.id_string(), self.args.experiment_name, self.mysql_logger)
+          """
+          seen_psnrs = None
           if not seen_psnrs is None: # model seen on other machine, skip training and use the given psnrs
             self.search_logger.info(f"model {new_model_id} already seen on another machine")
             self.update_model_database(task_info, seen_psnrs)
@@ -715,7 +749,7 @@ class Searcher():
           task = self.create_train_process(task_info, gpu_ids, train_psnrs, valid_psnrs)
           process_queue.add((task, task_info))
 
-        failed_tasks = self.run_training_tasks(gpu_ids, process_queue, training_tasks, valid_psnrs)
+        failed_tasks = self.run_training_tasks(gpu_ids, process_queue, train_psnrs, valid_psnrs)
 
         # update model database 
         for new_model_ast, task_info in training_tasks:
@@ -741,11 +775,13 @@ class Searcher():
 
           compute_cost = task_info.database_entry["compute_cost"]
           new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
+          """
           mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
-                                self.args.save, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
-
+                                self.args.save, self.args.experiment_name, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
+          """
         self.model_database.save()
-
+        new_cost_tiers.save_snapshot(generation, tid)
+        
       if self.args.pareto_sampling:
         new_cost_tiers.pareto_keep_topk(tier_size)
       else:
@@ -788,6 +824,8 @@ def parse_cost_tiers(s):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
+
+  parser.add_argument('--experiment_name', type=str)
   parser.add_argument('--max_channels', type=int, default=32, help='max channel count')
   parser.add_argument('--default_channels', type=int, default=12, help='initial channel count for Convs')
   parser.add_argument('--max_nodes', type=int, default=40, help='max number of nodes in a tree')
@@ -803,8 +841,11 @@ if __name__ == "__main__":
   parser.add_argument('--failure_database_dir', type=str, default='failure_database', help='path to save mutation failure statistics')
   parser.add_argument('--tier_database_dir', type=str, default='cost_tier_database', help='path to save cost tier snapshot')
   parser.add_argument('--restart_generation', type=int, help='generation to start search from if restarting a prior run')
+  parser.add_argument('--restart_tier', type=int, help='tier to start search from if restarting a prior run')
   parser.add_argument('--tier_snapshot', type=str, help='saved cost tiers to restart from')
   parser.add_argument('--model_db_snapshot', type=str, help='saved model database to restart from')
+  parser.add_argument('--tier_db_snapshot', type=str, help='saved tier database to restart from')
+
   parser.add_argument('--save', type=str, help='experiment name')
 
   parser.add_argument('--seed', type=int, default=1, help='random seed')
@@ -857,6 +898,7 @@ if __name__ == "__main__":
   parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of validation data image files')
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
+  parser.add_argument('--validation_variance_start_step', type=int, default=400, help='training step from which to start sampling validation PSNR for assessing variance')
 
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
@@ -873,6 +915,7 @@ if __name__ == "__main__":
   args = parser.parse_args()
 
   if not torch.cuda.is_available():
+    print("CUDA not found, aborting job.")
     sys.exit(1)
 
   random.seed(args.seed)

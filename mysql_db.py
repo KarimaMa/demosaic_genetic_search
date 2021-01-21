@@ -1,25 +1,35 @@
-from peewee import *
 from tree import *
 from model_lib import *
 import datetime
 import argparse
 import demosaic_ast 
+from peewee import *
+
 
 def drop_table(password, tablename):
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
+  db = MySQLDatabase('modelsearch', **db_conn)
 
-  db = MySQLDatabase(db_name, **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -30,6 +40,7 @@ def drop_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -41,6 +52,7 @@ def drop_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -52,6 +64,7 @@ def drop_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -63,6 +76,7 @@ def drop_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -74,6 +88,7 @@ def drop_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -85,6 +100,7 @@ def drop_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -96,6 +112,7 @@ def drop_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -126,20 +143,28 @@ def drop_table(password, tablename):
 
 def create_table(password, tablename):
 
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -149,6 +174,7 @@ def create_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -160,6 +186,7 @@ def create_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -171,6 +198,7 @@ def create_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -182,6 +210,7 @@ def create_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -193,6 +222,7 @@ def create_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -204,6 +234,7 @@ def create_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -215,6 +246,7 @@ def create_table(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -268,7 +300,7 @@ def create_table(password, tablename):
     key = i
     tree_hash = str(hash(model)).zfill(30)
     seed_record = table.create(model_id=key, tree_hash=tree_hash, machine="tefnut", \
-                            experiment_dir="seed", tree_id_str=model.id_string(), psnr_0=psnrs[i], psnr_1=-1, psnr_2=-1)
+                            experiment_dir="seed", experiment_name='None', tree_id_str=model.id_string(), psnr_0=psnrs[i], psnr_1=-1, psnr_2=-1)
     seed_record.save()
   
   query = table.select()
@@ -277,20 +309,28 @@ def create_table(password, tablename):
 
 
 def select(password, tablename):
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -301,6 +341,7 @@ def select(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -312,6 +353,7 @@ def select(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -323,6 +365,7 @@ def select(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -334,6 +377,7 @@ def select(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -345,6 +389,7 @@ def select(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -356,6 +401,7 @@ def select(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -367,6 +413,7 @@ def select(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -392,24 +439,32 @@ def select(password, tablename):
   query = table.select()
   print(len(query))
   for t in query:
-    print(t.model_id, t.tree_hash, t.machine, t.experiment_dir, t.psnr_0, t.psnr_1, t.psnr_2)
+    print(t.model_id, t.tree_hash, t.machine, t.experiment_dir, t.experiment_name, t.psnr_0, t.psnr_1, t.psnr_2)
 
 
 def select_range(password, tablename, id_min, id_max):
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -419,6 +474,7 @@ def select_range(password, tablename, id_min, id_max):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -430,6 +486,7 @@ def select_range(password, tablename, id_min, id_max):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -441,6 +498,7 @@ def select_range(password, tablename, id_min, id_max):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -452,6 +510,7 @@ def select_range(password, tablename, id_min, id_max):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -463,6 +522,7 @@ def select_range(password, tablename, id_min, id_max):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -474,6 +534,7 @@ def select_range(password, tablename, id_min, id_max):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -485,6 +546,7 @@ def select_range(password, tablename, id_min, id_max):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -514,22 +576,30 @@ def select_range(password, tablename, id_min, id_max):
 
 
 
-def find(password, tablename, tree_hash, tree_id_string, logger):
+def find(password, tablename, tree_hash, tree_id_string, experiment_name, logger):
 
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -540,6 +610,7 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -551,6 +622,7 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -562,6 +634,7 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -573,6 +646,7 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -584,6 +658,7 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -595,6 +670,7 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -606,6 +682,7 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -629,7 +706,7 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     table = TestChromaTrees
 
   tree_hash = str(tree_hash).zfill(30)
-  query = table.select().where(table.tree_hash == tree_hash, \
+  query = table.select().where(table.tree_hash == tree_hash, table.experiment_name == experiment_name, \
                                    table.tree_id_str == tree_id_string)
   if len(query) != 0:
     logger.info("---------")
@@ -639,7 +716,7 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
     logger.info("Already seen tree:")
     for t in query:
       psnrs = [t.psnr_0, t.psnr_1, t.psnr_2]
-      logger.info(f"ModelId: {t.model_id} Machine: {t.machine} Dir: {t.experiment_dir} " +
+      logger.info(f"ModelId: {t.model_id} Machine: {t.machine} Experiment: {t.experiment_name} " +
                   f"hash: {t.tree_hash} id_str: {t.tree_id_str} date: {t.add_date}")
       logger.info("---------")
       return psnrs
@@ -647,21 +724,29 @@ def find(password, tablename, tree_hash, tree_id_string, logger):
   return None
 
 
-def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_str, psnrs, logger):
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+def mysql_insert(password, tablename, model_id, machine, exp_dir, exp_name, tree_hash, id_str, psnrs, logger):
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:
@@ -671,6 +756,7 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -682,6 +768,7 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -693,6 +780,7 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -704,6 +792,7 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -715,6 +804,7 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -726,6 +816,7 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -737,6 +828,7 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -761,10 +853,10 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
 
   tree_hash = str(tree_hash).zfill(30)
 
-  already_in_db = find(password, tablename, tree_hash, id_str, logger)
+  already_in_db = find(password, tablename, tree_hash, id_str, exp_name, logger)
   if already_in_db is None:
     record = table.create(model_id=model_id, tree_hash=tree_hash, machine=machine, \
-                              experiment_dir=exp_dir, tree_id_str=id_str, \
+                              experiment_dir=exp_dir, experiment_name=exp_name, tree_id_str=id_str, \
                               psnr_0=psnrs[0], psnr_1=psnrs[1], psnr_2=psnrs[2])
     record.save()
 
@@ -772,30 +864,40 @@ def mysql_insert(password, tablename, model_id, machine, exp_dir, tree_hash, id_
     logger.info(f"other machine also generated tree with model {model_id}'s hash {tree_hash}")
 
 
-def mysql_delete_all(password, tablename):
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
+def mysql_delete(password, tablename, experiment_name, id_min, id_max):
+  # db_host = 'mysql.csail.mit.edu'
+  # db_name = 'ModelSearch'
+  # db_user = 'karima'
+  # db_password = password
+  # db_charset = 'utf8mb4'
     
+  # db_conn = {
+  #     'host': db_host,
+  #     'user': db_user,
+  #     'passwd': db_password,
+  #     'port': 3306,
+  # }
+
+  # db = MySQLDatabase(db_name, **db_conn)
+
   db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
+      'host': 'modelsearchinstance.c3t2omr0tk0e.us-east-2.rds.amazonaws.com',
+      'user': 'admin',
+      'passwd': password,
       'port': 3306,
   }
-
-  db = MySQLDatabase(db_name, **db_conn)
+  db = MySQLDatabase('modelsearch', **db_conn)
 
   class BaseModel(Model):
     class Meta:
       database = db
 
+
   class GreenTrees(BaseModel):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -807,6 +909,7 @@ def mysql_delete_all(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -818,6 +921,7 @@ def mysql_delete_all(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -829,6 +933,7 @@ def mysql_delete_all(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -840,6 +945,7 @@ def mysql_delete_all(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -851,6 +957,7 @@ def mysql_delete_all(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -862,6 +969,7 @@ def mysql_delete_all(password, tablename):
     model_id = IntegerField(primary_key=True)
     machine = CharField(index=False, max_length=20)
     experiment_dir = CharField(index=False, max_length=40)
+    experiment_name = CharField(index=False, max_length=40)
     tree_hash = CharField(index=True, max_length=30)
     tree_id_str = TextField()
     add_date = DateTimeField(default=datetime.datetime.now)
@@ -884,127 +992,12 @@ def mysql_delete_all(password, tablename):
   else:
     table = TestChromaTrees
 
-  found = table.select().where(table.model_id != 0)
-  for f in found:
-    f.delete_instance()
-
-
-def mysql_delete(password, tablename, id_min, id_max):
-  db_host = 'mysql.csail.mit.edu'
-  db_name = 'ModelSearch'
-  db_user = 'karima'
-  db_password = password
-  db_charset = 'utf8mb4'
-    
-  db_conn = {
-      'host': db_host,
-      'user': db_user,
-      'passwd': db_password,
-      'port': 3306,
-  }
-
-  db = MySQLDatabase(db_name, **db_conn)
-
-  class BaseModel(Model):
-    class Meta:
-      database = db
-
-
-  class GreenTrees(BaseModel):
-    model_id = IntegerField(primary_key=True)
-    machine = CharField(index=False, max_length=20)
-    experiment_dir = CharField(index=False, max_length=40)
-    tree_hash = CharField(index=True, max_length=30)
-    tree_id_str = TextField()
-    add_date = DateTimeField(default=datetime.datetime.now)
-    psnr_0 = FloatField()
-    psnr_1 = FloatField()
-    psnr_2 = FloatField()
-
-  class AdobeGreenTrees(BaseModel):
-    model_id = IntegerField(primary_key=True)
-    machine = CharField(index=False, max_length=20)
-    experiment_dir = CharField(index=False, max_length=40)
-    tree_hash = CharField(index=True, max_length=30)
-    tree_id_str = TextField()
-    add_date = DateTimeField(default=datetime.datetime.now)
-    psnr_0 = FloatField()
-    psnr_1 = FloatField()
-    psnr_2 = FloatField()
-
-  class DnetGreenTrees(BaseModel):
-    model_id = IntegerField(primary_key=True)
-    machine = CharField(index=False, max_length=20)
-    experiment_dir = CharField(index=False, max_length=40)
-    tree_hash = CharField(index=True, max_length=30)
-    tree_id_str = TextField()
-    add_date = DateTimeField(default=datetime.datetime.now)
-    psnr_0 = FloatField()
-    psnr_1 = FloatField()
-    psnr_2 = FloatField()
-
-  class ChromaTrees(BaseModel):
-    model_id = IntegerField(primary_key=True)
-    machine = CharField(index=False, max_length=20)
-    experiment_dir = CharField(index=False, max_length=40)
-    tree_hash = CharField(index=True, max_length=30)
-    tree_id_str = TextField()
-    add_date = DateTimeField(default=datetime.datetime.now)
-    psnr_0 = FloatField()
-    psnr_1 = FloatField()
-    psnr_2 = FloatField()
-
-  class TestGreenTrees(BaseModel):
-    model_id = IntegerField(primary_key=True)
-    machine = CharField(index=False, max_length=20)
-    experiment_dir = CharField(index=False, max_length=40)
-    tree_hash = CharField(index=True, max_length=30)
-    tree_id_str = TextField()
-    add_date = DateTimeField(default=datetime.datetime.now)
-    psnr_0 = FloatField()
-    psnr_1 = FloatField()
-    psnr_2 = FloatField()
-
-  class RGB8ChanTrees(BaseModel):
-    model_id = IntegerField(primary_key=True)
-    machine = CharField(index=False, max_length=20)
-    experiment_dir = CharField(index=False, max_length=40)
-    tree_hash = CharField(index=True, max_length=30)
-    tree_id_str = TextField()
-    add_date = DateTimeField(default=datetime.datetime.now)
-    psnr_0 = FloatField()
-    psnr_1 = FloatField()
-    psnr_2 = FloatField()
-
-  class TestChromaTrees(BaseModel):
-    model_id = IntegerField(primary_key=True)
-    machine = CharField(index=False, max_length=20)
-    experiment_dir = CharField(index=False, max_length=40)
-    tree_hash = CharField(index=True, max_length=30)
-    tree_id_str = TextField()
-    add_date = DateTimeField(default=datetime.datetime.now)
-    psnr_0 = FloatField()
-    psnr_1 = FloatField()
-    psnr_2 = FloatField()
-
-  if tablename == "testgreen":
-    table = TestGreenTrees
-  elif tablename == "green":
-    table = GreenTrees
-  elif tablename == "adobegreen":
-    table = AdobeGreenTrees
-  elif tablename == "dnetgreen":
-    table = DnetGreenTrees
-  elif tablename == "chroma":
-    table = ChromaTrees
-  elif tablename == "rgb8chan":
-    table = RGB8ChanTrees
+  if id_min is None and id_max is None:
+    found = table.select().where(table.experiment_name == experiment_name)
   else:
-    table = TestChromaTrees
-
-  found = table.select().where(table.model_id >= id_min, table.model_id <= id_max)
+    found = table.select().where(table.model_id >= id_min, table.model_id <= id_max, table.experiment_name == experiment_name)
   for t in found:
-    print(t.model_id, t.tree_hash, t.machine, t.experiment_dir, t.psnr_0, t.psnr_1, t.psnr_2)
+    print(t.model_id, t.tree_hash, t.machine, t.experiment_dir, t.experiment_name, t.psnr_0, t.psnr_1, t.psnr_2)
     t.delete_instance()
 
 
@@ -1015,13 +1008,17 @@ if __name__ == "__main__":
   parser.add_argument("--table", type=str)
   parser.add_argument("--create", action='store_true')
   parser.add_argument("--delete_range", type=str, help="ids to delete from table")
-
+  parser.add_argument("--delete_all", action='store_true')
+  parser.add_argument("--experiment_name", type=str)
   args = parser.parse_args()
 
   if args.delete_range:
     delete_range = [int(x.strip()) for x in args.delete_range.split(",")]
     print(f"deleting ids between {delete_range}")
-    mysql_delete(args.password, args.table, delete_range[0], delete_range[1])
+    mysql_delete(args.password, args.table, args.experiment_name, delete_range[0], delete_range[1])
+  if args.delete_all:
+    print(f"deleting all ids in {args.table} for {args.experiment_name}")
+    mysql_delete(args.password, args.table, args.experiment_name, None, None)
   if args.create:
     drop_table(args.password, args.table)
     create_table(args.password, args.table)
