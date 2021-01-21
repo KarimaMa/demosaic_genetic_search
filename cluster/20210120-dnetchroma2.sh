@@ -53,8 +53,8 @@ python $CODE_LOCAL/sys_run/run.py \
     --tier_size=20 \
     --full_model \
     --demosaicnet_search \
-    --green_model_asts=$CODE_LOCAL/PARETO_GREEN_MODELS/dnetgreen_pareto_files/dnet_pareto_green_asts.txt \
-    --green_model_weights=$CODE_LOCAL/PARETO_GREEN_MODELS/dnetgreen_pareto_files/dnet_pareto_green_weights.txt \
+    --green_model_asts=$CODE_LOCAL/PARETO_GREEN_MODELS/dnetgreen_pareto_files/pareto_green_asts.txt \
+    --green_model_weights=$CODE_LOCAL/PARETO_GREEN_MODELS/dnetgreen_pareto_files/pareto_green_weights.txt \
     --chroma_seed_model_files=$CODE_LOCAL/seed_model_files/dnet_chroma_seed_asts.txt \
     --chroma_seed_model_psnrs=$CODE_LOCAL/seed_model_files/dnet_chroma_seed_psnrs.txt 
   
