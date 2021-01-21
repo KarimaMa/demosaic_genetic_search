@@ -9,7 +9,7 @@ transfer_executable   = false
 
 requirements = TARGET.Machine=="ilcomp47.ilcomp"
 arguments             = $(process)
-executable            = cluster/20210116-green1-restart.sh
+executable            = cluster/20210116-green1.sh
 
 output                = log/20210116-green1.$(process).out
 error                 = log/20210116-green1.$(process).err
