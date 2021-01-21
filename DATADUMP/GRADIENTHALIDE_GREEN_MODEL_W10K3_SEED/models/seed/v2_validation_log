@@ -1,0 +1,10 @@
+2020-12-24 14:23:43,122 INFO validation epoch 000 mse 8.940002e-04 psnr 3.259319e+01
+2020-12-24 14:24:40,944 INFO validation epoch 001 mse 8.632339e-04 psnr 3.282433e+01
+2020-12-24 14:25:38,132 INFO validation epoch 002 mse 8.598027e-04 psnr 3.287867e+01
+2020-12-24 14:26:35,807 INFO validation epoch 003 mse 8.474278e-04 psnr 3.296628e+01
+2020-12-24 14:27:33,456 INFO validation epoch 004 mse 8.382901e-04 psnr 3.304760e+01
+2020-12-24 14:28:31,053 INFO validation epoch 005 mse 8.341756e-04 psnr 3.307248e+01
+2020-12-24 14:29:27,638 INFO validation epoch 006 mse 8.263300e-04 psnr 3.317123e+01
+2020-12-24 14:30:25,416 INFO validation epoch 007 mse 8.205419e-04 psnr 3.320691e+01
+2020-12-24 14:31:23,064 INFO validation epoch 008 mse 8.196767e-04 psnr 3.319340e+01
+2020-12-24 14:32:11,894 INFO validation epoch 009 mse 8.108647e-04 psnr 3.325382e+01
