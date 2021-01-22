@@ -240,29 +240,41 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
   return [loss_tracker.avg for loss_tracker in loss_trackers], [psnr_tracker.avg for psnr_tracker in psnr_trackers]
 
 
+def set_no_grad(model, no_grad):
+  nodes = model.preorder()
+  for n in nodes:
+    if type(n) is demosaic_ast.Input:
+      if n.name == "Input(GreenExtractor)":
+        n.no_grad = no_grad            
+      elif hasattr(n, "node"): # other input ops my run submodels that also
+        n.no_grad = no_grad
+        set_no_grad(n.node, no_grad)
+
+
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
   parser.add_argument('--learning_rate', type=float, default=0.01, help='init learning rate')
   parser.add_argument('--momentum', type=float, default=90., help='momentum')
-  parser.add_argument('--report_freq', type=float, default=200, help='report frequency')
-  parser.add_argument('--save_freq', type=float, default=2000, help='save frequency')
+  parser.add_argument('--report_freq', type=float, default=1000, help='report frequency')
+  parser.add_argument('--save_freq', type=float, default=5000, help='save frequency')
   parser.add_argument('--gpu', type=int, default=0, help='gpu device id')
   parser.add_argument('--epochs', type=int, default=10, help='num of training epochs')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
 
-  parser.add_argument('--multires_model', action='store_true')
-  parser.add_argument('--fast_multires_model', action='store_true')
   parser.add_argument('--demosaicnet', action='store_true')
   parser.add_argument('--ahd', action='store_true')
   parser.add_argument('--ahd2d', action='store_true')
-  parser.add_argument('--basic_model2d', action='store_true')
   parser.add_argument('--multiresquadgreen', action='store_true')
   parser.add_argument('--gradienthalide', action='store_true')
+  parser.add_argument('--bilinear', action='store_true')
   parser.add_argument('--chromagradienthalide', action='store_true')
   parser.add_argument('--chromaseed1', action='store_true')
   parser.add_argument('--chromaseed2', action='store_true')
   parser.add_argument('--chromaseed3', action='store_true')
+  parser.add_argument('--chromagradhalideseed', action='store_true')
+  parser.add_argument('--fullrgbgradienthalide', action='store_true')
+  parser.add_argument('--fullrgbdemosaicnet', action='store_true')
 
   parser.add_argument('--green_model_ast', type=str, help="green model ast to use for chroma model")
   parser.add_argument('--no_grad', action='store_true', help='whether or not to backprop through green model')
@@ -310,13 +322,7 @@ if __name__ == "__main__":
                                 os.path.join(args.save, 'training_log'))
   logger.info("args = %s", args)
 
-  if args.multires_model:
-    logger.info("TRAINING MULTIRES GREEN")
-    model = model_lib.multires_green_model()
-  elif args.fast_multires_model:
-    logger.info("TRAINING FAST MULTIRES GREEN")
-    model = model_lib.fast_multires_green_model()
-  elif args.demosaicnet:
+  if args.demosaicnet:
     logger.info("TRAINING DEMOSAICNET GREEN")
     model = model_lib.GreenDemosaicknet(args.depth, args.width)
   elif args.ahd:
@@ -325,18 +331,24 @@ if __name__ == "__main__":
   elif args.ahd2d:
     logger.info(f"TRAINING AHD2D GREEN")
     model = model_lib.ahd2D_green_model()
-  elif args.basic_model2d:
-    logger.info(f"TRAINING BASIC_MODEL2D GREEN")
-    model = model_lib.basic2D_green_model()
   elif args.multiresquadgreen:
     logger.info("TRAINING MULTIRES QUAD GREEN")
     model = model_lib.MultiresQuadGreenModel(args.depth, args.width)
   elif args.gradienthalide:
     logger.info("TRAINING GRADIENT HALIDE GREEN")
     model = model_lib.GradientHalideModel(args.width, args.k)
+  elif args.bilinear:
+    logger.info("TRAINING GRADIENT HALIDE GREEN")
+    model = model_lib.Bilinear(args.width, args.k)
   elif args.chromagradienthalide:
     logger.info("TRAINING CHROMA GRADIENT HALIDE")
     model = model_lib.RGBGradientHalideModel(args.width, args.k)
+  elif args.fullrgbgradienthalide:
+    logger.info("TRAINING RGB8Chan GRADIENT HALIDE")
+    model = model_lib.RGB8ChanGradientHalideModel(args.width, args.k)
+  elif args.fullrgbdemosaicnet:
+    logger.info("TRAINING RGB8Chan DEMOSAICNET")
+    model = model_lib.RGB8ChanDemosaicknet(args.depth, args.width)
   elif args.chromaseed1:
     logger.info("TRAINING CHROMA SEED MODEL1")
     green_model = demosaic_ast.load_ast(args.green_model_ast)
@@ -349,23 +361,54 @@ if __name__ == "__main__":
     logger.info("TRAINING CHROMA SEED MODEL3")
     green_model = demosaic_ast.load_ast(args.green_model_ast)
     model = model_lib.ChromaSeedModel3(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
+  elif args.chromagradhalideseed:
+    logger.info("TRAINING CHROMA GRADIENT HALIDE SEED")
+    green_model = demosaic_ast.load_ast(args.green_model_ast)
+    model = model_lib.ChromaGradientHalideModel(args.width, args.k, args.no_grad, green_model, args.green_model_id)
   else:
     logger.info("TRAINING BASIC GREEN")
     model = model_lib.basic1D_green_model()
 
 
+  
+  if args.full_model and not (args.chromagradienthalide or args.fullrgbdemosaicnet or args.fullrgbgradienthalide):
+    print(f'--- setting the no_grad parameter in green model {args.no_grad} ---')
+
+    set_no_grad(green_model, args.no_grad)
+    set_no_grad(model, args.no_grad)
+
+    print('--- inserting green model ---')
+
+    def insert_green(model):
+      nodes = model.preorder()
+      for n in nodes:
+        if type(n) is demosaic_ast.Input:
+          if n.name == "Input(GreenExtractor)":
+            n.node = green_model
+          elif hasattr(n, "node"): # other input ops my run submodels that also require the green model
+            insert_green(n.node)
+            
+    insert_green(model)
+
+  if args.green_pretrained:
+    def set_green_weights(green_weights, model_ast):
+      nodes = model_ast.preorder()
+      for n in nodes:
+        if type(n) is demosaic_ast.Input:
+          if hasattr(n, 'node'):
+            if hasattr(n, 'green_model_id'):
+              n.weight_file = args.green_weights
+            else:
+              set_green_weights(green_weights, n.node)
+
+    set_green_weights(args.green_weights, model)
+
+  print(model.dump())
+
   ev = cost.ModelEvaluator(None)
   model_cost = ev.compute_cost(model)
   print(f"model compute cost: {model_cost}")
   
-  if args.green_pretrained:
-    nodes = model.preorder()
-    for n in nodes:
-      if type(n) is demosaic_ast.Input:
-        if n.name == "Input(GreenExtractor)":
-          print('here')
-          n.weight_file = args.green_weights
-
   if not torch.cuda.is_available():
     sys.exit(1)
 
@@ -380,6 +423,9 @@ if __name__ == "__main__":
   torch.cuda.manual_seed(args.seed)
 
   torch_models = [model.ast_to_model().cuda() for i in range(args.model_initializations)]
+
+  print('--- calling save ----')
+  model_manager.save_model(torch_models, model, model_dir)
 
   for m in torch_models:
     m._initialize_parameters()
