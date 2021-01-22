@@ -54,9 +54,6 @@ def create_validation_dataset(args):
 
 
 def create_train_dataset(args):
-  full_data_filenames = ids_from_file(args.training_file)
-  used_filenames = full_data_filenames[0:int(args.train_portion)]
-
   if args.full_model:
     train_data = FullPredictionQuadDataset(data_file=args.training_file)
   elif args.rgb8chan:
@@ -148,7 +145,7 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   experiment_logger.info(f"learning rate stored in args {args.learning_rate}")
 
   for epoch in range(cur_epoch, args.epochs):
-    train_losses, train_psnrs = train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_loggers, \
+    train_losses, train_psnrs = train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, \
                                             valid_queue, validation_loggers, epoch)
     valid_losses, valid_psnrs = infer(args, gpu_id, valid_queue, models, criterion)
 
@@ -237,7 +234,7 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
   return [loss_tracker.avg for loss_tracker in loss_trackers], variance_tracker.validation_variance()
 
 
-def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_loggers, validation_queue, validation_loggers, epoch):
+def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, validation_queue, validation_loggers, epoch):
   loss_trackers = [util.AvgrageMeter() for m in models]
   psnr_trackers = [util.AvgrageMeter() for m in models]
 

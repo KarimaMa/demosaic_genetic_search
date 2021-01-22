@@ -314,7 +314,6 @@ if __name__ == "__main__":
   parser.add_argument('--save_freq', type=float, default=2000, help='trained weights save frequency')
   parser.add_argument('--epochs', type=int, default=3, help='num of training epochs')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
-  parser.add_argument('--train_portion', type=int, default=1e5, help='portion of training data to use')
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
