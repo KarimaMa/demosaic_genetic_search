@@ -1,5 +1,10 @@
 #!/bin/zsh
 
+echo "Testing GPU configuration..."
+if ! nvidia-smi; then
+    echo "nvidia-smi failed, aborting"
+    exit
+fi
 
 # This is needed to preempt all the GPUs on a machine...
 if [ "$1" -ne "0" ]
@@ -56,4 +61,5 @@ python $CODE_LOCAL/sys_run/run.py \
     --green_model_asts=$CODE_LOCAL/PARETO_GREEN_MODELS/green-01-18-pareto-files/pareto_green_asts.txt \
     --green_model_weights=$CODE_LOCAL/PARETO_GREEN_MODELS/green-01-18-pareto-files/pareto_green_weights.txt \
     --chroma_seed_model_files=$CODE_LOCAL/seed_model_files/chroma-01-20-i-green-01-18-im-asts.txt \
-    --chroma_seed_model_psnrs=$CODE_LOCAL/seed_model_files/chroma-01-20-i-green-01-18-im-psnrs.txt 
+    --chroma_seed_model_psnrs=$CODE_LOCAL/seed_model_files/chroma-01-20-i-green-01-18-im-psnrs.txt \
+    --late_cdf_gen=9

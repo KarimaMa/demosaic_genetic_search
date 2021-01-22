@@ -321,7 +321,9 @@ class Searcher():
           model_input_names = set(model_inputs.keys())
           self.args.input_ops = set(list(model_inputs.values()))
 
-        new_model_ast, shash, mutation_stats = self.mutator.mutate(parent_id, new_model_id, model_ast, model_input_names, generation, partner_ast=partner_ast)
+        new_model_ast, shash, mutation_stats = self.mutator.mutate(
+            parent_id, new_model_id, model_ast, model_input_names, generation,
+            partner_ast=partner_ast)
         generation_stats.update(mutation_stats)
 
         if new_model_ast is None: 

@@ -7,12 +7,12 @@ environment = "HIGHMEM=1 MULTIGPU=0123"
 should_transfer_files = no
 transfer_executable   = false
 
-requirements = TARGET.Machine=="ilcomp46.ilcomp"
+requirements = TARGET.Machine=="ilcomp6y.ilcomp"
 arguments             = $(process)
-executable            = cluster/20210116-rgb8chan2-restart.sh
+executable            = cluster/20210120-dnetchroma1.sh
 
-output                = log/20210116-rgb8chan2.$(process).out
-error                 = log/20210116-rgb8chan2.$(process).err
-log                   = log/20210116-rgb8chan2.$(process).log
+output                = log/20210120-dnetchroma1.$(process).out
+error                 = log/20210120-dnetchroma1.$(process).err
+log                   = log/20210120-dnetchroma1.$(process).log
 
 queue 4

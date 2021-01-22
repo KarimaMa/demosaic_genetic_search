@@ -1,5 +1,10 @@
 #!/bin/zsh
 
+echo "Testing GPU configuration..."
+if ! nvidia-smi; then
+    echo "nvidia-smi failed, aborting"
+    exit
+fi
 
 
 # This is needed to preempt all the GPUs on a machine...
