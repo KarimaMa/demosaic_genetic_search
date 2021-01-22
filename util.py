@@ -137,8 +137,8 @@ def create_logger(name, level, log_format, log_file):
   logger.addHandler(handler)
   return logger
  
-def get_model_pytorch_file(model_dir, model_version):
-  return os.path.join(model_dir, f'model_v{model_version}_pytorch')
+def get_model_pytorch_file(model_dir, model_version, epoch):
+  return os.path.join(model_dir, f'model_v{model_version}_epoch{epoch}_pytorch')
 
 def get_model_ast_file(model_dir):
   return os.path.join(model_dir, "model_ast")

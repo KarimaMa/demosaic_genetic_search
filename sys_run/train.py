@@ -49,7 +49,7 @@ def create_validation_dataset(args):
   validation_queue = FastDataLoader(
       validation_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(validation_indices),
-      pin_memory=True, num_workers=8)
+      pin_memory=True, num_workers=4)
   return validation_queue
 
 
@@ -70,7 +70,7 @@ def create_train_dataset(args):
   train_queue = FastDataLoader(
       train_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
-      pin_memory=True, num_workers=8)
+      pin_memory=True, num_workers=4)
   return train_queue
 
 
@@ -82,9 +82,6 @@ def run_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   print(f"FINISHED creating datasets")
 
   validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
-
-  model_pytorch_files = [util.get_model_pytorch_file(model_dir, model_version) \
-                        for model_version in range(len(models))]
 
   models = [model.to(device=f"cuda:{gpu_id}") for model in models]
   for m in models:
@@ -120,9 +117,6 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   train_loggers = create_loggers(model_dir, model_id, len(models), "train")
   validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
 
-  model_pytorch_files = [util.get_model_pytorch_file(model_dir, model_version) \
-                        for model_version in range(len(models))]
-
   models = [model.to(device=f"cuda:{gpu_id}") for model in models]
   for m in models:
     m.to_gpu(gpu_id)
@@ -155,7 +149,7 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
 
   for epoch in range(cur_epoch, args.epochs):
     train_losses, train_psnrs = train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_loggers, \
-      model_pytorch_files, valid_queue, validation_loggers, epoch)
+                                            valid_queue, validation_loggers, epoch)
     valid_losses, valid_psnrs = infer(args, gpu_id, valid_queue, models, criterion)
 
     for i in range(len(models)):
@@ -237,10 +231,13 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
       for i in range(len(models)):
         validation_loggers[i].info(f'validation step {step} {valid_losses[i]} {valid_psnrs[i]:2.3f}')
 
+      if step > args.validation_variance_end_step:
+        break
+
   return [loss_tracker.avg for loss_tracker in loss_trackers], variance_tracker.validation_variance()
 
 
-def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files, validation_queue, validation_loggers, epoch):
+def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_loggers, validation_queue, validation_loggers, epoch):
   loss_trackers = [util.AvgrageMeter() for m in models]
   psnr_trackers = [util.AvgrageMeter() for m in models]
 
@@ -293,6 +290,7 @@ def train_epoch(args, gpu_id, train_queue, models, criterion, optimizers, train_
         train_loggers[i].info('train %03d %e %2.3f', epoch*len(train_queue)+step, loss.item(), batch_avg_psnr)
 
     if step % args.save_freq == 0 or step == len(train_queue)-1:
+      model_pytorch_files = [util.get_model_pytorch_file(model_dir, model_version, epoch) for model_version in range(len(models))]
       for i in range(len(models)):
         torch.save(models[i].state_dict(), model_pytorch_files[i])
 

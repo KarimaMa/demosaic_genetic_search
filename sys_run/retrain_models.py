@@ -111,19 +111,20 @@ class Trainer():
     else:
       return model_ast
 
+
   """
   inserts the green model ast referenced by the green_model_id stored in 
   an input node into the input node.
   NOTE: WE MAKE SURE ONLY ONE GREEN MODEL DAG IS CREATED SO THAT 
   IT IS ONLY RUN ONCE PER RUN OF THE FULL MODEL
   """
-  def insert_green_model(self, new_model_ast):
-    green_model_id = get_green_model_id(new_model_ast)
+  def insert_green_model(self, new_model_ast, green_model=None, green_model_weight_file=None):
+    if green_model is None:
+      green_model_id = get_green_model_id(new_model_ast)
+      green_model_ast_file = self.args.green_model_asts[green_model_id]
+      green_model_weight_file = self.args.green_model_weights[green_model_id]
 
-    green_model_ast_file = self.args.green_model_asts[green_model_id]
-    green_model_weight_file = self.args.green_model_weights[green_model_id]
-
-    green_model = load_ast(green_model_ast_file)
+      green_model = demosaic_ast.load_ast(green_model_ast_file)
 
     nodes = new_model_ast.preorder()
     for n in nodes:
@@ -131,7 +132,18 @@ class Trainer():
         if n.name == "Input(GreenExtractor)":
           n.node = green_model
           n.weight_file = green_model_weight_file
-
+        elif hasattr(n, "node"): # other input ops my run submodels that also require the green model
+          self.insert_green_model(n.node, green_model, green_model_weight_file)
+  
+  def set_no_grad(self, model):
+    nodes = model.preorder()
+    for n in nodes:
+      if type(n) is demosaic_ast.Input:
+        if n.name == "Input(GreenExtractor)":
+          n.no_grad = no_grad            
+        elif hasattr(n, "node"): # other input ops my run submodels that also
+          n.no_grad = no_grad
+          set_no_grad(n.node, no_grad)
 
 
   def lower_model(self, new_model_id, new_model_ast):
@@ -256,10 +268,12 @@ class Trainer():
       model_ast = load_ast(model_ast_file)
      
       if self.args.full_model:
-        self.insert_green_model(model_ast)
-      pytorch_models = self.lower_model(model_id, model_ast)
-    
+        self.insert_green_model(model_ast) # inserts pretrained weights and the chosen green model ast
+        self.set_no_grad(model_ast) # sets no_grad parameter for all submodels
+
       compute_cost = self.model_evaluator.compute_cost(model_ast)
+
+      pytorch_models = self.lower_model(model_id, model_ast)
       
       save_model_dir = os.path.join(self.args.model_path, f"{model_id}")
       util.create_dir(save_model_dir)
@@ -305,6 +319,7 @@ if __name__ == "__main__":
   parser.add_argument('--validation_file', type=str, help='filename of file with list of validation data image files')
   parser.add_argument('--validation_freq', type=int, default=50, help='validation frequency for assessing validation PSNR variance')
   parser.add_argument('--validation_variance_start_step', type=int, default=400, help='training step from which to start sampling validation PSNR for assessing variance')
+  parser.add_argument('--validation_variance_end_step', type=int, default=1600, help='training step from which to start sampling validation PSNR for assessing variance')
 
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
@@ -313,8 +328,9 @@ if __name__ == "__main__":
   parser.add_argument('--green_model_asts', type=str, help="file with list of filenames of green model asts")
   parser.add_argument('--green_model_weights', type=str, help="file with list of filenames of green model weights")
 
-  parser.add_argument('--pretrained', action='store_true')
   parser.add_argument('--infer', action='store_true')
+  parser.add_argument('--no_grad', action='store_true', help='whether or not to backprop through green model')
+
   args = parser.parse_args()
 
   if not torch.cuda.is_available():
