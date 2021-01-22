@@ -1119,7 +1119,7 @@ def ChromaSeedModel3(depth, width, no_grad, green_model, green_model_id):
     if i != depth-1:
       relu = Relu(interp)
 
-    residual_prediction = Conv1x1(relu, 6)
+    residual_prediction = Conv1x1(relu, width)
 
   stacked = Stack(rb_min_g, residual_prediction) 
 
@@ -1135,6 +1135,43 @@ def ChromaSeedModel3(depth, width, no_grad, green_model, green_model_id):
   rgb.compute_input_output_channels()
 
   return rgb        
+
+
+def ChromaGradientHalideModel(width, k, no_grad, green_model, green_model_id):
+  bayer = Input(4, "Bayer")
+  green_GrGb = Input(2, "Green@GrGb")
+  rb = Input(2, "RedBlueBayer")
+  
+  flat_green = Input(1, "GreenExtractor", no_grad=True, node=green_model, green_model_id=green_model_id)
+
+  green_quad = Flat2Quad(flat_green)
+  green_quad.compute_input_output_channels()
+  green_quad_input = Input(4, "GreenQuad", node=green_quad, no_grad=True)
+
+  green_rb = GreenRBExtractor(flat_green)
+  green_rb.compute_input_output_channels()
+  green_rb_input = Input(2, "Green@RB", node=green_rb, no_grad=True)
+
+  rb_min_g = Sub(rb, green_rb_input)
+  rb_min_g_stack_green = Stack(rb_min_g, green_quad_input)
+  rb_min_g_stack_green.compute_input_output_channels()
+  chroma_input = Input(6, "RBdiffG_GreenQuad", no_grad=True, node=rb_min_g_stack_green)
+
+  weight_conv = Conv2D(chroma_input, width, kwidth=k)
+  filter_conv = Conv2D(chroma_input, width, kwidth=k)
+  weights = Softmax(weight_conv)
+
+  mul = Mul(weights, filter_conv)
+  chroma_diff_pred = GroupedSum(mul, 6)
+
+  added_green = Stack(green_quad_input, green_GrGb) # Gr R B Gb Gr Gb --> predicted values R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
+  chroma_pred = Add(chroma_diff_pred, added_green) # Gr R B Gb Gr Gb  
+
+  rgb = RGBExtractor(green_quad_input, rb, chroma_pred)
+  rgb.assign_parents()
+  rgb.compute_input_output_channels()
+
+  return rgb
 
 
 def RGB8ChanDemosaicknet(depth, width):
