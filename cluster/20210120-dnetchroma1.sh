@@ -38,7 +38,6 @@ rsync -av $DATA /dev/shm
 
 echo "Running job"
 
-
 python $CODE_LOCAL/sys_run/run.py \
     --experiment_name=dnetchroma-search \
     --training_file=$DATA_LOCAL/train.txt \
@@ -63,4 +62,3 @@ python $CODE_LOCAL/sys_run/run.py \
     --green_model_weights=$CODE_LOCAL/PARETO_GREEN_MODELS/dnetgreen_pareto_files/pareto_green_weights.txt \
     --chroma_seed_model_files=$CODE_LOCAL/seed_model_files/dnet_chroma_seed_asts.txt \
     --chroma_seed_model_psnrs=$CODE_LOCAL/seed_model_files/dnet_chroma_seed_psnrs.txt 
-  

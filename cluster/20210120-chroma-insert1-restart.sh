@@ -37,6 +37,7 @@ rsync -av $DATA /dev/shm
 
 echo "Running job"
 
+cd $CODE_LOCAL
 
 python $CODE_LOCAL/sys_run/run.py \
     --experiment_name=chroma-search \
