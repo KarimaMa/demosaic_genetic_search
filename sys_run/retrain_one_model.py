@@ -169,7 +169,7 @@ if __name__ == "__main__":
   parser.add_argument('--validation_variance_start_step', type=int, default=400, help='training step from which to start sampling validation PSNR for assessing variance')
   parser.add_argument('--validation_variance_end_step', type=int, default=1600, help='training step from which to start sampling validation PSNR for assessing variance')
   
-  parser.add_argument('--report_freq', type=float, default=400, help='training report frequency')
+  parser.add_argument('--report_freq', type=float, default=500, help='training report frequency')
   parser.add_argument('--save_freq', type=float, default=2000, help='trained weights save frequency')
 
   parser.add_argument('--training_file', type=str, help='filename of file with list of training data image files')
