@@ -27,6 +27,8 @@ CODE=$ROOT/demosaic_genetic_search
 CODE_LOCAL=/dev/shm/demosaic_genetic_search
 rsync -av $CODE /dev/shm
 
+cd $CODE_LOCAL
+
 echo "Installing python modules"
 export PYTHONPATH=.:$PYTHONPATH
 pip install -r $CODE_LOCAL/requirements.txt
