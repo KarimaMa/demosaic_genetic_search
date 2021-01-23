@@ -1,0 +1,10 @@
+../../model_search_analysis/satori-01-18-multires-dnet-insertbias-green-FLAGSHIP/FLAGSHIP-GREEN-PARETO-MODELS/3563/model_v1_pytorch
+../../model_search_analysis/satori-01-18-multires-dnet-insertbias-green-FLAGSHIP/FLAGSHIP-GREEN-PARETO-MODELS/3860/model_v1_pytorch
+../../model_search_analysis/satori-01-18-multires-dnet-insertbias-green-FLAGSHIP/FLAGSHIP-GREEN-PARETO-MODELS/3327/model_v0_pytorch
+../../model_search_analysis/satori-01-18-multires-dnet-insertbias-green-FLAGSHIP/FLAGSHIP-GREEN-PARETO-MODELS/3328/model_v0_pytorch
+../../model_search_analysis/satori-01-18-multires-dnet-insertbias-green-FLAGSHIP/FLAGSHIP-GREEN-PARETO-MODELS/3809/model_v1_pytorch
+../../model_search_analysis/satori-01-18-multires-dnet-insertbias-green-FLAGSHIP/FLAGSHIP-GREEN-PARETO-MODELS/4191/model_v1_pytorch
+../../model_search_analysis/satori-01-18-multires-dnet-insertbias-green-FLAGSHIP/FLAGSHIP-GREEN-PARETO-MODELS/3767/model_v1_pytorch
+../../model_search_analysis/satori-01-18-multires-dnet-insertbias-green-FLAGSHIP/FLAGSHIP-GREEN-PARETO-MODELS/3840/model_v2_pytorch
+../../model_search_analysis/satori-01-18-multires-dnet-insertbias-green-FLAGSHIP/FLAGSHIP-GREEN-PARETO-MODELS/4024/model_v2_pytorch
+../../model_search_analysis/satori-01-18-multires-dnet-insertbias-green-FLAGSHIP/FLAGSHIP-GREEN-PARETO-MODELS/4153/model_v1_pytorch
