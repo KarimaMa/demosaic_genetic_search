@@ -12,21 +12,30 @@ Requirements = (\
         (TARGET.Machine != "ilcomp57.ilcomp") && \
         (TARGET.Machine != "ilcomp4a.ilcomp") && \
         (TARGET.Machine != "ilcomp4d.ilcomp") && \
+        (TARGET.Machine != "ilcomp5a.ilcomp") && \
+        (TARGET.Machine != "ilcomp5c.ilcomp") && \
+        (TARGET.Machine != "ilcomp5d.ilcomp") && \
+        (TARGET.Machine != "ilcomp6b.ilcomp") && \
+        (TARGET.Machine != "ilcomp6d.ilcomp") && \
         (TARGET.Machine != "ilcomp6e.ilcomp") && \
         (TARGET.Machine != "ilcomp6f.ilcomp") && \
+        (TARGET.Machine != "ilcomp6l.ilcomp") && \
         (TARGET.Machine != "ilcomp6r.ilcomp") && \
+        (TARGET.Machine != "ilcomp6t.ilcomp") && \
+        (TARGET.Machine != "ilcomp6v.ilcomp") && \
         (TARGET.Machine != "ilcomp6x.ilcomp"))
 
 # We need this to get 64GB of /dev/shm
 environment = "HIGHMEM=1"
 
-executable            = cluster/check_nodes.sh
-
 should_transfer_files = no
 transfer_executable   = false
 
-output                = log/check.$(process).out
-error                 = log/check.$(process).err
-log                   = log/check.$(process).log
+arguments             = $(process)
+executable            = cluster/retrain_DNET_CHROMA_MODEL_SEARCH_01-20.sh
+
+output                = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20.$(process).out
+error                 = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20.$(process).err
+log                   = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20.$(process).log
 
 queue 1

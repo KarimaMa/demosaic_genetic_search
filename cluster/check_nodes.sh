@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # Test everything works
 
 CHECK=/mnt/ilcompf9d1/user/mgharbi/code/karima/check
@@ -35,8 +35,17 @@ touch $WORKING/$(hostname)
 echo "Memory"
 free -h
 
-echo "Disk space"
-df -h | grep ssd
+# TODO: check if data is already there
+freespace=$(df | grep ssd | awk '{print $4}')
+echo "Disk space" $freespace
+if (( $freespace < 90000000 )); then
+    echo "not enough disk space to copy demosaicking dataset"
+    echo $(hostname) "not enough space for dataset"
+    touch $BROKEN/$(hostname)
+fi
+echo "Sufficient free space for data" $freespace
+
+exit
 
 echo "SHM space"
 df -h | grep shm
