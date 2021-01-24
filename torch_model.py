@@ -3,6 +3,7 @@
 lowered representation of AST to pytorch model
 """
 
+import numpy
 import torch 
 import torch.nn as nn
 from demosaic_ast import *
@@ -1014,7 +1015,8 @@ def ast_to_model(self, shared_children=None):
   lmodel = self.lchild.ast_to_model(shared_children)
   rmodel = self.rchild.ast_to_model(shared_children)
   model = AddOp(lmodel, rmodel)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
@@ -1028,7 +1030,7 @@ def ast_to_model(self, shared_children=None):
   lmodel = self.lchild.ast_to_model(shared_children)
   rmodel = self.rchild.ast_to_model(shared_children)
   model = SubOp(lmodel, rmodel)
-
+  self.model = model
   shared_children[id(self)] = model 
   return model
 
@@ -1042,7 +1044,7 @@ def ast_to_model(self, shared_children=None):
   lmodel = self.lchild.ast_to_model(shared_children)
   rmodel = self.rchild.ast_to_model(shared_children)
   model = MulOp(lmodel, rmodel)
-
+  self.model = model
   shared_children[id(self)] = model 
   return model
 
@@ -1057,7 +1059,9 @@ def ast_to_model(self, shared_children=None):
   else:
     rmodel = self.rchild.ast_to_model(shared_children)
     shared_children[id(self.rchild)] = rmodel
-  return LogSubOp(lmodel, rmodel)
+  model = LogSubOp(lmodel, rmodel)
+  self.model = model
+  return model
 
 @extclass(AddExp)
 def ast_to_model(self, shared_children=None):
@@ -1070,7 +1074,9 @@ def ast_to_model(self, shared_children=None):
   else:
     rmodel = self.rchild.ast_to_model(shared_children)
     shared_children[id(self.rchild)] = rmodel
-  return AddExpOp(lmodel, rmodel)
+  model = AddExpOp(lmodel, rmodel)
+  self.model = model
+  return model
 
 @extclass(Stack)
 def ast_to_model(self, shared_children=None):
@@ -1082,7 +1088,8 @@ def ast_to_model(self, shared_children=None):
   lmodel = self.lchild.ast_to_model(shared_children)
   rmodel = self.rchild.ast_to_model(shared_children)
   model = StackOp(lmodel, rmodel)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
@@ -1097,7 +1104,8 @@ def ast_to_model(self, shared_children=None):
   child2_model = self.child2.ast_to_model(shared_children)
   child3_model = self.child3.ast_to_model(shared_children)
   model = RGBExtractorOp(child1_model, child2_model, child3_model)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
@@ -1111,6 +1119,7 @@ def ast_to_model(self, shared_children=None):
   lmodel = self.lchild.ast_to_model(shared_children)
   rmodel = self.rchild.ast_to_model(shared_children)
   model = RGB8ChanExtractorOp(lmodel, rmodel)
+  self.model = model
   
   shared_children[id(self)] = model 
   return model
@@ -1125,6 +1134,7 @@ def ast_to_model(self, shared_children=None):
   lmodel = self.lchild.ast_to_model(shared_children)
   rmodel = self.rchild.ast_to_model(shared_children)
   model = GreenExtractorOp(lmodel, rmodel)
+  self.model = model
   
   shared_children[id(self)] = model 
   return model
@@ -1138,7 +1148,8 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = GreenRBExtractorOp(child_model)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
@@ -1151,7 +1162,8 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = Flat2QuadOp(child_model)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
@@ -1164,7 +1176,8 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = SoftmaxOp(child_model)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
@@ -1177,6 +1190,7 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = ReluOp(child_model)
+  self.model = model
   
   shared_children[id(self)] = model 
   return model
@@ -1190,6 +1204,7 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = LogOp(child_model)
+  self.model = model
   
   shared_children[id(self)] = model 
   return model
@@ -1203,6 +1218,7 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = ExpOp(child_model)
+  self.model = model
   
   shared_children[id(self)] = model 
   return model
@@ -1216,7 +1232,8 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = DownsampleOp(child_model, self.in_c, 2, self.name)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
@@ -1229,7 +1246,8 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = UpsampleOp(child_model, self.in_c, 2, self.name)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
@@ -1242,7 +1260,8 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = Conv1x1Op(child_model, self.in_c, self.out_c, self.groups, self.name)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
@@ -1255,7 +1274,8 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = Conv1DOp(child_model, self.in_c, self.out_c, self.groups, self.name, self.kwidth)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
@@ -1269,7 +1289,8 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = Conv2DOp(child_model, self.in_c, self.out_c, self.groups, self.name, self.kwidth)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
@@ -1282,7 +1303,8 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = InterleavedSumOp(child_model, self.out_c)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
@@ -1295,7 +1317,8 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = GroupedSumOp(child_model, self.out_c)
-
+  self.model = model
+  
   shared_children[id(self)] = model 
   return model
 
