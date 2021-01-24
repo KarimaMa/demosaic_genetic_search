@@ -28,9 +28,9 @@ cat /proc/driver/nvidia/version
 
 echo "Testing GPU configuration..."
 if ! nvidia-smi; then
-    echo $(hostname) "nvidia-smi failed, aborting."
+    echo $(hostname) "job $1 nvidia-smi failed, aborting."
     echo $(date) >> $CRASHED/$MODEL_ID
-    echo $(hostname) >> $CRASHED/$MODEL_ID
+    echo $(hostname) job $1  >> $CRASHED/$MODEL_ID
     echo "nvidia-smi failed" >>  $CRASHED/$MODEL_ID
     exit
 fi
@@ -38,9 +38,9 @@ echo $(hostname) "nvidia-smi works"
 
 echo "Testing PyTorch configuration..."
 if ! python -c "import torch as th; print(th.zeros(3, 3).cuda())" ; then
-    echo $(hostname) "PyTorch command failed, aborting"
+    echo $(hostname) job $1  "PyTorch command failed, aborting"
     echo $(date) >> $CRASHED/$MODEL_ID
-    echo $(hostname) >> $CRASHED/$MODEL_ID
+    echo $(hostname) job $1  >> $CRASHED/$MODEL_ID
     echo "PyTorch CUDA does not work" >>  $CRASHED/$MODEL_ID
     exit
 fi
@@ -74,9 +74,9 @@ else
     freespace=$(df | grep ssd | awk '{print $4}')
     echo "Disk space" $freespace
     if (( $freespace < 90000000 )); then
-        echo $(hostname) "not enough space to copy data, aborting"
+        echo $(hostname)  job $1 "not enough space to copy data, aborting"
         echo $(date) >> $CRASHED/$MODEL_ID
-        echo $(hostname) >> $CRASHED/$MODEL_ID
+        echo $(hostname)  job $1 >> $CRASHED/$MODEL_ID
         echo "no space to copy data" >>  $CRASHED/$MODEL_ID
 
         # TODO: try shm 
@@ -120,9 +120,9 @@ then
     echo $(hostname) >> $FINISHED/$MODEL_ID
     echo "python completed successfully" >>  $FINISHED/$MODEL_ID
 else
-    echo $(hostname) "job crashed with an error"
+    echo $(hostname)  job $1 "crashed with an error"
     echo $(date) >> $CRASHED/$MODEL_ID
-    echo $(hostname) >> $CRASHED/$MODEL_ID
+    echo $(hostname)  job $1 >> $CRASHED/$MODEL_ID
     echo "python script return and error" >>  $CRASHED/$MODEL_ID
 fi
 

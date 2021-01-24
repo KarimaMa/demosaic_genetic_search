@@ -128,7 +128,7 @@ class Trainer():
         m._initialize_parameters()
 
     except RuntimeError:
-      debug_logger.debug(f"Failed to initialize model {model_id}")
+      # debug_logger.debug(f"Failed to initialize model {model_id}")
       print(f"Failed to initialize model {model_id}")
     else:
       util.create_dir(save_model_dir)

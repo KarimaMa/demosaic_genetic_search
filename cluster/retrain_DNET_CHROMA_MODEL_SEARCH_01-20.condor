@@ -8,8 +8,10 @@ Requirements = (\
         (TARGET.Machine != "ilcomp26.ilcomp") && \
         (TARGET.Machine != "ilcomp27.ilcomp") && \
         (TARGET.Machine != "ilcomp28.ilcomp") && \
+        (TARGET.Machine != "ilcomp29.ilcomp") && \
         (TARGET.Machine != "ilcomp47.ilcomp") && \
         (TARGET.Machine != "ilcomp57.ilcomp") && \
+        (TARGET.Machine != "ilcomp46.ilcomp") && \
         (TARGET.Machine != "ilcomp4a.ilcomp") && \
         (TARGET.Machine != "ilcomp4d.ilcomp") && \
         (TARGET.Machine != "ilcomp5a.ilcomp") && \
@@ -38,4 +40,4 @@ output                = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20.$(process).ou
 error                 = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20.$(process).err
 log                   = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20.$(process).log
 
-queue 1
+queue 163
