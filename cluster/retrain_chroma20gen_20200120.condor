@@ -20,13 +20,14 @@ Requirements = (\
 # We need this to get 64GB of /dev/shm
 environment = "HIGHMEM=1"
 
-executable            = cluster/check_nodes.sh
-
 should_transfer_files = no
 transfer_executable   = false
 
-output                = log/check.$(process).out
-error                 = log/check.$(process).err
-log                   = log/check.$(process).log
+arguments             = $(process)
+executable            = cluster/retrain_FLAGSHIP-CHROMA20GEN.sh
+
+output                = log/retrain_chroma20gen_20200120.$(process).out
+error                 = log/retrain_chroma20gen_20200120.$(process).err
+log                   = log/retrain_chroma20gen_20200120.$(process).log
 
 queue 1

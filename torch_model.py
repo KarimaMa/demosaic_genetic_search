@@ -32,7 +32,7 @@ class InputOp(nn.Module):
     if hasattr(self, "model") and not self.initialized:
       if self.weights:
         print(f"loading pretrained weights for input model {self.name} no grad {self.no_grad}")
-        state_dict = torch.load(self.weights)
+        state_dict = torch.load(self.weights, map_location="cpu")
         self.model.load_state_dict(state_dict)
       else:
         print(f"initializing weight for input model {self.name} no grad {self.no_grad}")
