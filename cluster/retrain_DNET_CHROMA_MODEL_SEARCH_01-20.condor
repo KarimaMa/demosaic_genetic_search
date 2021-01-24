@@ -25,7 +25,8 @@ Requirements = (\
         (TARGET.Machine != "ilcomp6r.ilcomp") && \
         (TARGET.Machine != "ilcomp6t.ilcomp") && \
         (TARGET.Machine != "ilcomp6v.ilcomp") && \
-        (TARGET.Machine != "ilcomp6x.ilcomp"))
+        (TARGET.Machine != "ilcomp6x.ilcomp") && \
+        (TARGET.Machine != "ilcomp76.ilcomp"))
 
 # We need this to get 64GB of /dev/shm
 environment = "HIGHMEM=1"
