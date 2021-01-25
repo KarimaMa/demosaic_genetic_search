@@ -1,6 +1,6 @@
 #!/bin/bash
 DOCKER_REPO=docker-arcluster-dev.dr.corp.adobe.com
-IMAGE=$USER/karima_genetic:v10
+IMAGE=$USER/karima_genetic:v13
 
 USERNAME=$(whoami)
 GROUP=$(groups | awk '{print $$1}')

@@ -59,7 +59,7 @@ class Trainer():
       green_model_ast_file = self.args.green_model_asts[green_model_id]
       green_model_weight_file = self.args.green_model_weights[green_model_id]
 
-      green_model = demosaic_ast.load_ast(green_model_ast_file)
+      green_model = load_ast(green_model_ast_file)
 
     nodes = new_model_ast.preorder()
     for n in nodes:
@@ -74,12 +74,12 @@ class Trainer():
   def set_no_grad(self, model):
     nodes = model.preorder()
     for n in nodes:
-      if type(n) is demosaic_ast.Input:
+      if type(n) is Input:
         if n.name == "Input(GreenExtractor)":
-          n.no_grad = no_grad            
+          n.no_grad = self.args.no_grad            
         elif hasattr(n, "node"): # other input ops my run submodels that also
-          n.no_grad = no_grad
-          set_no_grad(n.node, no_grad)
+          n.no_grad = self.args.no_grad
+          self.set_no_grad(n.node)
 
 
   def lower_model(self, new_model_id, new_model_ast):
@@ -128,7 +128,7 @@ class Trainer():
         m._initialize_parameters()
 
     except RuntimeError:
-      debug_logger.debug(f"Failed to initialize model {model_id}")
+      # debug_logger.debug(f"Failed to initialize model {model_id}")
       print(f"Failed to initialize model {model_id}")
     else:
       util.create_dir(save_model_dir)

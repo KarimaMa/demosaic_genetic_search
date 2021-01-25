@@ -98,10 +98,18 @@ ENV LC_ALL en_US.UTF-8
 RUN chown -R mgharbi /workspace
 
 # Nvidia driver
+# For machines with Titan X
+# RUN cd /tmp && \
+#     curl -fsSL -O http://us.download.nvidia.com/XFree86/Linux-x86_64/410.78/NVIDIA-Linux-x86_64-410.78.run && \
+#     sh NVIDIA-Linux-x86_64-410.78.run -s --no-kernel-module && \
+#     rm NVIDIA-Linux-x86_64-410.78.run
+
+# For machines with 1080 Ti
 RUN cd /tmp && \
-    curl -fsSL -O http://us.download.nvidia.com/XFree86/Linux-x86_64/410.78/NVIDIA-Linux-x86_64-410.78.run && \
-    sh NVIDIA-Linux-x86_64-410.78.run -s --no-kernel-module && \
-    rm NVIDIA-Linux-x86_64-410.78.run
+    curl -fsSL -O https://us.download.nvidia.com/XFree86/Linux-x86_64/450.66/NVIDIA-Linux-x86_64-450.66.run && \
+    sh NVIDIA-Linux-x86_64-450.66.run -s --no-kernel-module && \
+    rm NVIDIA-Linux-x86_64-450.66.run
+
 ENV LD_LIBRARY_PATH /usr/local/nvidia/lib:/usr/local/nvidia/lib64
 
 # -- User stuff ---------------------------------------------------------------

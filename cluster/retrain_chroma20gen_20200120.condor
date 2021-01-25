@@ -1,0 +1,33 @@
+universe                = docker
+docker_image            = docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v13
+
+# 1080 machines with 450.66
+Requirements = (\
+        (TARGET.Machine != "ilcomp21.ilcomp") && \
+        (TARGET.Machine != "ilcomp22.ilcomp") && \
+        (TARGET.Machine != "ilcomp26.ilcomp") && \
+        (TARGET.Machine != "ilcomp27.ilcomp") && \
+        (TARGET.Machine != "ilcomp28.ilcomp") && \
+        (TARGET.Machine != "ilcomp47.ilcomp") && \
+        (TARGET.Machine != "ilcomp57.ilcomp") && \
+        (TARGET.Machine != "ilcomp4a.ilcomp") && \
+        (TARGET.Machine != "ilcomp4d.ilcomp") && \
+        (TARGET.Machine != "ilcomp6e.ilcomp") && \
+        (TARGET.Machine != "ilcomp6f.ilcomp") && \
+        (TARGET.Machine != "ilcomp6r.ilcomp") && \
+        (TARGET.Machine != "ilcomp6x.ilcomp"))
+
+# We need this to get 64GB of /dev/shm
+environment = "HIGHMEM=1"
+
+should_transfer_files = no
+transfer_executable   = false
+
+arguments             = $(process)
+executable            = cluster/retrain_FLAGSHIP-CHROMA20GEN.sh
+
+output                = log/retrain_chroma20gen_20200120.$(process).out
+error                 = log/retrain_chroma20gen_20200120.$(process).err
+log                   = log/retrain_chroma20gen_20200120.$(process).log
+
+queue 1
