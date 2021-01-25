@@ -28,9 +28,9 @@ cat /proc/driver/nvidia/version
 
 echo "Testing GPU configuration..."
 if ! nvidia-smi; then
-    echo $(hostname) "nvidia-smi failed, aborting."
+    echo $(hostname) "job $1 nvidia-smi failed, aborting."
     echo $(date) >> $CRASHED/$MODEL_ID
-    echo $(hostname) >> $CRASHED/$MODEL_ID
+    echo $(hostname) job $1  >> $CRASHED/$MODEL_ID
     echo "nvidia-smi failed" >>  $CRASHED/$MODEL_ID
     exit
 fi
@@ -38,9 +38,9 @@ echo $(hostname) "nvidia-smi works"
 
 echo "Testing PyTorch configuration..."
 if ! python -c "import torch as th; print(th.zeros(3, 3).cuda())" ; then
-    echo $(hostname) "PyTorch command failed, aborting"
+    echo $(hostname) job $1  "PyTorch command failed, aborting"
     echo $(date) >> $CRASHED/$MODEL_ID
-    echo $(hostname) >> $CRASHED/$MODEL_ID
+    echo $(hostname) job $1  >> $CRASHED/$MODEL_ID
     echo "PyTorch CUDA does not work" >>  $CRASHED/$MODEL_ID
     exit
 fi
@@ -74,9 +74,9 @@ else
     freespace=$(df | grep ssd | awk '{print $4}')
     echo "Disk space" $freespace
     if (( $freespace < 90000000 )); then
-        echo $(hostname) "not enough space to copy data, aborting"
+        echo $(hostname)  job $1 "not enough space to copy data, aborting"
         echo $(date) >> $CRASHED/$MODEL_ID
-        echo $(hostname) >> $CRASHED/$MODEL_ID
+        echo $(hostname)  job $1 >> $CRASHED/$MODEL_ID
         echo "no space to copy data" >>  $CRASHED/$MODEL_ID
 
         # TODO: try shm 
@@ -113,33 +113,15 @@ python $CODE_LOCAL/sys_run/retrain_one_model.py \
     --green_model_weights=$CODE_LOCAL/PARETO_GREEN_MODELS/green-01-18-pareto-files/pareto_green_weights.txt \
     --full_model
 
-    # --model_info_dir=FLAGSHIP-CHROMA20GEN-INSERT-BINOP-RETRAIN-DATA/CHROMA_MODEL_SEARCH_01-20-INSERT-BINOP-COMBINED/models \
-    # --model_retrain_list=FLAGSHIP-CHROMA20GEN-INSERT-BINOP-RETRAIN-DATA/pareto_model_ids.txt \
-
 if [ $? -eq 0 ]
 then
     echo $(hostname) "job completed successfully"
     echo $(date) >> $FINISHED/$MODEL_ID
-    echo $(hostname) >> $FINISHED/$MODEL_ID
+    echo $(hostname) job $1 >> $FINISHED/$MODEL_ID
     echo "python completed successfully" >>  $FINISHED/$MODEL_ID
 else
-    echo $(hostname) "job crashed with an error"
+    echo $(hostname)  job $1 "crashed with an error"
     echo $(date) >> $CRASHED/$MODEL_ID
-    echo $(hostname) >> $CRASHED/$MODEL_ID
+    echo $(hostname) job $1 >> $CRASHED/$MODEL_ID
     echo "python script return and error" >>  $CRASHED/$MODEL_ID
 fi
-
-# - task_id:  index 'into model_retrain_list'. 
-
-# - model_info_dir: directory with the combined the model ast info, e.g. CHROMA_MODEL_SEARCH_01-20-INSERT/models/
-# For example, every thing from CHROMA_MODEL_SEARCH_01-20-INSERT/models and CHROMA_MODEL_SEARCH_01-20-INSERT-NODE2/models
-# gets copied into CHROMA_MODEL_SEARCH_01-20-INSERT-COMBINED/models, and we pass this directory
-
-# - save: output directory e.g. RETRAINED_CHROMA_MODEL_SEARCH_01-20-INSERT/models/
-
-# - training_file: full demosaicnet train.txt
-# - validation_file: full demosaicnet val.txt
-
-# --save=RETRAINED_GREEN_SEARCH_01-19-MULTIRES-DNET-SEEDS-INSERT-BINOP
-# --model_retrain_list=pareto_model_ids.txt
-# --model_info_dir=GREEN_SEARCH_01-19-MULTIRES-DNET-SEEDS-INSERT-BINOP-COMBINED/models
