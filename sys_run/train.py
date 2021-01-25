@@ -130,6 +130,9 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
     reuse_lr_search_epoch = False
   experiment_logger.info(f"USING LEARNING RATE {lr_tracker.proposed_lrs[-1]}")
 
+  if len(train_queue) > args.validation_variance_end_step:
+    reuse_lr_search_epoch = False
+    
   if not reuse_lr_search_epoch:
     # erase logs from previous epoch and reset models
     train_loggers = create_loggers(model_dir, model_id, len(models), "train")
