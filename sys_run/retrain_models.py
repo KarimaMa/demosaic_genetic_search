@@ -124,7 +124,7 @@ class Trainer():
       green_model_ast_file = self.args.green_model_asts[green_model_id]
       green_model_weight_file = self.args.green_model_weights[green_model_id]
 
-      green_model = demosaic_ast.load_ast(green_model_ast_file)
+      green_model = load_ast(green_model_ast_file)
 
     nodes = new_model_ast.preorder()
     for n in nodes:
@@ -138,12 +138,12 @@ class Trainer():
   def set_no_grad(self, model):
     nodes = model.preorder()
     for n in nodes:
-      if type(n) is demosaic_ast.Input:
+      if type(n) is Input:
         if n.name == "Input(GreenExtractor)":
-          n.no_grad = no_grad            
+          n.no_grad = self.args.no_grad            
         elif hasattr(n, "node"): # other input ops my run submodels that also
-          n.no_grad = no_grad
-          set_no_grad(n.node, no_grad)
+          n.no_grad = self.args.no_grad
+          self.set_no_grad(n.node)
 
 
   def lower_model(self, new_model_id, new_model_ast):
@@ -298,7 +298,7 @@ if __name__ == "__main__":
   parser.add_argument('--model_info_dir', type=str, help='where model asts are stored')
   parser.add_argument('--save', type=str, help='experiment name')
   parser.add_argument('--model_retrain_list', type=str, help='filename with list of model ids to retrain')
-  parser.add_argument('--train_timeout', type=int, default=3600)
+  parser.add_argument('--train_timeout', type=int, default=4800)
   parser.add_argument('--crop', type=int, default=16)
 
   # training parameters
