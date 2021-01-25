@@ -117,12 +117,12 @@ if [ $? -eq 0 ]
 then
     echo $(hostname) "job completed successfully"
     echo $(date) >> $FINISHED/$MODEL_ID
-    echo $(hostname) >> $FINISHED/$MODEL_ID
+    echo $(hostname) job $1 >> $FINISHED/$MODEL_ID
     echo "python completed successfully" >>  $FINISHED/$MODEL_ID
 else
     echo $(hostname)  job $1 "crashed with an error"
     echo $(date) >> $CRASHED/$MODEL_ID
-    echo $(hostname)  job $1 >> $CRASHED/$MODEL_ID
+    echo $(hostname) job $1 >> $CRASHED/$MODEL_ID
     echo "python script return and error" >>  $CRASHED/$MODEL_ID
 fi
 

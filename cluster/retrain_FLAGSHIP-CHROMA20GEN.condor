@@ -39,10 +39,10 @@ should_transfer_files = no
 transfer_executable   = false
 
 arguments             = $(process)
-executable            = cluster/retrain_DNET_CHROMA_MODEL_SEARCH_01-20.sh
+executable            = cluster/retrain_FLAGSHIP-CHROMA20GEN.sh
 
-output                = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20_batch3.$(process).out
-error                 = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20_batch3.$(process).err
-log                   = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20_batch3.$(process).log
+output                = log/retrain_FLAGSHIP-CHROMA20GEN.$(process).out
+error                 = log/retrain_FLAGSHIP-CHROMA20GEN.$(process).err
+log                   = log/retrain_FLAGSHIP-CHROMA20GEN.$(process).log
 
-queue 2
+queue 138
