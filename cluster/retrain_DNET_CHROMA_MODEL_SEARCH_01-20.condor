@@ -17,10 +17,13 @@ Requirements = (\
         (TARGET.Machine != "ilcomp5a.ilcomp") && \
         (TARGET.Machine != "ilcomp5c.ilcomp") && \
         (TARGET.Machine != "ilcomp5d.ilcomp") && \
+        (TARGET.Machine != "ilcomp5f.ilcomp") && \
+        (TARGET.Machine != "ilcomp5r.ilcomp") && \
         (TARGET.Machine != "ilcomp6b.ilcomp") && \
         (TARGET.Machine != "ilcomp6d.ilcomp") && \
         (TARGET.Machine != "ilcomp6e.ilcomp") && \
         (TARGET.Machine != "ilcomp6f.ilcomp") && \
+        (TARGET.Machine != "ilcomp6h.ilcomp") && \
         (TARGET.Machine != "ilcomp6l.ilcomp") && \
         (TARGET.Machine != "ilcomp6r.ilcomp") && \
         (TARGET.Machine != "ilcomp6t.ilcomp") && \
@@ -37,8 +40,8 @@ transfer_executable   = false
 arguments             = $(process)
 executable            = cluster/retrain_DNET_CHROMA_MODEL_SEARCH_01-20.sh
 
-output                = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20.$(process).out
-error                 = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20.$(process).err
-log                   = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20.$(process).log
+output                = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20_batch2.$(process).out
+error                 = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20_batch2.$(process).err
+log                   = log/retrain_DNET_CHROMA_MODEL_SEARCH_01-20_batch2.$(process).log
 
-queue 163
+queue 33

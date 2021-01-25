@@ -103,7 +103,7 @@ python $CODE_LOCAL/sys_run/retrain_one_model.py \
     --task_id=$1 \
     --gpu_id=0 \
     --model_info_dir=$RETRAIN_DATA/combined_models \
-    --save=$ROOT/results/FLAGSHIP-CHROMA20GEN-INSERT-BINOP \
+    --save=$ROOT/results/RETRAINED-FLAGSHIP-CHROMA20GEN-INSERT-BINOP \
     --model_retrain_list=$RETRAIN_LIST \
     --epochs=5 \
     --learning_rate=0.003 \
