@@ -77,7 +77,10 @@ if __name__ == '__main__':
     print("COST: ", cost.ModelEvaluator(None).compute_cost(ast))
     
     model = ast.ast_to_model()
-    model.load_state_dict(torch.load(sys.argv[3], map_location = torch.device("cpu")))
+    try:
+        model.load_state_dict(torch.load(sys.argv[3], map_location = torch.device("cpu")))
+    except:
+        print("Failed to load weights. Oh well.")
 
     # Run the model on a test pattern to give us a unit test
     circle = numpy.array(imread("circle.png")).astype(numpy.float32) / (2**8 - 1)
