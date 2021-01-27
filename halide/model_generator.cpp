@@ -93,7 +93,15 @@ struct Op {
         }
 
         if (name == "Add") {
-            func(x, y, co) = in_1(x, y, co) + in_2(x, y, co);
+            if (in_channels[0] > in_channels[1]) {
+                int r = in_channels[0] / in_channels[1];
+                func(x, y, co) = in_1(x, y, co) + in_2(x, y, co / r);
+            } else if (in_channels[0] < in_channels[1]) {
+                int r = in_channels[1] / in_channels[0];
+                func(x, y, co) = in_1(x, y, co / r) + in_2(x, y, co);
+            } else {
+                func(x, y, co) = in_1(x, y, co) + in_2(x, y, co);
+            }
         } else if (name == "Conv1D") {
             weights0 = decode_buffer(weight0_shape, name + "." + std::to_string(id) + ".weights0", weight0_b64);
             weights1 = decode_buffer(weight1_shape, name + "." + std::to_string(id) + ".weights1", weight1_b64);
@@ -103,7 +111,7 @@ struct Op {
             assert(weight1_shape[2] == 1);
 
             int in_group_size = in_channels[0] / groups;
-            int out_group_size = out_channels / groups;
+            int out_group_size = num_v_filters / groups;
             Expr group = min(co, num_v_filters - 1) / out_group_size;
 
             Expr v = 0.0f;
@@ -113,7 +121,7 @@ struct Op {
             }
 
             RDom rh(0, weight1_shape[3]);
-            group = max(co - num_v_filters, 0) / out_group_size;
+            group = 0; //max(co - num_v_filters, 0) / out_group_size;
             Expr h = 0.0f;
             for (int ci = 0; ci < in_group_size; ci++) {
                 h += weights1(rh, 0, ci, max(co - num_v_filters, 0)) * in_1(x + rh - weight1_shape[3]/2, y, ci + group * in_group_size);
@@ -266,7 +274,15 @@ struct Op {
             pointwise = false;
             unroll_channels = true;
         } else if (name == "Mul") {
-            func(x, y, co) = in_1(x, y, co) * in_2(x, y, co);
+            if (in_channels[0] > in_channels[1]) {
+                int r = in_channels[0] / in_channels[1];
+                func(x, y, co) = in_1(x, y, co) * in_2(x, y, co / r);
+            } else if (in_channels[0] < in_channels[1]) {
+                int r = in_channels[1] / in_channels[0];
+                func(x, y, co) = in_1(x, y, co / r) * in_2(x, y, co);
+            } else {
+                func(x, y, co) = in_1(x, y, co) * in_2(x, y, co);
+            }
         } else if (name == "Relu") {
             func(x, y, co) = max(0.0f, in_1(x, y, co));
         } else if (name == "RGBExtractor") {
@@ -326,7 +342,15 @@ struct Op {
             unroll_channels = true;
             pointwise = false;
         } else if (name == "Sub") {
-            func(x, y, co) = in_1(x, y, co) - in_2(x, y, co);
+            if (in_channels[0] > in_channels[1]) {
+                int r = in_channels[0] / in_channels[1];
+                func(x, y, co) = in_1(x, y, co) - in_2(x, y, co / r);
+            } else if (in_channels[0] < in_channels[1]) {
+                int r = in_channels[1] / in_channels[0];
+                func(x, y, co) = in_1(x, y, co / r) - in_2(x, y, co);
+            } else {
+                func(x, y, co) = in_1(x, y, co) - in_2(x, y, co);
+            }
         } else if (name == "Upsample") {
             // Bilinear
             Expr x_near = (x / 2) + (x % 2);
@@ -436,7 +460,9 @@ public:
                 }
 
                 // Not strictly necessary, but useful for debugging the definitions
-                ops[i].func.bound(co, 0, ops[i].out_channels);
+                if (ops[i].id != 34) {
+                    ops[i].func.bound(co, 0, ops[i].out_channels);
+                }
             } else {
                 if (ops[i].unroll_channels) {
                     for (int o : ops[i].outputs) {
