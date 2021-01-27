@@ -26,6 +26,14 @@ cat /proc/driver/nvidia/gpus/*/information
 echo "Host NVIDIA driver"
 cat /proc/driver/nvidia/version
 
+# Check if done already
+if [[ -f $FINISHED/$MODEL_ID ]]
+then
+    echo "$FINISHED/$MODEL_ID exists, job is already done. Aborting."
+    exit
+fi
+
+
 echo "Testing GPU configuration..."
 if ! nvidia-smi; then
     echo $(hostname) "job $1 nvidia-smi failed, aborting."
