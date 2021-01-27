@@ -49,14 +49,20 @@ def linearize_ast(node, emitted):
 if __name__ == '__main__':
 
     assert(len(sys.argv) == 5)
-    green_ast = demosaic_ast.load_ast(sys.argv[1])    
+    green_asts = {}
+    idx = 0
+    for filename in open(sys.argv[1]):           
+        green_ast = demosaic_ast.load_ast(filename.strip())        
+        green_asts[idx] = green_ast
+        idx += 1
+        
     ast = demosaic_ast.load_ast(sys.argv[2])
 
     # Graft in the green model
     def graft_green_model(ast):        
         for n in ast.preorder():
             if type(n) is demosaic_ast.Input and n.name == "Input(GreenExtractor)" and hasattr(n, 'green_model_id'):
-                n.node = green_ast
+                n.node = green_asts[n.green_model_id]
                 print(n.dump())
                 print(n.node.dump())
                 del n.green_model_id
@@ -92,9 +98,7 @@ if __name__ == '__main__':
     output = numpy.clip(output, 0, 255)
     output = output.astype(numpy.uint8)
     output = output.transpose(1, 2, 0)
-    imsave("circle_out.png", output)
-
-
+    imsave(os.path.join(os.path.dirname(sys.argv[4]), "circle_out_ref.png"), output)
     
     # Assign weights to the AST nodes
     def assign_weights(node):

@@ -31,7 +31,11 @@ struct Op {
     // Fields populated by define()
     Buffer<float> weights0, weights1;
     Func func;
-    bool group_output = false;
+    bool pointwise = true;
+    bool may_inline = true;
+    bool must_inline = false;
+    bool unroll_channels = false;
+    vector<int> outputs;
 
     // Fields set by schedule()
     Func compute_at;
@@ -77,12 +81,15 @@ struct Op {
         Func in_1, in_2, in_3;
         if (inputs[0] >= 0) {
             in_1 = ops[inputs[0]].func;
+            ops[inputs[0]].outputs.push_back(id);
         }
         if (inputs[1] >= 0) {
             in_2 = ops[inputs[1]].func;
+            ops[inputs[1]].outputs.push_back(id);
         }
         if (inputs[2] >= 0) {
             in_3 = ops[inputs[2]].func;
+            ops[inputs[2]].outputs.push_back(id);
         }
 
         if (name == "Add") {
@@ -93,32 +100,27 @@ struct Op {
             weights1 = decode_buffer(weight1_shape, name + "." + std::to_string(id) + ".weights1", weight1_b64);
             int num_v_filters = out_channels / 2;
 
-            dump();
-
             assert(weight0_shape[3] == 1);
             assert(weight1_shape[2] == 1);
 
             Expr v = 0.0f;
+            RDom rv(0, weight0_shape[2]);
             for (int ci = 0; ci < in_channels[0]; ci++) {
-                for (int dy = 0; dy < weight0_shape[2]; dy++) {
-                    v += weights0(0, dy, ci, min(co, num_v_filters - 1)) * in_1(x, y + dy - weight0_shape[2]/2, ci);
-                }
+                v += weights0(0, rv, ci, min(co, num_v_filters - 1)) * in_1(x, y + rv - weight0_shape[2]/2, ci);
             }
 
+            RDom rh(0, weight1_shape[3]);
             Expr h = 0.0f;
             for (int ci = 0; ci < in_channels[0]; ci++) {
-                for (int dx = 0; dx < weight1_shape[3]; dx++) {
-                    h += weights1(dx, 0, ci, max(co - num_v_filters, 0)) * in_1(x + dx - weight1_shape[3]/2, y, ci);
-                }
+                h += weights1(rh, 0, ci, max(co - num_v_filters, 0)) * in_1(x + rh - weight1_shape[3]/2, y, ci);
             }
 
-            func(x, y, co) = select(co < num_v_filters, v, h);
+            func(x, y, co) = select(co < num_v_filters, sum(v), sum(h));
 
-            func.unroll(co);
-            group_output = true;
+            pointwise = false;
+            unroll_channels = true;
 
         } else if (name == "Conv1x1") {
-            //assert(groups == 1 && "grouped conv not implemented yet");
             weights0 = decode_buffer(weight0_shape, name + "." + std::to_string(id) + ".weights", weight0_b64);
             assert(weights0.dim(0).extent() == 1);
             assert(weights0.dim(1).extent() == 1);
@@ -133,24 +135,25 @@ struct Op {
             }
             func(x, y, co) = e;
 
+            pointwise = false;
+
         } else if (name == "Conv2D") {
-            assert(groups == 1 && "grouped conv not implemented yet");
             weights0 = decode_buffer(weight0_shape, name + "." + std::to_string(id) + ".weights", weight0_b64);
             assert(weights0.dim(0).extent() == 3);
             assert(weights0.dim(1).extent() == 3);
-            assert(weights0.dim(2).extent() == in_channels[0]);
+            assert(weights0.dim(2).extent() == in_channels[0] / groups);
             assert(weights0.dim(3).extent() == out_channels);
 
             Expr e = 0.0f;
-            for (int ci = 0; ci < in_channels[0]; ci++) {
-                for (int dy = 0; dy < 3; dy++) {
-                    for (int dx = 0; dx < 3; dx++) {
-                        e += weights0(dx, dy, ci, co) * in_1(x + dx - 1, y + dy - 1, ci);
-                    }
-                }
+            int in_group_size = in_channels[0] / groups;
+            int out_group_size = out_channels / groups;
+            Expr group = co / out_group_size;
+            RDom r(0, 3, 0, 3);
+            for (int ci = 0; ci < in_group_size; ci++) {
+                e += weights0(r.x, r.y, ci, co) * in_1(x + r.x - 1, y + r.y - 1, ci + group * in_group_size);
             }
-            func(x, y, co) = e;
-            group_output = true;
+            func(x, y, co) = sum(e);
+            pointwise = false;
         } else if (name == "Downsample") {
             weights0 = decode_buffer(weight0_shape, name + "." + std::to_string(id) + ".weights", weight0_b64);
             assert(weights0.dim(0).extent() == 4);
@@ -158,23 +161,37 @@ struct Op {
             assert(weights0.dim(2).extent() == in_channels[0]);
             assert(weights0.dim(3).extent() == out_channels);
 
+            Func interleave{"interleave"};
+            Var u, v;
+            interleave(x, y, u, co) = in_1(2*x + u, y, co);
+
             Expr e = 0.0f;
+            RDom r(0, 4, 0, 4);
             for (int ci = 0; ci < in_channels[0]; ci++) {
-                for (int dy = 0; dy < 4; dy++) {
-                    for (int dx = 0; dx < 4; dx++) {
-                        e += weights0(dx, dy, ci, co) * in_1(2*x + dx - 1, 2*y + dy - 1, ci);
-                    }
-                }
+                e += weights0(r.x, r.y, ci, co) *
+                    interleave(x + (r.x - 1)/2, 2*y + r.y - 1, (r.x - 1) % 2, ci);
             }
-            func(x, y, co) = e;
-            group_output = true;
+            func(x, y, co) = sum(e);
+
+            interleave
+                .compute_at(func, Var::outermost())
+                .store_in(MemoryType::Stack)
+                .align_storage(x, 8)
+                .reorder(u, co, x, y)
+                .unroll(u)
+                .unroll(co)
+                .vectorize(x, 16);
+
+            may_inline = false; // Just so we can schedule the interleave somewhere good
+            pointwise = false;
         } else if (name == "Flat2Quad") {
             func(x, y, co) = mux(co, {in_1(2*x, 2*y, 0),
                                       in_1(2*x + 1, 2*y, 0),
                                       in_1(2*x, 2*y + 1, 0),
                                       in_1(2*x + 1, 2*y + 1, 0)});
-            func.unroll(co);
 
+            pointwise = false;
+            unroll_channels = true;
         } else if (name == "GreenExtractor") {
             assert(in_channels[0] == 4);
             assert(in_channels[1] == 2);
@@ -187,12 +204,14 @@ struct Op {
                                     x % 2 == 0 && y % 2 == 1,
                                     in_2(x/2, y/2, 1),
                                     in_1(x/2, y/2, 3));
-            func.unroll(co);
+            pointwise = false;
+            may_inline = false;
         } else if (name == "GreenRBExtractorOp") {
             // Real input.
             func(x, y, co) = mux(co, {in_1(2*x + 1, 2*y, 0),
                                       in_1(2*x, 2*y + 1, 0)});
-            func.unroll(co);
+            pointwise = false;
+            unroll_channels = true;
         } else if (name == "GroupedSum") {
             // Sum in groups
             int values_per_group = in_channels[0] / out_channels;
@@ -201,38 +220,47 @@ struct Op {
                 e += in_1(x, y, co * values_per_group + i);
             }
             func(x, y, co) = e;
+            pointwise = false;
         } else if (name == "InterleavedSum") {
             int values_per_group = in_channels[0] / out_channels;
             Expr e = 0.0f;
             for (int i = 0; i < values_per_group; i++) {
-                e += in_1(x, y, co + i * values_per_group);
+                e += in_1(x, y, co + i * out_channels);
             }
             func(x, y, co) = e;
+            pointwise = false;
         } else if (name == "Input(Bayer)") {
             // Real input
             func(x, y, co) = to_float(mux(co, {raw(2*x, 2*y),
                                                raw(2*x + 1, 2*y),
                                                raw(2*x, 2*y + 1),
                                                raw(2*x + 1, 2*y + 1)}));
-            func.unroll(co);
+            pointwise = false;
+            unroll_channels = true;
         } else if (name == "Input(GreenExtractor)") {
             func(x, y, co) = in_1(x, y, co);
+            must_inline = true;
         } else if (name == "Input(Green@GrGb)") {
             // Real input.
             func(x, y, co) = to_float(mux(co, {raw(2*x, 2*y),
                                                raw(2*x + 1, 2*y + 1)}));
-            func.unroll(co);
+            pointwise = false;
+            unroll_channels = true;
         } else if (name == "Input(GreenQuad)") {
             func(x, y, co) = in_1(x, y, co);
+            must_inline = true;
         } else if (name == "Input(Green@RB)") {
             func(x, y, co) = in_1(x, y, co);
+            must_inline = true;
         } else if (name == "Input(RBdiffG_GreenQuad)") {
             func(x, y, co) = in_1(x, y, co);
+            must_inline = true;
         } else if (name == "Input(RedBlueBayer)") {
             // Real input.
             func(x, y, co) = to_float(mux(co, {raw(2*x + 1, 2*y),
                                                raw(2*x, 2*y + 1)}));
-            func.unroll(co);
+            pointwise = false;
+            unroll_channels = true;
         } else if (name == "Mul") {
             func(x, y, co) = in_1(x, y, co) * in_2(x, y, co);
         } else if (name == "Relu") {
@@ -263,8 +291,9 @@ struct Op {
                                     x % 2 == 0 && y % 2 == 1,
                                     mux(co, {in_3(x/2, y/2, 2), in_1(x/2, y/2, 2), in_2(x/2, y/2, 1)}),
                                     mux(co, {in_3(x/2, y/2, 3), in_1(x/2, y/2, 3), in_3(x/2, y/2, 5)}));
-            group_output = true;
-
+            pointwise = false;
+            may_inline = false;
+            unroll_channels = true;
         } else if (name == "Softmax") {
             Func max_arg{"max_arg"};
             Expr m = in_1(x, y, 0);
@@ -279,16 +308,19 @@ struct Op {
                 sum += exp_args(x, y, i);
             }
             Func inv_sum{"inv_sum"};
-            inv_sum(x, y, co) = 1.0f / sum;
-            func(x, y, co) = exp_args(x, y, co) * inv_sum(x, y, co);
-            exp_args.compute_at(func, x);
-            inv_sum.compute_at(func, x);
-            max_arg.compute_at(func, x);
+            inv_sum(x, y) = 1.0f / sum;
+            func(x, y, co) = exp_args(x, y, co) * inv_sum(x, y);
+            exp_args.compute_at(func, x).vectorize(x);
+            inv_sum.compute_at(func, x).vectorize(x);
+            max_arg.compute_at(func, x).vectorize(x);
+            pointwise = false;
+            may_inline = false;
         } else if (name == "Stack") {
             func(x, y, co) = select(co < in_channels[0],
-                                    in_1(x, y, min(co, in_channels[0] - 1)),
-                                    in_2(x, y, max(co - in_channels[0], 0)));
-            func.unroll(co);
+                                    in_1(x, y, clamp(co, 0, in_channels[0] - 1)),
+                                    in_2(x, y, clamp(co - in_channels[0], 0, in_channels[1] - 1)));
+            unroll_channels = true;
+            pointwise = false;
         } else if (name == "Sub") {
             func(x, y, co) = in_1(x, y, co) - in_2(x, y, co);
         } else if (name == "Upsample") {
@@ -301,8 +333,8 @@ struct Op {
                 (9 * in_1(x_near, y_near, co) +
                  3 * (in_1(x_near, y_far, co) + in_1(x_far, y_near, co)) +
                  in_1(x_far, y_far, co)) * (1.0f / 16);
-
-            ops[inputs[0]].group_output = true;
+            pointwise = false;
+            may_inline = false;
         } else {
             std::cerr << "Unknown op: " << name << "\n";
             assert(false);
@@ -367,26 +399,47 @@ public:
 
         Var xo, yo, xi, yi;
         output
-            .align_bounds(x, 64)
-            .align_bounds(y, 64)
-            .reorder(co, x, y)
-            .tile(x, y, xo, yo, x, y, 64, 64)
-            .tile(x, y, xi, yi, 2, 2)
-            .unroll(xi)
-            .unroll(yi)
-            //.parallel(y)
-            .vectorize(x, 8)
-            .unroll(co);
+            .align_bounds(x, 16)
+            .align_bounds(y, 16)
+            .tile(x, y, xo, yo, x, y, 256, 128)
+            .split(y, y, yi, 2)
+            .reorder(co, yi, x, y, xo, yo)
+            .vectorize(x, 16)
+            .unroll(co)
+            .unroll(yi);
 
         output.dim(2).set_bounds(0, 3);
 
         for (size_t i = 0; i < ops.size() - 1; i++)  {
-            ops[i].func
-                .store_in(MemoryType::Stack)
-                .align_storage(x, 8)
-                .compute_at(output, xo)
-                .vectorize(x, 8, TailStrategy::RoundUp)
-                .reorder(co, x, y);
+            bool should_schedule = ops[i].outputs.size() > 1;
+            if (ops[i].outputs.size() == 1) {
+                should_schedule = !ops[ops[i].outputs[0]].pointwise;
+            }
+            should_schedule |= !ops[i].may_inline;
+            should_schedule &= !ops[i].must_inline;
+            if (should_schedule) {
+                ops[i].func
+                    .store_in(MemoryType::Stack)
+                    .align_storage(x, 8)
+                    .compute_at(output, xo)
+                    .vectorize(x, 16, TailStrategy::RoundUp)
+                    .split(y, y, yi, 2)
+                    .reorder(yi, co, x, y)
+                    .unroll(yi);
+
+                if (ops[i].unroll_channels) {
+                    ops[i].func.unroll(co);
+                }
+
+                // Not strictly necessary, but useful for debugging the definitions
+                ops[i].func.bound(co, 0, ops[i].out_channels);
+            } else {
+                if (ops[i].unroll_channels) {
+                    for (int o : ops[i].outputs) {
+                        ops[o].unroll_channels = true;
+                    }
+                }
+            }
         }
 
         /*
