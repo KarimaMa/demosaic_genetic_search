@@ -1,6 +1,7 @@
 HALIDE_DIR=$(shell echo ~/projects/Halide_master/distrib)
 RTPROCESS_DIR=$(shell echo ~/projects/librtprocess/install)
-HL_TARGET=x86-64-osx-avx2-disable_llvm_loop_opt
+# HL_TARGET=x86-64-osx-avx2-disable_llvm_loop_opt
+HL_TARGET=x86-64-linux-avx2-disable_llvm_loop_opt
 
 # This is the combined contents of the two chroma model search folders
 MODEL_DIR ?= FLAGSHIP-CHROMA_MODEL_SEARCH-INSERT-NODE12-ASTS
@@ -20,8 +21,9 @@ bin/model_generator: model_generator.cpp
 .PRECIOUS: bin/%/exported.txt
 bin/%/exported.txt: export_ast_to_halide.py
 	mkdir -p $(@D)
-	#python3 export_ast_to_halide.py $(GREEN_MODELS) $(MODEL_DIR)/$*/model_ast $(shell ls $(MODEL_DIR)/$*/model_*_pytorch | head -n1) $@ > bin/$*/export_log.txt
 	python3 export_ast_to_halide.py $(GREEN_MODELS) $(MODEL_DIR)/$*/model_ast NoWeights $@ > bin/$*/export_log.txt
+
+#python3 export_ast_to_halide.py $(GREEN_MODELS) $(MODEL_DIR)/$*/model_ast $(shell ls $(MODEL_DIR)/$*/model_*_pytorch | head -n1) $@ > bin/$*/export_log.txt
 
 .PRECIOUS: bin/%/halide_model.a
 bin/%/halide_model.a: bin/model_generator bin/%/exported.txt
@@ -37,7 +39,7 @@ bin/RunGenMain.o: $(HALIDE_DIR)/tools/RunGenMain.cpp
 
 .PRECIOUS: bin/%/run_model
 bin/%/run_model: bin/%/halide_model.a bin/runtime.a bin/RunGenMain.o
-	$(CXX) -I $(HALIDE_DIR)/include -I $(HALIDE_DIR)/tools -lpthread -lpng -ldl -lz -ljpeg bin/$*/halide_model.registration.cpp $^ -o $@
+	$(CXX) -I $(HALIDE_DIR)/include -I $(HALIDE_DIR)/tools -Wl,--no-as-needed -ldl -lpthread -lpng -ldl -lz -ljpeg bin/$*/halide_model.registration.cpp $^ -o $@
 
 bin/%/circle_out.tmp: bin/%/run_model
 	$^ raw=circle.png output=$@
