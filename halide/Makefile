@@ -1,12 +1,11 @@
 HALIDE_DIR=$(shell echo ~/projects/Halide_master/distrib)
 RTPROCESS_DIR=$(shell echo ~/projects/librtprocess/install)
+HL_TARGET=x86-64-osx-avx2-disable_llvm_loop_opt
 
 # This is the combined contents of the two chroma model search folders
 MODEL_DIR ?= FLAGSHIP-CHROMA_MODEL_SEARCH-INSERT-NODE12-ASTS
 # The pareto green models have been dumped in the location indicated by the paths in this text file
 GREEN_MODELS ?= flagship-green-pareto-files/pareto_green_asts.txt
-
-HL_TARGET=x86-64-osx-avx2-disable_llvm_loop_opt
 
 CXX=g++ -std=c++14
 
@@ -63,4 +62,4 @@ build_all: bin/ids.txt
 	cat bin/ids.txt | while read ID; do echo bin/$${ID}/run_model; done | xargs -n64 make --keep-going -j8
 
 bench_all: bin/ids.txt 
-	cat ids.txt | while read ID; do echo bin/$${ID}/bench.txt; done | xargs -n64 make --keep-going
+	cat bin/ids.txt | while read ID; do echo bin/$${ID}/bench.txt; done | xargs -n64 make --keep-going
