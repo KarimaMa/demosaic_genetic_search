@@ -9,6 +9,7 @@ Requirements = (\
         (TARGET.Machine != "ilcomp27.ilcomp") && \
         (TARGET.Machine != "ilcomp28.ilcomp") && \
         (TARGET.Machine != "ilcomp36.ilcomp") && \
+        (TARGET.Machine != "ilcomp39.ilcomp") && \
         (TARGET.Machine != "ilcomp29.ilcomp") && \
         (TARGET.Machine != "ilcomp47.ilcomp") && \
         (TARGET.Machine != "ilcomp57.ilcomp") && \
@@ -33,7 +34,8 @@ Requirements = (\
         (TARGET.Machine != "ilcomp6v.ilcomp") && \
         (TARGET.Machine != "ilcomp6x.ilcomp") && \
         (TARGET.Machine != "ilcomp6y.ilcomp") && \
-        (TARGET.Machine != "ilcomp76.ilcomp"))
+        (TARGET.Machine != "ilcomp76.ilcomp") && \
+        (TARGET.Machine != "ilcomp77.ilcomp"))
 
 # We need this to get 64GB of /dev/shm
 environment = "HIGHMEM=1"
@@ -42,10 +44,10 @@ should_transfer_files = no
 transfer_executable   = false
 
 arguments             = $(process)
-executable            = cluster/retrain_FLAGSHIP-CHROMA20GEN.sh
+executable            = cluster/retrain_FLAGSHIP-CHROMA-INSERT.sh
 
-output                = log/retrain_FLAGSHIP-CHROMA20GEN.$(process).out
-error                 = log/retrain_FLAGSHIP-CHROMA20GEN.$(process).err
-log                   = log/retrain_FLAGSHIP-CHROMA20GEN.$(process).log
+output                = log/retrain_FLAGSHIP-CHROMA-INSERT.$(process).out
+error                 = log/retrain_FLAGSHIP-CHROMA-INSERT.$(process).err
+log                   = log/retrain_FLAGSHIP-CHROMA-INSERT.$(process).log
 
-queue 138
+queue 148
