@@ -7,12 +7,12 @@ environment = "HIGHMEM=1 MULTIGPU=0123"
 should_transfer_files = no
 transfer_executable   = false
 
-requirements = TARGET.Machine=="ilcomp36.ilcomp"
+requirements = TARGET.Machine=="ilcomp6y.ilcomp"
 arguments             = $(process)
-executable            = cluster/20210120-chroma-insert1.sh
+executable            = cluster/20210120-chroma-insert1-restart.sh
 
-output                = log/20210120-chroma-insert1.$(process).out
-error                 = log/20210120-chroma-insert1.$(process).err
-log                   = log/20210120-chroma-insert1.$(process).log
+output                = log/20210120-chroma-insert1-restart.$(process).out
+error                 = log/20210120-chroma-insert1-restart.$(process).err
+log                   = log/20210120-chroma-insert1-restart.$(process).log
 
 queue 4

@@ -1,0 +1,15 @@
+2021-01-23 14:10:55,139 INFO validation epoch 000 mse 1.050712e-03 psnr 3.192800e+01
+2021-01-23 14:12:40,873 INFO validation epoch 001 mse 1.039329e-03 psnr 3.196139e+01
+2021-01-23 14:14:26,449 INFO validation epoch 002 mse 1.028847e-03 psnr 3.200672e+01
+2021-01-23 14:16:12,412 INFO validation epoch 003 mse 1.024071e-03 psnr 3.201988e+01
+2021-01-23 14:17:57,782 INFO validation epoch 004 mse 1.045833e-03 psnr 3.195728e+01
+2021-01-23 14:19:42,883 INFO validation epoch 005 mse 1.030128e-03 psnr 3.197312e+01
+2021-01-23 14:21:24,644 INFO validation epoch 006 mse 1.038827e-03 psnr 3.197894e+01
+2021-01-23 14:22:50,653 INFO validation epoch 007 mse 1.027649e-03 psnr 3.201273e+01
+2021-01-23 14:24:16,107 INFO validation epoch 008 mse 1.014538e-03 psnr 3.204141e+01
+2021-01-23 14:25:41,510 INFO validation epoch 009 mse 1.015956e-03 psnr 3.202774e+01
+2021-01-23 14:27:06,951 INFO validation epoch 010 mse 1.010800e-03 psnr 3.206384e+01
+2021-01-23 14:28:20,240 INFO validation epoch 011 mse 9.941119e-04 psnr 3.206420e+01
+2021-01-23 14:29:32,833 INFO validation epoch 012 mse 1.007025e-03 psnr 3.208389e+01
+2021-01-23 14:30:46,413 INFO validation epoch 013 mse 1.000278e-03 psnr 3.207610e+01
+2021-01-23 14:31:59,606 INFO validation epoch 014 mse 9.922079e-04 psnr 3.208772e+01
