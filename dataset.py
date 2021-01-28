@@ -202,7 +202,39 @@ class Dataset(data.Dataset):
       input = mosaic
 
     if self.return_index:
-      return (index, input, target)
+      return (image_f, input, target)
+  
+    return (input, target) 
+
+
+class GradHalideDataset(data.Dataset):
+  def __init__(self, data_file=None, data_filenames=None,\
+              return_index=False):
+
+    if data_file:
+      self.list_IDs = ids_from_file(data_file) # patch filenames
+    else:
+      self.list_IDs = data_filenames
+
+    self.return_index = return_index
+
+  def __len__(self):
+    return len(self.list_IDs)
+
+  def __getitem__(self, index):
+    image_f = self.list_IDs[index]
+    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+    img = np.transpose(img, [2, 0, 1])
+
+    target = img
+    mosaic = bayer(img)
+    
+    flat_mosaic = np.sum(mosaic, axis=0, keepdims=True)
+
+    input = (flat_mosaic, mosaic)
+
+    if self.return_index:
+      return (image_f, input, target)
   
     return (input, target) 
 
@@ -527,6 +559,7 @@ class FullPredictionQuadDataset(data.Dataset):
   def __getitem__(self, index):
     image_f = self.list_IDs[index]
     img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+   
     img = np.transpose(img, [2, 0, 1])
 
     mosaic = bayer(img)
@@ -556,7 +589,7 @@ class FullPredictionQuadDataset(data.Dataset):
     input = (bayer_quad, redblue_bayer, green_grgb)
 
     if self.return_index:
-      return (index, input, target)
+      return (image_f, input, target)
 
     return (input, target) 
  
