@@ -16,6 +16,8 @@ using namespace std;
 
 #define DUMP_BAYER 0
 
+void processFalseColorCorrection  (int W, int H, float **r, float**g, float **b, const int steps);
+
 // C++17 has std::clamp, but we just define the same here
 inline float clamp(float val, float min, float max) {
   return (val < min) ? min : (val > max) ? max : val;
@@ -110,7 +112,7 @@ float* convert_rtprocess_to_float_png(int w, int h, float** red, float** green, 
   return ret;
 }
 
-enum DemosaicAlgorithm { ahd, vng4, amaze, lmmse };
+enum DemosaicAlgorithm { ahd, vng4, amaze, lmmse1, lmmse2, lmmse3 };
 
 #define TIC auto _timer = chrono::steady_clock::now()
 #define TOC cout << "Demosaicking time: " << chrono::duration_cast<chrono::milliseconds>( \
@@ -125,9 +127,11 @@ int main(int argc, char* argv[]) {
   if (argc < 4 ||
       (string(argv[1]) != "ahd" &&
        string(argv[1]) != "vng4" &&
-       string(argv[1]) != "lmmse" &&
+       string(argv[1]) != "lmmse1" &&
+       string(argv[1]) != "lmmse2" &&
+       string(argv[1]) != "lmmse3" &&
        string(argv[1]) != "amaze")) {
-    std::cout << "Usage: " << argv[0] << " <ahd|vng4|amaze|lmmse> <input> <output>\n";
+    std::cout << "Usage: " << argv[0] << " <ahd|vng4|amaze|lmmse1|lmmse2|lmmse3> <input> <output>\n";
     return 0;
   }
 
@@ -137,8 +141,12 @@ int main(int argc, char* argv[]) {
     alg = vng4;
   } else if (string(argv[1]) == "amaze") {
     alg = amaze;
-  } else if (string(argv[1]) == "lmmse") {
-    alg = lmmse;
+  } else if (string(argv[1]) == "lmmse1") {
+    alg = lmmse1;
+  } else if (string(argv[1]) == "lmmse2") {
+    alg = lmmse2;
+  } else if (string(argv[1]) == "lmmse3") {
+    alg = lmmse3;
  }
 
   input_fname = argv[2];
@@ -170,9 +178,10 @@ int main(int argc, char* argv[]) {
     float rgb_cam[3][4] = { {1.0f, 1.0f, 1.0f, 1.0f},
                             {1.0f, 1.0f, 1.0f, 1.0f},
                             {1.0f, 1.0f, 1.0f, 1.0f} };
-    t = Halide::Tools::benchmark(10, 10, [&]() {
+    t = Halide::Tools::benchmark([&]() {
                                      ahd_demosaic(x, y, rawdata, red, green, blue, cfarray, rgb_cam, f);
-                                 });
+                                     processFalseColorCorrection  (x, y, red, green, blue, 1);
+                                         });
     break;
   }
   case vng4: {
@@ -192,8 +201,26 @@ int main(int argc, char* argv[]) {
                                  });
     break;
   }
-  case lmmse: {
+  case lmmse1: {
     int passcount = 1;
+    std::cout << "Running LMMSE demosaic with passcount=" << passcount << "...\n";
+    unsigned int cfarray[2][2] = {{1, 0},{2, 1}};
+    t = Halide::Tools::benchmark(10, 10, [&]() {
+                                     lmmse_demosaic(x, y, rawdata, red, green, blue, cfarray, f, passcount);
+                                 });
+    break;
+  }
+  case lmmse2: {
+    int passcount = 2;
+    std::cout << "Running LMMSE demosaic with passcount=" << passcount << "...\n";
+    unsigned int cfarray[2][2] = {{1, 0},{2, 1}};
+    t = Halide::Tools::benchmark(10, 10, [&]() {
+                                     lmmse_demosaic(x, y, rawdata, red, green, blue, cfarray, f, passcount);
+                                 });
+    break;
+  }
+  case lmmse3: {
+    int passcount = 3;
     std::cout << "Running LMMSE demosaic with passcount=" << passcount << "...\n";
     unsigned int cfarray[2][2] = {{1, 0},{2, 1}};
     t = Halide::Tools::benchmark(10, 10, [&]() {
