@@ -75,7 +75,7 @@ def bayer(im, return_mask=False):
 
 def ids_from_file(filename):
   # Assume the list file has relative paths
-  root = os.path.dirname(os.path.abspath(filename))
+  root = os.getcwd()
   ids = [os.path.join(root, l.strip()) for l in open(filename, "r")]
   random.shuffle(ids)
   if not os.path.exists(ids[0]):
