@@ -299,9 +299,29 @@ provides bayer quad, red and blue from bayer, gr and gb from bayer
 as inputs and the full RGB image as the target
 """
 class FullPredictionProcessedDataset(data.Dataset):
-  def __init__(self, data_file=None, return_index=False):
+  def __init__(self, data_file=None, RAM=False, return_index=False):
     self.list_IDs = ids_from_file(data_file) # patch filenames
     self.return_index = return_index
+    self.RAM = RAM
+
+    if RAM: 
+      self.data_array = [None for i in range(len(list_IDs))]
+      for i, image_datadir in enumerate(self.list_IDs):
+        target_f = os.path.join(image_datadir, "rgb_target")
+        target = np.fromfile(target_f, dtype=np.float32).reshape(3, 128, 128)
+
+        bayer_f = os.path.join(image_datadir, "bayer")
+        bayer_quad = np.fromfile(bayer_f, dtype=np.float32).reshape(4, 64, 64)
+
+        redblue_bayer_f = os.path.join(image_datadir, "redblue_bayer")
+        redblue_bayer = np.fromfile(redblue_bayer_f, dtype=np.float32).reshape(2, 64, 64)
+
+        green_grgb_f = os.path.join(image_datadir, "green_grgb")
+        green_grgb = np.fromfile(green_grgb_f, dtype=np.float32).reshape(2, 64, 64)
+
+        image_data = [bayer_quad, redblue_bayer, green_grgb, target]
+        self.data_array[i] = image_data
+
 
   def __len__(self):
     return len(self.list_IDs)
@@ -309,17 +329,21 @@ class FullPredictionProcessedDataset(data.Dataset):
   def __getitem__(self, index):
     image_datadir = self.list_IDs[index]
 
-    target_f = os.path.join(image_datadir, "rgb_target")
-    target = np.fromfile(target_f, dtype=np.float32).reshape(3, 128, 128)
+    if self.RAM:
+      bayer_quad, redblue_bayer, green_grgb, target = self.data_array[index]
 
-    bayer_f = os.path.join(image_datadir, "bayer")
-    bayer_quad = np.fromfile(bayer_f, dtype=np.float32).reshape(4, 64, 64)
+    else:
+      target_f = os.path.join(image_datadir, "rgb_target")
+      target = np.fromfile(target_f, dtype=np.float32).reshape(3, 128, 128)
 
-    redblue_bayer_f = os.path.join(image_datadir, "redblue_bayer")
-    redblue_bayer = np.fromfile(redblue_bayer_f, dtype=np.float32).reshape(2, 64, 64)
+      bayer_f = os.path.join(image_datadir, "bayer")
+      bayer_quad = np.fromfile(bayer_f, dtype=np.float32).reshape(4, 64, 64)
 
-    green_grgb_f = os.path.join(image_datadir, "green_grgb")
-    green_grgb = np.fromfile(green_grgb_f, dtype=np.float32).reshape(2, 64, 64)
+      redblue_bayer_f = os.path.join(image_datadir, "redblue_bayer")
+      redblue_bayer = np.fromfile(redblue_bayer_f, dtype=np.float32).reshape(2, 64, 64)
+
+      green_grgb_f = os.path.join(image_datadir, "green_grgb")
+      green_grgb = np.fromfile(green_grgb_f, dtype=np.float32).reshape(2, 64, 64)
 
     input = (bayer_quad, redblue_bayer, green_grgb)
 
