@@ -17,7 +17,7 @@ import util
 import model_lib
 from torch_model import ast_to_model
 from dataset import GreenDataset, Dataset, FastDataLoader
-from dataset import GreenQuadDataset, FullPredictionQuadDataset, FastDataLoader
+from dataset import GreenQuadDataset, FullPredictionQuadDataset, FastDataLoader, FullPredictionProcessedDataset, GreenProcessedQuadDataset
 from tree import print_parents
 import demosaic_ast
 
@@ -54,14 +54,14 @@ def run(args, models, model_id, model_dir):
  
   if not args.full_model:
     if not args.infer:
-      train_data = GreenQuadDataset(data_file=args.training_file) 
-    validation_data = GreenQuadDataset(data_file=args.validation_file)
-    test_data = GreenQuadDataset(data_file=args.test_file)
+      train_data = GreenProcessedQuadDataset(data_file=args.training_file) 
+    validation_data = GreenProcessedQuadDataset(data_file=args.validation_file)
+    test_data = GreenProcessedQuadDataset(data_file=args.test_file)
   else:
     if not args.infer:
-      train_data = FullPredictionQuadDataset(data_file=args.training_file)
-    validation_data = FullPredictionQuadDataset(data_file=args.validation_file)
-    test_data = FullPredictionQuadDataset(data_file=args.test_file)
+      train_data = FullPredictionProcessedDataset(data_file=args.training_file)
+    validation_data = FullPredictionProcessedDataset(data_file=args.validation_file)
+    test_data = FullPredictionProcessedDataset(data_file=args.test_file)
 
   if not args.infer:
     num_train = len(train_data)
@@ -117,6 +117,7 @@ def run(args, models, model_id, model_dir):
 
 def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files, validation_queue, validation_loggers, epoch):
   loss_trackers = [util.AvgrageMeter() for m in models]
+
   for m in models:
     m.train()
 
@@ -155,21 +156,22 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
         print(target[0,:,0:4,0:4])
         exit()
 
-      # pred = pred[:,1,:,:].unsqueeze(1)
-      # target = target[:,1,:,:].unsqueeze(1)
-
       if args.crop > 0:
         pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
 
       loss = criterion(pred, target) 
-
       loss.backward()
       optimizers[i].step()
-
       loss_trackers[i].update(loss.item(), n)
 
       if step % args.report_freq == 0 or step == len(train_queue)-1:
-        train_loggers[i].info('train %03d %e', epoch*len(train_queue)+step, loss.item())
+        # compute batch average psnr
+        clamped = torch.clamp(pred, min=0, max=1).detach()
+        per_image_mse = (clamped-target).square().mean(-1).mean(-1).mean(-1)
+        per_image_psnr = -10.0*torch.log10(per_image_mse)
+        batch_avg_psnr = per_image_psnr.sum(0) / n
+
+        train_loggers[i].info(f'train step {epoch*len(train_queue)+step} loss {loss.item():.5f} psnr {batch_avg_psnr:.3f}')
 
     if step % args.save_freq == 0 or step == len(train_queue)-1:
       for i in range(len(models)):
@@ -220,9 +222,6 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
 
         clamped = torch.clamp(pred, min=0, max=1)
 
-        # clamped = clamped[:,1,:,:].unsqueeze(1)
-        # target = target[:,1,:,:].unsqueeze(1)
-
         if args.crop > 0:
           clamped = clamped[..., args.crop:-args.crop, args.crop:-args.crop]
           
@@ -262,7 +261,7 @@ if __name__ == "__main__":
   parser.add_argument('--epochs', type=int, default=10, help='num of training epochs')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
 
-  parser.add_argument('--demosaicnet', action='store_true')
+  parser.add_argument('--green_demosaicnet', action='store_true')
   parser.add_argument('--ahd', action='store_true')
   parser.add_argument('--ahd2d', action='store_true')
   parser.add_argument('--multiresquadgreen', action='store_true')
@@ -322,7 +321,7 @@ if __name__ == "__main__":
                                 os.path.join(args.save, 'training_log'))
   logger.info("args = %s", args)
 
-  if args.demosaicnet:
+  if args.green_demosaicnet:
     logger.info("TRAINING DEMOSAICNET GREEN")
     model = model_lib.GreenDemosaicknet(args.depth, args.width)
   elif args.ahd:

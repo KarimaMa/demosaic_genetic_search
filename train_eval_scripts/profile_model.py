@@ -13,7 +13,7 @@ import re
 import csv
 sys.path.append(sys.path[0].split("/")[0])
 
-from dataset import FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, ids_from_file, FastDataLoader
+from dataset import GreenQuadDataset, FullPredictionQuadDataset, FastDataLoader, FullPredictionProcessedDataset, GreenProcessedQuadDataset
 import util
 from demosaic_ast import load_ast, get_green_model_id, Input
 import cost
@@ -25,9 +25,9 @@ def run(args, model, model_id):
     model.to_gpu(args.gpu)
     
   if not args.full_model:
-    test_data = GreenQuadDataset(data_file=args.test_file, return_index=True)
+    test_data = GreenProcessedQuadDataset(data_file=args.test_file, return_index=True)
   else:
-    test_data = FullPredictionQuadDataset(data_file=args.test_file, return_index=True)
+    test_data = FullPredictionProcessedDataset(data_file=args.test_file, return_index=True)
 
   infer(args, test_data, model, model_id)
 
