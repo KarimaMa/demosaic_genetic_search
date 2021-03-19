@@ -320,6 +320,8 @@ class FullPredictionProcessedDataset(data.Dataset):
         green_grgb = np.fromfile(green_grgb_f, dtype=np.float32).reshape(2, 64, 64)
 
         image_data = [bayer_quad, redblue_bayer, green_grgb, target]
+        image_data = [torch.Tensor(x).cuda() for x in image_data]
+        
         self.data_array[i] = image_data
 
 

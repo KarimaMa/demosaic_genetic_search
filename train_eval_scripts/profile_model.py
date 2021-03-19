@@ -39,7 +39,7 @@ def infer(args, test_data, model, model_id):
   test_queue = FastDataLoader(
     test_data, batch_size=args.batchsize,
     sampler=torch.utils.data.sampler.SequentialSampler(test_indices),
-    pin_memory=False, num_workers=4)
+    pin_memory=True, num_workers=0)
   
   criterion = nn.MSELoss()
 
