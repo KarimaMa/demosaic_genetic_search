@@ -305,7 +305,7 @@ class FullPredictionProcessedDataset(data.Dataset):
     self.RAM = RAM
 
     if RAM: 
-      self.data_array = [None for i in range(len(list_IDs))]
+      self.data_array = [None for i in range(len(self.list_IDs))]
       for i, image_datadir in enumerate(self.list_IDs):
         target_f = os.path.join(image_datadir, "rgb_target")
         target = np.fromfile(target_f, dtype=np.float32).reshape(3, 128, 128)
@@ -350,7 +350,7 @@ class FullPredictionProcessedDataset(data.Dataset):
     input = (bayer_quad, redblue_bayer, green_grgb)
 
     if self.return_index:
-      return (image_f, input, target)
+      return (image_datadir, input, target)
 
     return (input, target) 
  
