@@ -46,40 +46,40 @@ def infer(args, test_data, model, model_id):
   model.eval()
 
   with torch.no_grad():
-    with profiler.profile(use_cuda=True) as prof:
-      with profiler.record_function("model_inference"):
-        for step, (input_img_names, input, target) in enumerate(test_queue):
-          if args.full_model:
-            bayer, redblue_bayer, green_grgb = input 
-            redblue_bayer = redblue_bayer.float()
-            green_grgb = green_grgb.float()
-            if args.gpu >= 0:
-              redblue_bayer = redblue_bayer.cuda()
-              green_grgb = green_grgb.cuda()
-          else:
-            bayer = input
-            
-          bayer = bayer.float()
-          target = target.float()
-          if args.gpu >= 0:
-            bayer = bayer.cuda()
-            target = target.cuda()
-          
-          target = target[..., args.crop:-args.crop, args.crop:-args.crop]
+    # with profiler.profile(use_cuda=True) as prof:
+    #   with profiler.record_function("model_inference"):
+    for step, (input_img_names, input, target) in enumerate(test_queue):
+      if args.full_model:
+        bayer, redblue_bayer, green_grgb = input 
+        redblue_bayer = redblue_bayer.float()
+        green_grgb = green_grgb.float()
+        if args.gpu >= 0:
+          redblue_bayer = redblue_bayer.cuda()
+          green_grgb = green_grgb.cuda()
+      else:
+        bayer = input
+        
+      bayer = bayer.float()
+      target = target.float()
+      if args.gpu >= 0:
+        bayer = bayer.cuda()
+        target = target.cuda()
+      
+      target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
-          n = bayer.size(0)
-          model.reset()
-          if args.full_model:
-            model_inputs = {"Input(Bayer)": bayer, 
-                            "Input(Green@GrGb)": green_grgb, 
-                            "Input(RedBlueBayer)": redblue_bayer}
-            model.run(model_inputs)
-          else:
-            model_inputs = {"Input(Bayer)": bayer}
-            model.run(model_inputs)
+      n = bayer.size(0)
+      model.reset()
+      if args.full_model:
+        model_inputs = {"Input(Bayer)": bayer, 
+                        "Input(Green@GrGb)": green_grgb, 
+                        "Input(RedBlueBayer)": redblue_bayer}
+        model.run(model_inputs)
+      else:
+        model_inputs = {"Input(Bayer)": bayer}
+        model.run(model_inputs)
 
-  prof.export_chrome_trace(f"model-{model_id}-trace.json")
-  print(prof.key_averages().table(row_limit=25))
+  # prof.export_chrome_trace(f"model-{model_id}-trace.json")
+  # print(prof.key_averages().table(row_limit=25))
 
 
 """
