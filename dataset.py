@@ -324,7 +324,7 @@ class FullPredictionProcessedDataset(data.Dataset):
     input = (bayer_quad, redblue_bayer, green_grgb)
 
     if self.return_index:
-      return (image_f, input, target)
+      return (image_datadir, input, target)
 
     return (input, target) 
  
