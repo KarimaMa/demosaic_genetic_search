@@ -27,7 +27,7 @@ def run(args, model, model_id):
   if not args.full_model:
     test_data = GreenProcessedQuadDataset(data_file=args.test_file, return_index=True)
   else:
-    test_data = FullPredictionProcessedDataset(data_file=args.test_file, return_index=True)
+    test_data = FullPredictionProcessedDataset(data_file=args.test_file, RAM=True, return_index=True)
 
   infer(args, test_data, model, model_id)
 
