@@ -1,4 +1,5 @@
 import argparse
+import time
 from PIL import Image
 import torch
 import torch.nn as nn
@@ -28,6 +29,7 @@ def run(args, model, model_id):
     test_data = GreenProcessedQuadDataset(data_file=args.test_file, return_index=True)
   else:
     test_data = FullPredictionProcessedDataset(data_file=args.test_file, RAM=True, return_index=True)
+    #test_data = FullPredictionQuadDataset(data_file=args.test_file, return_index=True)
 
   infer(args, test_data, model, model_id)
 
@@ -39,16 +41,19 @@ def infer(args, test_data, model, model_id):
   test_queue = FastDataLoader(
     test_data, batch_size=args.batchsize,
     sampler=torch.utils.data.sampler.SequentialSampler(test_indices),
-    pin_memory=True, num_workers=0)
+    pin_memory=False, num_workers=8)
   
   criterion = nn.MSELoss()
 
   model.eval()
 
+
   with torch.no_grad():
     # with profiler.profile(use_cuda=True) as prof:
     #   with profiler.record_function("model_inference"):
     for step, (input_img_names, input, target) in enumerate(test_queue):
+      if step == 1:
+        start = time.perf_counter()
       if args.full_model:
         bayer, redblue_bayer, green_grgb = input 
         redblue_bayer = redblue_bayer.float()
@@ -77,6 +82,9 @@ def infer(args, test_data, model, model_id):
       else:
         model_inputs = {"Input(Bayer)": bayer}
         model.run(model_inputs)
+  end = time.perf_counter()
+
+  print(f"time per batch: {(end - start)/(len(test_queue)-1)}")
 
   # prof.export_chrome_trace(f"model-{model_id}-trace.json")
   # print(prof.key_averages().table(row_limit=25))
