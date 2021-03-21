@@ -26,9 +26,9 @@ def run(args, model, model_id):
     model.to_gpu(args.gpu)
     
   if not args.full_model:
-    test_data = GreenProcessedQuadDataset(data_file=args.test_file, return_index=True)
+    test_data = GreenProcessedQuadDataset(data_file=args.test_file, return_index=False)
   else:
-    test_data = FullPredictionProcessedDataset(data_file=args.test_file, RAM=True, return_index=True)
+    test_data = FullPredictionProcessedDataset(data_file=args.test_file, RAM=True, return_index=False)
     #test_data = FullPredictionQuadDataset(data_file=args.test_file, return_index=True)
 
   infer(args, test_data, model, model_id)
@@ -41,23 +41,39 @@ def infer(args, test_data, model, model_id):
   data_loader = FastDataLoader(
     test_data, batch_size=args.batchsize,
     sampler=torch.utils.data.sampler.SequentialSampler(test_indices),
-    pin_memory=False, num_workers=8)
+    pin_memory=True, num_workers=8)
   
   criterion = nn.MSELoss()
   model.eval()
 
   device = torch.device(f'cuda:{args.gpu}')
+  print(f"Using device {device}")
 
   iterator = iter(data_loader);
   not_finished = True;
   next_data = next(iterator);
-  next_data = next_data.to(device, non_blocking=True)
+  next_input, next_target = next_data
+  if args.full_model:
+    next_bayer = next_input[0].to(device, non_blocking=True)
+    next_redblue_bayer = next_input[1].to(device, non_blocking=True)
+    next_green_grgb = next_input[2].to(device, non_blocking=True)
+  else:
+    next_bayer = next_input.to(device, non_blocking=True)
 
+  step = 0
   with torch.no_grad():
     with profiler.profile(use_cuda=True) as prof:
       with profiler.record_function("model_inference"):
         while not_finished:
-          input, target = next_data
+          if args.full_model:
+            bayer = next_bayer
+            redblue_bayer = next_redblue_bayer
+            green_grgb = next_green_grgb
+          else:
+            bayer = next_bayer
+
+          target = next_target
+
           """
           data prefetching
           """
@@ -66,13 +82,13 @@ def infer(args, test_data, model, model_id):
             next_input, next_target = next_data
 
             if args.full_model:
-              next_input = [x.float().to(device, non_blocking=True) for x in next_input]
+              next_bayer = next_input[0].to(device, non_blocking=True)
+              next_redblue_bayer = next_input[1].to(device, non_blocking=True)
+              next_green_grgb = next_input[2].to(device, non_blocking=True)
             else:
-              next_input = next_input.float().to(device, non_blocking=True)
+              next_bayer = next_input.to(device, non_blocking=True)
             
-            next_target = next_target.float().to(device, non_blocking=True)
-            
-            next_data = (next_input, next_target)
+            next_target = next_target.to(device, non_blocking=True)
             
           except StopIteration:
             not_finished = False
@@ -82,11 +98,6 @@ def infer(args, test_data, model, model_id):
           """
           if step == 1:
             start = time.perf_counter()
-
-          if args.full_model:
-            bayer, redblue_bayer, green_grgb = input 
-          else:
-            bayer = input
           
           target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
@@ -102,13 +113,13 @@ def infer(args, test_data, model, model_id):
             model_inputs = {"Input(Bayer)": bayer}
             model.run(model_inputs)
 
-
+          step += 1
   end = time.perf_counter()
 
-  print(f"time per batch: {(end - start)/(len(test_queue)-1)}")
+  print(f"time per batch: {(end - start)/(len(data_loader)-1)}")
 
-  # prof.export_chrome_trace(f"model-{model_id}-trace.json")
-  # print(prof.key_averages().table(row_limit=25))
+  prof.export_chrome_trace(f"model-{model_id}-trace.json")
+  print(prof.key_averages().table(row_limit=25))
 
 
 """

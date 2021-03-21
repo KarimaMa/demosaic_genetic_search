@@ -309,7 +309,7 @@ class FullPredictionProcessedDataset(data.Dataset):
       for i, image_datadir in enumerate(self.list_IDs):
         target_f = os.path.join(image_datadir, "rgb_target")
         target = np.fromfile(target_f, dtype=np.float32).reshape(3, 128, 128)
-
+    
         bayer_f = os.path.join(image_datadir, "bayer")
         bayer_quad = np.fromfile(bayer_f, dtype=np.float32).reshape(4, 64, 64)
 
@@ -320,7 +320,7 @@ class FullPredictionProcessedDataset(data.Dataset):
         green_grgb = np.fromfile(green_grgb_f, dtype=np.float32).reshape(2, 64, 64)
 
         image_data = [bayer_quad, redblue_bayer, green_grgb, target]
-        image_data = [torch.Tensor(x) for x in image_data]
+        image_data = [torch.Tensor(x).float().cuda() for x in image_data]
         
         self.data_array[i] = image_data
 
@@ -337,16 +337,20 @@ class FullPredictionProcessedDataset(data.Dataset):
     else:
       target_f = os.path.join(image_datadir, "rgb_target")
       target = np.fromfile(target_f, dtype=np.float32).reshape(3, 128, 128)
+      target = torch.Tensor(target).float()
 
       bayer_f = os.path.join(image_datadir, "bayer")
       bayer_quad = np.fromfile(bayer_f, dtype=np.float32).reshape(4, 64, 64)
+      bayer_quad = torch.Tensor(bayer_quad).float()
 
       redblue_bayer_f = os.path.join(image_datadir, "redblue_bayer")
       redblue_bayer = np.fromfile(redblue_bayer_f, dtype=np.float32).reshape(2, 64, 64)
+      redblue_bayer = torch.Tensor(redblue_bayer).float()
 
       green_grgb_f = os.path.join(image_datadir, "green_grgb")
       green_grgb = np.fromfile(green_grgb_f, dtype=np.float32).reshape(2, 64, 64)
-      
+      green_grgb = torch.Tensor(green_grgb).float()      
+
     input = (bayer_quad, redblue_bayer, green_grgb)
 
     if self.return_index:
