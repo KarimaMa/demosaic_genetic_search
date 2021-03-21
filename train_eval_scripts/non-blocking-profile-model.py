@@ -89,7 +89,8 @@ def infer(args, test_data, model, model_id):
               next_bayer = next_input.to(device, non_blocking=True)
             
             next_target = next_target.to(device, non_blocking=True)
-            
+            print("next bayer")
+            print(next_bayer[0,0,0:4,0:4])
           except StopIteration:
             not_finished = False
 
@@ -105,6 +106,8 @@ def infer(args, test_data, model, model_id):
           model.reset()
 
           if args.full_model:
+            print("this bayer")
+            print(bayer[0,0,0:4,0:4])
             model_inputs = {"Input(Bayer)": bayer, 
                             "Input(Green@GrGb)": green_grgb, 
                             "Input(RedBlueBayer)": redblue_bayer}
