@@ -23,8 +23,6 @@ class AsynchronousLoader(object):
       The PyTorch device we are loading to
   batch_size: Integer
       The batch size to load in
-  shuffle: Boolean
-      Whether to load the dataset in a random (shuffled) order
   pin_memory: Boolean
       Whether to use CUDA pinned memory
       Note that this should *always* be set to True for asynchronous loading to CUDA devices
@@ -33,17 +31,17 @@ class AsynchronousLoader(object):
   queue_size: Integer
       Size of the que used to store the data loaded to the device
   """
-  def __init__(self, dataset, device, batch_size = 1, pin_memory = True, workers = 10, queue_size = 10, **kwargs):
+  def __init__(self, dataset, device, batch_size = 1, pin_memory = True, shuffle = False, workers = 10, queue_size = 10, **kwargs):
     self.dataset = dataset
     self.device = device
     self.batch_size = batch_size
-    self.shuffle = shuffle
     self.workers = workers
     self.pin_memory = pin_memory
+    self.shuffle = shuffle
     self.queue_size = queue_size
 
     # Use PyTorch's DataLoader for collating samples and stuff since it's nicely written and parallelrised
-    self.dataloader = DataLoader(dataset, batch_size = batch_size, pin_memory = pin_memory, num_workers = workers, **kwargs)
+    self.dataloader = DataLoader(dataset, batch_size = batch_size, pin_memory = pin_memory, shuffle = shuffle, num_workers = workers, **kwargs)
 
     self.load_stream = torch.cuda.Stream(device = device)
     self.queue = Queue(maxsize = self.queue_size)
