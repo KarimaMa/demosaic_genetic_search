@@ -9,6 +9,10 @@ from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+import sys
+sys.path.append(sys.path[0].split("/")[0])
+
+from dataset import FastDataLoader
 
 
 
@@ -41,7 +45,7 @@ class AsynchronousLoader(object):
     self.queue_size = queue_size
 
     # Use PyTorch's DataLoader for collating samples and stuff since it's nicely written and parallelrised
-    self.dataloader = DataLoader(dataset, batch_size = batch_size, pin_memory = pin_memory, shuffle = shuffle, num_workers = workers, **kwargs)
+    self.dataloader = FastDataLoader(dataset, batch_size = batch_size, pin_memory = pin_memory, shuffle = shuffle, num_workers = workers, **kwargs)
 
     self.load_stream = torch.cuda.Stream(device = device)
     self.queue = Queue(maxsize = self.queue_size)
@@ -51,6 +55,7 @@ class AsynchronousLoader(object):
   def load_loop(self): # The loop that will load into the queue in the background
     for i, sample in enumerate(self.dataloader):
       self.queue.put(self.load_instance(sample))
+
 
   def load_instance(self, sample): # Recursive loading for each instance based on torch.utils.data.default_collate
     if torch.is_tensor(sample):
@@ -64,6 +69,7 @@ class AsynchronousLoader(object):
         else:
           out.append(self.load_instance(s))
       return out
+
 
   def __iter__(self):
     assert self.idx == 0, 'idx must be 0 at the beginning of __iter__. Are you trying to run the same instance more than once in parallel?'
@@ -85,6 +91,7 @@ class AsynchronousLoader(object):
       self.queue.task_done()
       self.idx += 1
     return out
+
 
   def __len__(self):
     return len(self.dataloader)
