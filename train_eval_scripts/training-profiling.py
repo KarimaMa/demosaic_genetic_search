@@ -64,57 +64,57 @@ def train(args, data, model, model_id):
 
   iter_ = 0
 
-  with profiler.profile(use_cuda=True) as prof:
-    with profiler.record_function("model_inference"):
-      for epoch in range(args.epochs):
-        for step, (input, target) in enumerate(loader):
-          if args.full_model:
-            bayer, redblue_bayer, green_grgb = input
-            if not args.asyncload:
-              bayer = bayer.cuda()
-              redblue_bayer = redblue_bayer.cuda()
-              green_grgb = green_grgb.cuda()
-              target = target.cuda()
-          else:
-            bayer = input
-            if not args.asyncload:
-              bayer = bayer.cuda()
-              target = target.cuda()
+  # with profiler.profile(use_cuda=True) as prof:
+  #   with profiler.record_function("model_inference"):
+  for epoch in range(args.epochs):
+    for step, (input, target) in enumerate(loader):
+      if args.full_model:
+        bayer, redblue_bayer, green_grgb = input
+        if not args.asyncload:
+          bayer = bayer.cuda()
+          redblue_bayer = redblue_bayer.cuda()
+          green_grgb = green_grgb.cuda()
+          target = target.cuda()
+      else:
+        bayer = input
+        if not args.asyncload:
+          bayer = bayer.cuda()
+          target = target.cuda()
 
-          if iter_ == 1:
-            start = time.perf_counter()
+      if iter_ == 1:
+        start = time.perf_counter()
 
-          n = bayer.size(0)
-          optimizer.zero_grad()
-          model.reset()
+      n = bayer.size(0)
+      optimizer.zero_grad()
+      model.reset()
 
-          forward_start = time.perf_counter()
-          if args.full_model:
-            model_inputs = {"Input(Bayer)": bayer, 
-                            "Input(Green@GrGb)": green_grgb, 
-                            "Input(RedBlueBayer)": redblue_bayer}
-            pred = model.run(model_inputs)
-          else:
-            model_inputs = {"Input(Bayer)": bayer}
-            pred = model.run(model_inputs)
-          
-          forward_end = time.perf_counter()
-          if iter_ > 0:
-            forward_time += (forward_end - forward_start)
+      forward_start = time.perf_counter()
+      if args.full_model:
+        model_inputs = {"Input(Bayer)": bayer, 
+                        "Input(Green@GrGb)": green_grgb, 
+                        "Input(RedBlueBayer)": redblue_bayer}
+        pred = model.run(model_inputs)
+      else:
+        model_inputs = {"Input(Bayer)": bayer}
+        pred = model.run(model_inputs)
+      
+      forward_end = time.perf_counter()
+      if iter_ > 0:
+        forward_time += (forward_end - forward_start)
 
-          backprop_start = time.perf_counter()
-          target = target[..., args.crop:-args.crop, args.crop:-args.crop]
-          pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
-          loss = criterion(target, pred)
-        
-          loss.backward()
-          backprop_end = time.perf_counter()
-          if iter_ > 0:
-            backprop_time += (backprop_end - backprop_start)
+      backprop_start = time.perf_counter()
+      target = target[..., args.crop:-args.crop, args.crop:-args.crop]
+      pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
+      loss = criterion(target, pred)
+    
+      loss.backward()
+      backprop_end = time.perf_counter()
+      if iter_ > 0:
+        backprop_time += (backprop_end - backprop_start)
 
-          optimizer.step()
+      optimizer.step()
 
-          iter_ += 1
+      iter_ += 1
 
   end = time.perf_counter()
   print(f"step {step}")
@@ -122,7 +122,7 @@ def train(args, data, model, model_id):
   print(f"time per backprop: {backprop_time/(iter_-1)}")
   print(f"time per forward: {forward_time/(iter_-1)}")
 
-  prof.export_chrome_trace(f"model-{model_id}-aync-{args.asyncload}-epochs-{args.epochs}-train-trace.json")
+  # prof.export_chrome_trace(f"model-{model_id}-aync-{args.asyncload}-epochs-{args.epochs}-train-trace.json")
   #print(prof.key_averages().table(row_limit=25))
 
 
