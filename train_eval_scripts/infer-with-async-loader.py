@@ -62,50 +62,53 @@ def infer(args, test_data, model, model_id):
 
   iter_ = 0
   with torch.no_grad():
-    for epoch in range(3):
-      for step, (input, target) in enumerate(loader):
-        if args.full_model:
-          bayer, redblue_bayer, green_grgb = input
-          if not args.asyncload:
-            bayer = bayer.cuda()
-            redblue_bayer = redblue_bayer.cuda()
-            green_grgb = green_grgb.cuda()
-            target = target.cuda()
-        else:
-          bayer = input
-          if not args.asyncload:
-            bayer = bayer.cuda()
-            target = target.cuda()
+    with profiler.profile(use_cuda=True) as prof:
+      with profiler.record_function("model_inference"):
+        for epoch in range(args.epochs):
+          for step, (input, target) in enumerate(loader):
+            if args.full_model:
+              bayer, redblue_bayer, green_grgb = input
+              if not args.asyncload:
+                bayer = bayer.cuda()
+                redblue_bayer = redblue_bayer.cuda()
+                green_grgb = green_grgb.cuda()
+                target = target.cuda()
+            else:
+              bayer = input
+              if not args.asyncload:
+                bayer = bayer.cuda()
+                target = target.cuda()
 
-        if iter_ == 1:
-          start = time.perf_counter()
-        
-        target = target[..., args.crop:-args.crop, args.crop:-args.crop]
+            if iter_ == 1:
+              start = time.perf_counter()
+            
+            target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
-        n = bayer.size(0)
-        model.reset()
+            n = bayer.size(0)
+            model.reset()
 
-        forward_start = time.perf_counter()
+            forward_start = time.perf_counter()
 
-        if args.full_model:
-          model_inputs = {"Input(Bayer)": bayer, 
-                          "Input(Green@GrGb)": green_grgb, 
-                          "Input(RedBlueBayer)": redblue_bayer}
-          model.run(model_inputs)
-        else:
-          model_inputs = {"Input(Bayer)": bayer}
-          model.run(model_inputs)
+            if args.full_model:
+              model_inputs = {"Input(Bayer)": bayer, 
+                              "Input(Green@GrGb)": green_grgb, 
+                              "Input(RedBlueBayer)": redblue_bayer}
+              model.run(model_inputs)
+            else:
+              model_inputs = {"Input(Bayer)": bayer}
+              model.run(model_inputs)
 
-        forward_end = time.perf_counter()
-        if iter_ > 0:
-          forward_time += (forward_end - forward_start)
+            forward_end = time.perf_counter()
+            if iter_ > 0:
+              forward_time += (forward_end - forward_start)
 
-        iter_ += 1
+            iter_ += 1
 
   end = time.perf_counter()
 
   print(f"time per batch: {(end - start)/(iter_-1)}")
   print(f"time per forward: {(forward_time)/(iter_-1)}")
+  prof.export_chrome_trace(f"model-{model_id}-aync-{args.asyncload}-epochs-{args.epochs}-infer-trace.json")
 
 
 """
@@ -140,6 +143,7 @@ if __name__ == "__main__":
   parser.add_argument('--model_id', type=int, help='model id from modeldir to run')
   parser.add_argument('--crop', type=int, default=16)
   parser.add_argument('--batchsize', type=int, default=64)
+  parser.add_argument('--epochs', type=int)
   parser.add_argument('--gpu', type=int, default=-1)
   
   # training parameters
@@ -189,8 +193,6 @@ if __name__ == "__main__":
 
     if no_grad:
       set_green_weights(green_model_weights, model_ast)
-
-    print(model_ast.dump())
 
   if args.gpu >= 0:  
     torch_model = model_ast.ast_to_model().cuda() 
