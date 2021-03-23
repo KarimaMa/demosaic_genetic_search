@@ -342,19 +342,19 @@ class FullPredictionProcessedDataset(data.Dataset):
     else:
       target_f = os.path.join(image_datadir, "rgb_target")
       target = np.fromfile(target_f, dtype=np.float32).reshape(3, 128, 128)
-      target = torch.Tensor(target).float()
+      target = torch.Tensor(target)
 
       bayer_f = os.path.join(image_datadir, "bayer")
       bayer_quad = np.fromfile(bayer_f, dtype=np.float32).reshape(4, 64, 64)
-      bayer_quad = torch.Tensor(bayer_quad).float()
+      bayer_quad = torch.Tensor(bayer_quad)
 
       redblue_bayer_f = os.path.join(image_datadir, "redblue_bayer")
       redblue_bayer = np.fromfile(redblue_bayer_f, dtype=np.float32).reshape(2, 64, 64)
-      redblue_bayer = torch.Tensor(redblue_bayer).float()
+      redblue_bayer = torch.Tensor(redblue_bayer)
 
       green_grgb_f = os.path.join(image_datadir, "green_grgb")
       green_grgb = np.fromfile(green_grgb_f, dtype=np.float32).reshape(2, 64, 64)
-      green_grgb = torch.Tensor(green_grgb).float()      
+      green_grgb = torch.Tensor(green_grgb)  
 
     input = (bayer_quad, redblue_bayer, green_grgb)
 
