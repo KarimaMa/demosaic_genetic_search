@@ -286,10 +286,10 @@ class FullPredictionQuadDataset(data.Dataset):
 
     target = img
 
-    bayer_quad = torch.Tensor(bayer_quad).float()
-    redblue_bayer = torch.Tensor(redblue_bayer).float()
-    green_grgb = torch.Tensor(green_grgb).float()
-    target = torch.Tensor(target).float()
+    bayer_quad = torch.Tensor(bayer_quad)
+    redblue_bayer = torch.Tensor(redblue_bayer)
+    green_grgb = torch.Tensor(green_grgb)
+    target = torch.Tensor(target)
 
     input = (bayer_quad, redblue_bayer, green_grgb)
 
@@ -325,7 +325,7 @@ class FullPredictionProcessedDataset(data.Dataset):
         green_grgb = np.fromfile(green_grgb_f, dtype=np.float32).reshape(2, 64, 64)
 
         image_data = [bayer_quad, redblue_bayer, green_grgb, target]
-        image_data = [torch.Tensor(x).float() for x in image_data]
+        image_data = [torch.Tensor(x) for x in image_data]
 
         self.data_array[i] = image_data
 

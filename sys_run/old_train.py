@@ -9,11 +9,11 @@ import os
 import random 
 import numpy as np
 import sys
-from dataset import FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, ids_from_file, FastDataLoader
 
 sys.path.append(sys.path[0].split("/")[0])
 sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
-from async_loader import AsynchronousLoader
+
+from old_dataset import FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, ids_from_file, FastDataLoader
 
 import util
 from validation_variance_tracker import  VarianceTracker, LRTracker
@@ -36,25 +36,7 @@ def create_loggers(model_dir, model_id, num_models, mode):
   return loggers
 
 
-def create_train_dataset(args, gpu_id):
-  device = torch.device(f'cuda:{args.gpu}')
-
-  if args.full_model:
-    train_data = FullPredictionQuadDataset(data_file=args.training_file)
-  elif args.rgb8chan:
-    train_data = RGB8ChanDataset(data_file=args.training_file)
-  else:
-    train_data = GreenQuadDataset(data_file=args.training_file) 
-
-  loader = AsynchronousLoader(train_data, device, batch_size=args.batch_size, \
-                              pin_memory=True, workers=8, shuffle=True)
-
-  return loader
-
-
-def create_validation_dataset(args, gpu_id):
-  device = torch.device(f'cuda:{args.gpu}')
-
+def create_validation_dataset(args):
   if args.full_model:
     validation_data = FullPredictionQuadDataset(data_file=args.validation_file)
   elif args.rgb8chan:
@@ -62,16 +44,38 @@ def create_validation_dataset(args, gpu_id):
   else:
     validation_data = GreenQuadDataset(data_file=args.validation_file)
 
-  loader = AsynchronousLoader(validation_data, device, batch_size=args.batch_size, \
-                              pin_memory=True, workers=8, shuffle=True)
+  num_validation = len(validation_data)
+  validation_indices = list(range(num_validation))
 
-  return loader
+  validation_queue = FastDataLoader(
+      validation_data, batch_size=args.batch_size,
+      sampler=torch.utils.data.sampler.SubsetRandomSampler(validation_indices),
+      pin_memory=True, num_workers=4)
+  return validation_queue
+
+
+def create_train_dataset(args):
+  if args.full_model:
+    train_data = FullPredictionQuadDataset(data_file=args.training_file)
+  elif args.rgb8chan:
+    train_data = RGB8ChanDataset(data_file=args.training_file)
+  else:
+    train_data = GreenQuadDataset(data_file=args.training_file) 
+
+  num_train = len(train_data)
+  train_indices = list(range(num_train))
+  
+  train_queue = FastDataLoader(
+      train_data, batch_size=args.batch_size,
+      sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
+      pin_memory=True, num_workers=4)
+  return train_queue
 
 
 def run_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   print(f"running inference for {len(models)} models on GPU {gpu_id}")
 
-  valid_queue = create_validation_dataset(args, gpu_id)
+  valid_queue = create_validation_dataset(args)
 
   print(f"FINISHED creating datasets")
 
@@ -103,8 +107,10 @@ def run_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
 def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   print(f"training {len(models)} models on GPU {gpu_id}")
 
-  train_queue = create_train_dataset(args, gpu_id)
-  valid_queue = create_validation_dataset(args, gpu_id)
+  train_queue = create_train_dataset(args)
+  valid_queue = create_validation_dataset(args)
+
+  print(f"FINISHED creating datasets")
 
   train_loggers = create_loggers(model_dir, model_id, len(models), "train")
   validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
@@ -188,16 +194,13 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
       bayer, redblue_bayer, green_grgb = input 
-       
-      bayer = bayer.cuda()
-      redblue_bayer = redblue_bayer.cuda()
-      green_grgb = green_grgb.cuda()
-      target = target.cuda()
-
+      redblue_bayer = Variable(redblue_bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+      green_grgb = Variable(green_grgb, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
     else:
       bayer = input
-      bayer = bayer.cuda()
-      target = target.cuda()
+
+    bayer = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+    target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
 
     n = bayer.size(0)
 
@@ -245,16 +248,14 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
       bayer, redblue_bayer, green_grgb = input 
-      bayer = bayer.cuda()
-      redblue_bayer = redblue_bayer.cuda()
-      green_grgb = green_grgb.cuda()
-      target = target.cuda()
-
+      redblue_bayer = Variable(redblue_bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+      green_grgb = Variable(green_grgb, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
     else:
       bayer = input
-      bayer = bayer.cuda()
-      target = target.cuda()
 
+    bayer = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+    target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+    
     target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
     n = bayer.size(0)
@@ -280,16 +281,14 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
       optimizers[i].step()
 
       loss_trackers[i].update(loss.item(), n)
-
       # compute running psnr
-      # per_image_mse = (pred-target).square().mean(-1).mean(-1).mean(-1)
-      # per_image_psnr = -10.0*torch.log10(per_image_mse)
-      # batch_avg_psnr = per_image_psnr.sum(0) / n
-      # psnr_trackers[i].update(batch_avg_psnr.item(), n)
+      per_image_mse = (pred-target).square().mean(-1).mean(-1).mean(-1)
+      per_image_psnr = -10.0*torch.log10(per_image_mse)
+      batch_avg_psnr = per_image_psnr.sum(0) / n
+      psnr_trackers[i].update(batch_avg_psnr.item(), n)
 
       if step % args.report_freq == 0 or step == len(train_queue)-1:
-        #train_loggers[i].info('train %03d %e %2.3f', epoch*len(train_queue)+step, loss.item(), batch_avg_psnr)
-        train_loggers[i].info(f"train step {epoch*len(train_queue)+step} loss {loss.item():.5f}")
+        train_loggers[i].info('train %03d %e %2.3f', epoch*len(train_queue)+step, loss.item(), batch_avg_psnr)
 
     if step % args.save_freq == 0 or step == len(train_queue)-1:
       model_pytorch_files = [util.get_model_pytorch_file(model_dir, model_version, epoch) for model_version in range(len(models))]
@@ -310,15 +309,14 @@ def infer(args, gpu_id, valid_queue, models, criterion):
     for step, (input, target) in enumerate(valid_queue):
       if args.full_model:
         bayer, redblue_bayer, green_grgb = input 
-        bayer = bayer.cuda()
-        redblue_bayer = redblue_bayer.cuda()
-        green_grgb = green_grgb.cuda()
-        target = target.cuda()
+        redblue_bayer = Variable(redblue_bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+        green_grgb = Variable(green_grgb, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
       else:
         bayer = input
-        bayer = bayer.cuda()
-        target = target.cuda()
 
+      bayer = Variable(bayer, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+      target = Variable(target, requires_grad=False).to(device=f"cuda:{gpu_id}", dtype=torch.float)
+      
       target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
       n = bayer.size(0)
