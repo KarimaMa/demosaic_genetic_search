@@ -80,8 +80,7 @@ def model_database_entry(model_id, id_str, model_ast, shash, generation, \
   return data
 
 
-def run_train(task_id, train_args, gpu_ids, model_id, pytorch_models, model_dir, \
-              train_psnrs, valid_psnrs, log_format, task_logger):
+def run_train(task_id, train_args, gpu_ids, model_id, pytorch_models, model_dir, valid_psnrs, log_format, task_logger):
   inits = train_args.model_initializations
   gpu_id = gpu_ids[task_id]
   try:
@@ -97,16 +96,15 @@ def run_train(task_id, train_args, gpu_ids, model_id, pytorch_models, model_dir,
     
     # print('Task ', task_id, ' launched on GPU ', gpu_id, ' model id ', model_id)
     task_logger.info(f"Task {task_id} launched on GPU {gpu_id}  model id {model_id}")
-    model_valid_psnrs, model_train_psnrs = train_model(train_args, gpu_id, model_id, pytorch_models, model_dir, training_logger)
+    model_valid_psnrs = train_model(train_args, gpu_id, model_id, pytorch_models, model_dir, training_logger)
     for i in range(train_args.model_initializations):
       index = train_args.model_initializations * task_id + i 
-      task_logger.info(f"Task {task_id} updating psnr at {index} (of {len(train_psnrs)}) from initialization {i}")
-      train_psnrs[index] = model_train_psnrs[i]
+      task_logger.info(f"Task {task_id} updating psnr at {index} from initialization {i}")
       valid_psnrs[index] = model_valid_psnrs[i]
 
  
 def init_process(task_id, fn, train_args, gpu_ids, model_id, models, model_dir,\
-                train_psnrs, valid_psnrs, log_format, task_logger, backend='nccl'):
+                valid_psnrs, log_format, task_logger, backend='nccl'):
   """ Initialize the distributed environment. """
   #os.environ['MASTER_ADDR'] = '127.0.0.1'
   #os.environ['MASTER_PORT'] = '29500'
@@ -114,7 +112,7 @@ def init_process(task_id, fn, train_args, gpu_ids, model_id, models, model_dir,\
   #dist.init_process_group(backend, rank=task_id, world_size=num_tasks)
 
   fn(task_id, train_args, gpu_ids, model_id, models, model_dir, \
-    train_psnrs, valid_psnrs, log_format, task_logger)
+    valid_psnrs, log_format, task_logger)
 
 
 class GenerationStats():
@@ -147,7 +145,6 @@ class MutationTaskInfo:
 class MutationBatchInfo:
   def __init__(self):
     self.validation_psnrs = {}
-    self.train_psnrs = {}
     self.database_entries = {}
     self.model_dirs = {}
     self.model_asts = {}
@@ -163,9 +160,8 @@ class MutationBatchInfo:
     self.database_entries[model_id] = model_data
     self.gpu_mapping[model_id] = gpu_id
 
-  def update_model_perf(self, model_id, validation_psnr, train_psnr):
+  def update_model_perf(self, model_id, validation_psnr):
     self.validation_psnrs[model_id] = validation_psnr
-    self.train_psnrs[model_id] = train_psnr
 
 
 class Searcher():
@@ -372,7 +368,7 @@ class Searcher():
         return new_models
 
 
-  def create_train_process(self, mutation_task_info, gpu_ids, train_psnrs, validation_psnrs):
+  def create_train_process(self, mutation_task_info, gpu_ids, validation_psnrs):
     model_id = mutation_task_info.model_id
     task_id = mutation_task_info.task_id
     #gpu_id = mutation_task_info.gpu_mapping
@@ -380,13 +376,13 @@ class Searcher():
     models = mutation_task_info.models
 
     p = mp.Process(target=init_process, args=(task_id, run_train, self.args, gpu_ids, model_id, models, model_dir, \
-                                              train_psnrs, validation_psnrs, self.log_format, self.task_logger))
+                                              validation_psnrs, self.log_format, self.task_logger))
     return p
 
-  def run_training_tasks(self, gpu_ids, process_queue, train_psnrs, validation_psnrs):
+  def run_training_tasks(self, gpu_ids, process_queue, validation_psnrs):
     timeout = self.args.train_timeout
     bootup_time = 30
-    available_gpus = set((0,1,2,3))
+    available_gpus = set([i for i in range(self.args.num_gpus)])
     running_processes = {}
     start_times = {}
     restarted = set()
@@ -441,7 +437,7 @@ class Searcher():
               if not task_id in restarted:
                 self.task_logger.info(f"task {task_id} model_id {task_info.model_id} process name {task.name} " +
                                       f"unresponsive, restarting on gpu {gpu_ids[task_id]}...")
-                new_task = self.create_train_process(task_info, gpu_ids, train_psnrs, validation_psnrs)
+                new_task = self.create_train_process(task_info, gpu_ids, validation_psnrs)
                 new_task.start()
                 start_times[task_id] = time.time()
                 restarted.add(task_id)
@@ -483,7 +479,6 @@ class Searcher():
 
     processes = []
     valid_psnrs = mp.Array(ctypes.c_double, [-1]*(size*self.args.model_initializations))
-    train_psnrs = mp.Array(ctypes.c_double, [-1]*(size*self.args.model_initializations))
 
     rankd2modelId = {}
     for rank in range(size):
@@ -495,7 +490,7 @@ class Searcher():
       models = mutation_batch_info.pytorch_models[model_id]
 
       p = mp.Process(target=init_process, args=(rank, size, run_train, self.args, gpu_id, model_id, models, model_dir, \
-                                                train_psnrs, valid_psnrs, self.log_format, self.debug_logger))
+                                                valid_psnrs, self.log_format, self.debug_logger))
       p.start()
       processes.append(p)
 
@@ -528,13 +523,10 @@ class Searcher():
     for rank in range(size):
       model_id = rankd2modelId[rank]
       model_validation_psnrs = []
-      model_train_psnrs = []
       for i in range(self.args.model_initializations):
         index = rank * self.args.model_initializations + i
         model_validation_psnrs.append(valid_psnrs[index])
-        model_train_psnrs.append(train_psnrs[index])
       mutation_batch_info.validation_psnrs[model_id] = model_validation_psnrs
-      mutation_batch_info.train_psnrs[model_id] = model_train_psnrs
 
 
   def save_model_ast(self, model_ast, model_id, model_dir):
@@ -677,7 +669,6 @@ class Searcher():
 
         size = len(model_ids) * self.args.model_initializations
         valid_psnrs = mp.Array(ctypes.c_double, [-1]*size)
-        train_psnrs = mp.Array(ctypes.c_double, [-1]*size)
         gpu_ids = mp.Array(ctypes.c_int, [-1]*len(model_ids))
 
         for task_id, model_id in enumerate(model_ids):
@@ -748,10 +739,10 @@ class Searcher():
           self.save_model_ast(new_model_ast, task_info.model_id, task_info.model_dir)
 
         for ast, task_info in training_tasks:
-          task = self.create_train_process(task_info, gpu_ids, train_psnrs, valid_psnrs)
+          task = self.create_train_process(task_info, gpu_ids, valid_psnrs)
           process_queue.add((task, task_info))
 
-        failed_tasks = self.run_training_tasks(gpu_ids, process_queue, train_psnrs, valid_psnrs)
+        failed_tasks = self.run_training_tasks(gpu_ids, process_queue, valid_psnrs)
 
         # update model database 
         for new_model_ast, task_info in training_tasks:
