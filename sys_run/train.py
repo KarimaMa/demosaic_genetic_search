@@ -37,7 +37,7 @@ def create_loggers(model_dir, model_id, num_models, mode):
 
 
 def create_train_dataset(args, gpu_id):
-  device = torch.device(f'cuda:{args.gpu}')
+  device = torch.device(f'cuda:{gpu_id}')
 
   if args.full_model:
     train_data = FullPredictionQuadDataset(data_file=args.training_file)
@@ -53,7 +53,7 @@ def create_train_dataset(args, gpu_id):
 
 
 def create_validation_dataset(args, gpu_id):
-  device = torch.device(f'cuda:{args.gpu}')
+  device = torch.device(f'cuda:{gpu_id}')
 
   if args.full_model:
     validation_data = FullPredictionQuadDataset(data_file=args.validation_file)
@@ -143,14 +143,14 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   experiment_logger.info(f"learning rate stored in args {args.learning_rate}")
 
   for epoch in range(cur_epoch, args.epochs):
-    train_losses, train_psnrs = train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, \
+    train_losses = train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, \
                                             valid_queue, validation_loggers, epoch)
     valid_losses, valid_psnrs = infer(args, gpu_id, valid_queue, models, criterion)
 
     for i in range(len(models)):
       validation_loggers[i].info('validation epoch %03d %e %2.3f', epoch, valid_losses[i], valid_psnrs[i])
 
-  return valid_psnrs, train_psnrs
+  return valid_psnrs
 
 
 def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers):
@@ -183,22 +183,21 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
   for m in models:
     m.train()
 
-  print(f"LEN OF TRAIN QUEUE {len(train_queue)}")
-
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
       bayer, redblue_bayer, green_grgb = input 
-       
-      bayer = bayer.cuda()
-      redblue_bayer = redblue_bayer.cuda()
-      green_grgb = green_grgb.cuda()
-      target = target.cuda()
-
+      """    
+      bayer = bayer.to(device=f"cuda:{gpu_id}")
+      redblue_bayer = redblue_bayer.to(device=f"cuda:{gpu_id}")
+      green_grgb = green_grgb.to(device=f"cuda:{gpu_id}")
+      target = target.to(device=f"cuda:{gpu_id}")
+      """
     else:
       bayer = input
-      bayer = bayer.cuda()
-      target = target.cuda()
-
+      """
+      bayer = bayer.to(device=f"cuda:{gpu_id}")
+      target = target.to(device=f"cuda:{gpu_id}")
+      """
     n = bayer.size(0)
 
     for i, model in enumerate(models):
@@ -237,7 +236,7 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
 
 def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, validation_queue, validation_loggers, epoch):
   loss_trackers = [util.AvgrageMeter() for m in models]
-  psnr_trackers = [util.AvgrageMeter() for m in models]
+  #psnr_trackers = [util.AvgrageMeter() for m in models]
 
   for m in models:
     m.train()
@@ -245,16 +244,18 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
       bayer, redblue_bayer, green_grgb = input 
-      bayer = bayer.cuda()
-      redblue_bayer = redblue_bayer.cuda()
-      green_grgb = green_grgb.cuda()
-      target = target.cuda()
-
+      """
+      bayer = bayer.to(device=f"cuda:{gpu_id}")
+      redblue_bayer = redblue_bayer.to(device=f"cuda:{gpu_id}")
+      green_grgb = green_grgb.to(device=f"cuda:{gpu_id}")
+      target = target.to(device=f"cuda:{gpu_id}")
+      """
     else:
       bayer = input
-      bayer = bayer.cuda()
-      target = target.cuda()
-
+      """
+      bayer = bayer.to(device=f"cuda:{gpu_id}")
+      target = target.to(device=f"cuda:{gpu_id}")
+      """
     target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
     n = bayer.size(0)
@@ -296,7 +297,7 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
       for i in range(len(models)):
         torch.save(models[i].state_dict(), model_pytorch_files[i])
 
-  return [loss_tracker.avg for loss_tracker in loss_trackers], [psnr_tracker.avg for psnr_tracker in psnr_trackers]
+  return [loss_tracker.avg for loss_tracker in loss_trackers] #, [psnr_tracker.avg for psnr_tracker in psnr_trackers]
 
 
 def infer(args, gpu_id, valid_queue, models, criterion):
@@ -310,14 +311,8 @@ def infer(args, gpu_id, valid_queue, models, criterion):
     for step, (input, target) in enumerate(valid_queue):
       if args.full_model:
         bayer, redblue_bayer, green_grgb = input 
-        bayer = bayer.cuda()
-        redblue_bayer = redblue_bayer.cuda()
-        green_grgb = green_grgb.cuda()
-        target = target.cuda()
       else:
         bayer = input
-        bayer = bayer.cuda()
-        target = target.cuda()
 
       target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
