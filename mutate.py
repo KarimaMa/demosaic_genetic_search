@@ -11,7 +11,6 @@ Specifically:
     touchup region has inputs Stack(ChromaExtractor, GreenExtractor
 2) input / output channels match up
 """
-import time
 import random
 import logging
 import copy
@@ -95,7 +94,6 @@ class Mutator():
         self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["green_model"]["uniform"])
 
   def __init__(self, args, debug_logger, mysql_logger):
-    
     self.args = args
     self.debug_logger = debug_logger
     self.mysql_logger = mysql_logger
@@ -152,7 +150,7 @@ class Mutator():
         if rv <= mutation_type_cdf[i]:
           mutation_type = mtype
           break
-      self.debug_logger.debug(f"--- mutation type cdf: {mutation_type_cdf} ---")
+      # self.debug_logger.debug(f"--- mutation type cdf: {mutation_type_cdf} ---")
     return mutation_type
 
   def mutate(self, parent_id, model_id, tree, input_set, generation, partner_ast=None):
