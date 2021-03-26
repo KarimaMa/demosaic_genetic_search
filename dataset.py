@@ -4,7 +4,6 @@ import torch.nn.functional as F
 import os
 import numpy as np
 from torch.utils import data
-import random
 from imageio import imread
 from config import IMG_H, IMG_W
 
@@ -77,7 +76,6 @@ def ids_from_file(filename):
   # Assume the list file has relative paths
   root = os.getcwd()
   ids = [os.path.join(root, l.strip()) for l in open(filename, "r")]
-  random.shuffle(ids)
   if not os.path.exists(ids[0]):
       raise RuntimeError(f"Dataset filelist is invalid, coult not find {ids[0]}")
   return ids
@@ -246,50 +244,95 @@ provides bayer quad, red and blue from bayer, gr and gb from bayer
 as inputs and the full RGB image as the target
 """
 class FullPredictionQuadDataset(data.Dataset):
-  def __init__(self, data_file=None, data_filenames=None, return_index=False):
+  def __init__(self, data_file=None, data_filenames=None, RAM=False, return_index=False):
+    self.RAM = RAM
+    
     if data_file:
       self.list_IDs = ids_from_file(data_file) # patch filenames
     else:
       self.list_IDs = data_filenames
     self.return_index = return_index
 
+    if RAM: 
+      self.data_array = [None for i in range(len(self.list_IDs))]
+      for i, image_f in enumerate(self.list_IDs):
+        img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+       
+        img = np.transpose(img, [2, 0, 1])
+
+        mosaic = bayer(img)
+        mosaic = np.sum(mosaic, axis=0, keepdims=True)
+
+        image_size = list(img.shape)
+        quad_h = image_size[1] // 2
+        quad_w = image_size[2] // 2
+
+        redblue_bayer = np.zeros((2, quad_h, quad_w))
+        bayer_quad = np.zeros((4, quad_h, quad_w))
+        green_grgb = np.zeros((2, quad_h, quad_w))
+
+        bayer_quad[0,:,:] = mosaic[0,0::2,0::2]
+        bayer_quad[1,:,:] = mosaic[0,0::2,1::2]
+        bayer_quad[2,:,:] = mosaic[0,1::2,0::2]
+        bayer_quad[3,:,:] = mosaic[0,1::2,1::2]
+
+        redblue_bayer[0,:,:] = bayer_quad[1,:,:]
+        redblue_bayer[1,:,:] = bayer_quad[2,:,:]
+
+        green_grgb[0,:,:] = bayer_quad[0,:,:]
+        green_grgb[1,:,:] = bayer_quad[3,:,:]
+
+        target = img
+
+        bayer_quad = torch.Tensor(bayer_quad)
+        redblue_bayer = torch.Tensor(redblue_bayer)
+        green_grgb = torch.Tensor(green_grgb)
+        target = torch.Tensor(target)
+
+        image_data = [bayer_quad, redblue_bayer, green_grgb, target]
+
+        self.data_array[i] = image_data
+
   def __len__(self):
     return len(self.list_IDs)
 
   def __getitem__(self, index):
     image_f = self.list_IDs[index]
-    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-   
-    img = np.transpose(img, [2, 0, 1])
 
-    mosaic = bayer(img)
-    mosaic = np.sum(mosaic, axis=0, keepdims=True)
+    if self.RAM:
+      bayer_quad, redblue_bayer, green_grgb, target = self.data_array[index]
+    else:
+      img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+      img = np.transpose(img, [2, 0, 1])
 
-    image_size = list(img.shape)
-    quad_h = image_size[1] // 2
-    quad_w = image_size[2] // 2
+      mosaic = bayer(img)
+      mosaic = np.sum(mosaic, axis=0, keepdims=True)
 
-    redblue_bayer = np.zeros((2, quad_h, quad_w))
-    bayer_quad = np.zeros((4, quad_h, quad_w))
-    green_grgb = np.zeros((2, quad_h, quad_w))
+      image_size = list(img.shape)
+      quad_h = image_size[1] // 2
+      quad_w = image_size[2] // 2
 
-    bayer_quad[0,:,:] = mosaic[0,0::2,0::2]
-    bayer_quad[1,:,:] = mosaic[0,0::2,1::2]
-    bayer_quad[2,:,:] = mosaic[0,1::2,0::2]
-    bayer_quad[3,:,:] = mosaic[0,1::2,1::2]
+      redblue_bayer = np.zeros((2, quad_h, quad_w))
+      bayer_quad = np.zeros((4, quad_h, quad_w))
+      green_grgb = np.zeros((2, quad_h, quad_w))
 
-    redblue_bayer[0,:,:] = bayer_quad[1,:,:]
-    redblue_bayer[1,:,:] = bayer_quad[2,:,:]
+      bayer_quad[0,:,:] = mosaic[0,0::2,0::2]
+      bayer_quad[1,:,:] = mosaic[0,0::2,1::2]
+      bayer_quad[2,:,:] = mosaic[0,1::2,0::2]
+      bayer_quad[3,:,:] = mosaic[0,1::2,1::2]
 
-    green_grgb[0,:,:] = bayer_quad[0,:,:]
-    green_grgb[1,:,:] = bayer_quad[3,:,:]
+      redblue_bayer[0,:,:] = bayer_quad[1,:,:]
+      redblue_bayer[1,:,:] = bayer_quad[2,:,:]
 
-    target = img
+      green_grgb[0,:,:] = bayer_quad[0,:,:]
+      green_grgb[1,:,:] = bayer_quad[3,:,:]
 
-    bayer_quad = torch.Tensor(bayer_quad)
-    redblue_bayer = torch.Tensor(redblue_bayer)
-    green_grgb = torch.Tensor(green_grgb)
-    target = torch.Tensor(target)
+      target = img
+
+      bayer_quad = torch.Tensor(bayer_quad)
+      redblue_bayer = torch.Tensor(redblue_bayer)
+      green_grgb = torch.Tensor(green_grgb)
+      target = torch.Tensor(target)
 
     input = (bayer_quad, redblue_bayer, green_grgb)
 
