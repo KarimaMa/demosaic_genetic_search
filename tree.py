@@ -36,7 +36,7 @@ class Node:
     self.num_children = num_children
     
   def __hash__(self):
-    name_hash = myhash(self.__class__.__name__)
+    name_hash = myhash(self.name)
 
     h = hash_combine(name_hash, self.out_c)
     if type(self.in_c) is tuple:
@@ -51,6 +51,8 @@ class Node:
       h = hash_combine(h, self.groups)
     if hasattr(self, "green_model_id"):
       h = hash_combine(h, self.green_model_id)
+    if hasattr(self, "node") and not hasattr(self, "green_model_id"):
+      h = hash_combine(h, hash(self.node))
 
     if self.num_children == 3:
       h = hash_combine(h, hash(self.child1))
@@ -63,6 +65,7 @@ class Node:
       h = hash_combine(h, hash(self.child))
 
     return int(h)
+
 
   def id_string(self):
     if self.num_children == 0:
