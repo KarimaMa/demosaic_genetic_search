@@ -7,7 +7,7 @@ from tree import Node, has_loop, hash_combine
 import copy
 import sys
 import pickle
-
+from orderedset import OrderedSet
 
 # from a github gist by victorlei
 def extclass(cls):
@@ -576,7 +576,7 @@ def structure_to_array(self):
       node_info["partner_set"] = partner_ids
 
     parents = []
-    seen_parents = set()
+    seen_parents = OrderedSet()
     if type(n.parent) is tuple:
       for node_parent in n.parent:
         for j in range(0, len(preorder)):
@@ -727,7 +727,7 @@ def link_partners_in_reconstructed_tree(tree, preorder_node_info):
   for i, node_info in enumerate(preorder_node_info):
     if "partner_set" in node_info:
       partner_ids = node_info["partner_set"] # list of preorder ids of partners
-      partner_set = set([ (preorder[pid], id(preorder[pid])) for pid in partner_ids])
+      partner_set = OrderedSet([ (preorder[pid], id(preorder[pid])) for pid in partner_ids])
       preorder[i].partner_set = partner_set
 
 def load_ast(filename):
@@ -800,7 +800,7 @@ def structural_hash(tree):
             AddExp, LogSub, Stack, Upsample, Downsample, InterleavedSum, \
             GroupedSum, RGBExtractor, RGB8ChanExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input]
 
-  ops_used = set([type(n) for n in nodes])
+  ops_used = OrderedSet([type(n) for n in nodes])
   op_coverage = 0
   for i,o in enumerate(op_list):
     if o in ops_used:
@@ -876,14 +876,14 @@ def redirect_to_new_partners(old_tree, new_tree):
   new_tree_preorder = new_tree.preorder()
   old_tree_ids = [id(n) for n in old_tree_preorder]
 
-  done = set()
+  done = OrderedSet()
   for new_node in new_tree_preorder:
     if id(new_node) in done:
       continue
     done.add(id(new_node))
     if hasattr(new_node, "partner_set"):
       found = False
-      new_node_partner_set = set()
+      new_node_partner_set = OrderedSet()
       for p in new_node.partner_set:
         if not p[1] in old_tree_ids: # partner of new node is not within the copied subtree -it's in the shared parent tree
           pass
@@ -892,7 +892,7 @@ def redirect_to_new_partners(old_tree, new_tree):
           # new_node_partner = p
 
           # # remove all connections between partner node and old nodes 
-          # partners_of_new_node_partner = set()
+          # partners_of_new_node_partner = OrderedSet()
           # for item in new_node_partner[0].partner_set: 
           #   # nodes may have been modified since insertion into partner set
           #   # so we need to reproduce the set by rehashing the nodes
@@ -1020,9 +1020,9 @@ given opclasses.
 """
 def find_closest_parents(node, OpClasses):
   if any([issubclass(type(node), oc) for oc in OpClasses]):
-      return set( [ (node, id(node)) ] )
+      return OrderedSet( [ (node, id(node)) ] )
   if node.parent is None:
-    return set()
+    return OrderedSet()
   parent_type = type(node.parent)
   if parent_type is tuple:
     found_set1 = find_closest_parents(node.parent[0], OpClasses)
@@ -1038,7 +1038,7 @@ such a child, return the closest found in each branch
 """
 def find_closest_children(node, OpClasses):
   if any([issubclass(type(node), oc) for oc in OpClasses]):
-    return set( [(node, id(node))] )
+    return OrderedSet( [(node, id(node))] )
   if node.num_children == 3:
     found1 = find_closest_children(node.child1, OpClasses)
     found2 = find_closest_children(node.child2, OpClasses)
@@ -1050,42 +1050,42 @@ def find_closest_children(node, OpClasses):
     return lfound.union(rfound)
   elif node.num_children == 1:
     return find_closest_children(node.child, OpClasses)
-  return set()
+  return OrderedSet()
 
 
 # ops to choose from for insertion
-linear_insert_ops = set((Conv1x1, Conv1D, Conv2D))
-nonlinear_insert_ops = set((Relu,)) # only allow Softmax to be used with Mul insertion 
-#special_insert_ops = set((Mul, Add, Sub, Stack, Downsample, SumR, LogSub))
-special_insert_ops = set((Mul, Add, Sub, Stack, Downsample, InterleavedSum, GroupedSum))
+linear_insert_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
+nonlinear_insert_ops = OrderedSet((Relu,)) # only allow Softmax to be used with Mul insertion 
+#special_insert_ops = OrderedSet((Mul, Add, Sub, Stack, Downsample, SumR, LogSub))
+special_insert_ops = OrderedSet((Mul, Add, Sub, Stack, Downsample, InterleavedSum, GroupedSum))
 
 nl_sp_insert_ops = nonlinear_insert_ops.union(special_insert_ops)
 l_sp_insert_ops = linear_insert_ops.union(special_insert_ops)
 all_insert_ops = nl_sp_insert_ops.union(l_sp_insert_ops)
 
 
-linear_ops = set((Conv1x1, Conv1D, Conv2D))
-nonlinear_ops = set((Softmax, Relu)) 
-special_ops = set((Mul, Add, Sub, Stack, Upsample, Downsample, InterleavedSum, GroupedSum))
+linear_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
+nonlinear_ops = OrderedSet((Softmax, Relu)) 
+special_ops = OrderedSet((Mul, Add, Sub, Stack, Upsample, Downsample, InterleavedSum, GroupedSum))
 
 """
-special_ops = set((Mul, Add, Sub, AddExp, LogSub, Stack, Upsample, Downsample, SumR))
-sandwich_ops = set((LogSub, AddExp, Downsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
+special_ops = OrderedSet((Mul, Add, Sub, AddExp, LogSub, Stack, Upsample, Downsample, SumR))
+sandwich_ops = OrderedSet((LogSub, AddExp, Downsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
 sandwich_pairs = {
   LogSub: AddExp,
   Downsample: Upsample
 }
 """
-sandwich_ops = set((Downsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
+sandwich_ops = OrderedSet((Downsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
 
 sandwich_pairs = {
   Downsample: Upsample
 }
 
-border_ops = set((RGBExtractor, RGB8ChanExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input))
+border_ops = OrderedSet((RGBExtractor, RGB8ChanExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input))
 nl_and_sp = nonlinear_ops.union(special_ops)
 l_and_sp = linear_ops.union(special_ops)
 all_ops = nl_and_sp.union(l_and_sp)
 
-demosaicnet_ops = set((Conv1x1, Conv2D, Relu))
+demosaicnet_ops = OrderedSet((Conv1x1, Conv2D, Relu))
 

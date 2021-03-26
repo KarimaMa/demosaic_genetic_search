@@ -1,6 +1,7 @@
 import logging
 import torch
 import os
+from orderedset import OrderedSet
 from functools import reduce
 
 from demosaic_ast import load_ast
@@ -28,7 +29,7 @@ def compute_psnr(loss):
   return 10*math.log(float(255)**2 / math.pow(math.sqrt(loss)*float(255), 2),10)
 
 def get_factors(n):    
-  factors = set(reduce(list.__add__, 
+  factors = OrderedSet(reduce(list.__add__, 
     ([i, n//i] for i in range(1, int(n**0.5) + 1) if n % i == 0)))
   return factors
 
@@ -100,8 +101,8 @@ class AvgrageMeter(object):
 def create_exp_dir(path, scripts_to_save=None):
   if not os.path.exists(path):
     os.makedirs(path, exist_ok=True)
-  else:
-  	print(f"Directory already exists {path}")
+  # else:
+  # 	print(f"Directory already exists {path}")
 
   print('Experiment dir : {}'.format(path))
 
@@ -115,8 +116,8 @@ def create_exp_dir(path, scripts_to_save=None):
 def create_dir(path, scripts_to_save=None):
   if not os.path.exists(path):
     os.makedirs(path, exist_ok=True)
-  else:
-  	print(f"Directory already exists {path}")
+  # else:
+  # 	print(f"Directory already exists {path}")
 
   if scripts_to_save is not None:
     scripts_dir = os.path.join(path, 'scripts')
