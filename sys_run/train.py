@@ -6,13 +6,12 @@ from torch.autograd import Variable
 import logging
 import argparse
 import os
-import random 
-import numpy as np
 import sys
-from dataset import FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, ids_from_file, FastDataLoader
 
 sys.path.append(sys.path[0].split("/")[0])
 sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
+
+from dataset import FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, ids_from_file, FastDataLoader
 from async_loader import AsynchronousLoader
 
 import util
@@ -46,8 +45,20 @@ def create_train_dataset(args, gpu_id):
   else:
     train_data = GreenQuadDataset(data_file=args.training_file) 
 
-  loader = AsynchronousLoader(train_data, device, batch_size=args.batch_size, \
-                              pin_memory=True, workers=8, shuffle=True)
+  num_train = len(train_data)
+  train_indices = list(range(num_train))
+
+  if args.deterministic:
+    sampler = torch.utils.data.sampler.SequentialSampler(train_indices)
+  else:
+    sampler = torch.utils.data.sampler.SubsetRandomSampler(train_indices)
+
+  train_queue = FastDataLoader(
+      train_data, batch_size=args.batch_size,
+      sampler=sampler,
+      pin_memory=True, num_workers=8)
+
+  loader = AsynchronousLoader(train_queue, device)
 
   return loader
 
@@ -62,8 +73,20 @@ def create_validation_dataset(args, gpu_id):
   else:
     validation_data = GreenQuadDataset(data_file=args.validation_file)
 
-  loader = AsynchronousLoader(validation_data, device, batch_size=args.batch_size, \
-                              pin_memory=True, workers=8, shuffle=True)
+  num_validation = len(validation_data)
+  validation_indices = list(range(num_validation))
+
+  if args.deterministic:
+    sampler = torch.utils.data.sampler.SequentialSampler(validation_indices)
+  else:
+    sampler = torch.utils.data.sampler.SubsetRandomSampler(validation_indices)
+
+  validation_queue = FastDataLoader(
+      validation_data, batch_size=args.batch_size,
+      sampler=sampler,
+      pin_memory=True, num_workers=8)
+
+  loader = AsynchronousLoader(validation_queue, device)
 
   return loader
 

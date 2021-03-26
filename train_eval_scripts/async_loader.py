@@ -1,5 +1,3 @@
-
-  
 import os, sys
 from threading import Thread
 from queue import Queue
@@ -35,17 +33,10 @@ class AsynchronousLoader(object):
   queue_size: Integer
       Size of the que used to store the data loaded to the device
   """
-  def __init__(self, dataset, device, batch_size = 1, pin_memory = True, shuffle = False, workers = 10, queue_size = 10, **kwargs):
-    self.dataset = dataset
+  def __init__(self, dataloader, device, queue_size=10):
+    self.dataloader = dataloader
     self.device = device
-    self.batch_size = batch_size
-    self.workers = workers
-    self.pin_memory = pin_memory
-    self.shuffle = shuffle
     self.queue_size = queue_size
-
-    # Use PyTorch's DataLoader for collating samples and stuff since it's nicely written and parallelrised
-    self.dataloader = FastDataLoader(dataset, batch_size = batch_size, pin_memory = pin_memory, shuffle = shuffle, num_workers = workers, **kwargs)
 
     self.load_stream = torch.cuda.Stream(device = device)
     self.queue = Queue(maxsize = self.queue_size)

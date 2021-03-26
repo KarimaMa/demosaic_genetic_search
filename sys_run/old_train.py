@@ -36,24 +36,6 @@ def create_loggers(model_dir, model_id, num_models, mode):
   return loggers
 
 
-def create_validation_dataset(args):
-  if args.full_model:
-    validation_data = FullPredictionQuadDataset(data_file=args.validation_file)
-  elif args.rgb8chan:
-    validation_data = RGB8ChanDataset(data_file=args.validation_file)
-  else:
-    validation_data = GreenQuadDataset(data_file=args.validation_file)
-
-  num_validation = len(validation_data)
-  validation_indices = list(range(num_validation))
-
-  validation_queue = FastDataLoader(
-      validation_data, batch_size=args.batch_size,
-      sampler=torch.utils.data.sampler.SubsetRandomSampler(validation_indices),
-      pin_memory=True, num_workers=4)
-  return validation_queue
-
-
 def create_train_dataset(args):
   if args.full_model:
     train_data = FullPredictionQuadDataset(data_file=args.training_file)
@@ -65,11 +47,39 @@ def create_train_dataset(args):
   num_train = len(train_data)
   train_indices = list(range(num_train))
   
+  if args.deterministic:
+    sampler = torch.utils.data.sampler.SequentialSampler(train_indices)
+  else:
+    sampler = torch.utils.data.sampler.SubsetRandomSampler(train_indices)
+
   train_queue = FastDataLoader(
       train_data, batch_size=args.batch_size,
-      sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
+      sampler=sampler,
       pin_memory=True, num_workers=4)
   return train_queue
+
+
+def create_validation_dataset(args):
+  if args.full_model:
+    validation_data = FullPredictionQuadDataset(data_file=args.validation_file)
+  elif args.rgb8chan:
+    validation_data = RGB8ChanDataset(data_file=args.validation_file)
+  else:
+    validation_data = GreenQuadDataset(data_file=args.validation_file)
+
+  num_validation = len(validation_data)
+  validation_indices = list(range(num_validation))
+
+  if args.deterministic:
+    sampler = torch.utils.data.sampler.SequentialSampler(validation_indices)
+  else:
+    sampler = torch.utils.data.sampler.SubsetRandomSampler(validation_indices)
+
+  validation_queue = FastDataLoader(
+      validation_data, batch_size=args.batch_size,
+      sampler=sampler,
+      pin_memory=True, num_workers=4)
+  return validation_queue
 
 
 def run_model(args, gpu_id, model_id, models, model_dir, experiment_logger):

@@ -9,6 +9,7 @@ import glob
 import copy
 import random
 import numpy as np
+from orderedset import OrderedSet
 import torch
 import torch.backends.cudnn as cudnn
 import sys
@@ -306,16 +307,16 @@ class Searcher():
           if partner_ast:
             set_green_model_id(partner_ast, green_model_id)
           model_inputs = self.construct_chroma_inputs(green_model_id)
-          model_input_names = set(model_inputs.keys())
-          self.args.input_ops = set([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
+          model_input_names = OrderedSet(model_inputs.keys())
+          self.args.input_ops = OrderedSet([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
         elif self.args.rgb8chan: # full rgb model search uses same inputs as green search
           model_inputs = self.construct_green_inputs()
-          model_input_names = set(model_inputs.keys())
-          self.args.input_ops = set(list(model_inputs.values()))
+          model_input_names = OrderedSet(model_inputs.keys())
+          self.args.input_ops = OrderedSet(list(model_inputs.values()))
         else: 
           model_inputs = self.construct_green_inputs()
-          model_input_names = set(model_inputs.keys())
-          self.args.input_ops = set(list(model_inputs.values()))
+          model_input_names = OrderedSet(model_inputs.keys())
+          self.args.input_ops = OrderedSet(list(model_inputs.values()))
 
         new_model_ast, shash, mutation_stats = self.mutator.mutate(
             parent_id, new_model_id, model_ast, model_input_names, generation,
@@ -693,6 +694,12 @@ class Searcher():
           if new_model_ast is None:
             continue
 
+          """
+          HACK: print new asts to check mutation is deterministic
+          """
+          print(f"model {new_model_id} hash: {hash(new_model_ast)}")
+          print("------------------")
+
           if self.args.full_model:
             self.insert_green_model(new_model_ast)
 
@@ -732,7 +739,7 @@ class Searcher():
             new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
           else:
             training_tasks.append((new_model_ast, task_info))
-        
+
         # hack for now remove later
         for new_model_ast, task_info in training_tasks:
           util.create_dir(task_info.model_dir)
@@ -751,6 +758,10 @@ class Searcher():
           index = task_id * model_inits
 
           model_psnrs = valid_psnrs[index:(index+model_inits)]
+
+          if self.args.deterministic:
+            model_psnrs = [random.uniform(0,1) * (33 - 28) + 28 for i in range(args.model_initializations)]
+          print(f"model {task_info.model_id} psnrs {model_psnrs}")
 
           self.update_model_database(task_info, model_psnrs)
 
@@ -842,6 +853,7 @@ if __name__ == "__main__":
   parser.add_argument('--save', type=str, help='experiment name')
 
   parser.add_argument('--seed', type=int, default=1, help='random seed')
+  parser.add_argument('--deterministic', action='store_true', help="set model psnrs to be deterministic")
 
   # seed models 
   parser.add_argument('--green_seed_model_files', type=str, help='file with list of filenames of green seed model asts')
@@ -914,12 +926,11 @@ if __name__ == "__main__":
 
   random.seed(args.seed)
   np.random.seed(args.seed)
-  #torch.cuda.set_device(args.gpu)
   cudnn.benchmark = False
   torch.manual_seed(args.seed)
 
   cudnn.enabled=True
-  cudnn.deterministic=True
+  # cudnn.deterministic=True
   torch.cuda.manual_seed(args.seed)
 
   if args.full_model:

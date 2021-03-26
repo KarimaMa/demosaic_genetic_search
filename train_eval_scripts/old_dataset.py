@@ -4,7 +4,6 @@ import torch.nn.functional as F
 import os
 import numpy as np
 from torch.utils import data
-import random
 from imageio import imread
 from config import IMG_H, IMG_W
 
@@ -77,7 +76,6 @@ def ids_from_file(filename):
   # Assume the list file has relative paths
   root = os.path.dirname(os.path.abspath(filename))
   ids = [os.path.join(root, l.strip()) for l in open(filename, "r")]
-  random.shuffle(ids)
   if not os.path.exists(ids[0]):
       raise RuntimeError(f"Dataset filelist is invalid, coult not find {ids[0]}")
   return ids
