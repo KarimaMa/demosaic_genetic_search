@@ -36,6 +36,15 @@ def create_loggers(model_dir, model_id, num_models, mode):
   return loggers
 
 
+def create_dataset_logger(model_dir, model_id):
+  log_format = '%(asctime)s %(levelname)s %(message)s'
+  log_file = os.path.join(model_dir, f'dataloader_log')
+  if os.path.exists(log_file):
+    os.remove(log_file)
+  logger = util.create_logger(f'model_{model_id}_dataloader_logger', logging.INFO, log_format, log_file)
+  return logger
+
+
 def create_train_dataset(args):
   if args.full_model:
     train_data = FullPredictionQuadDataset(data_file=args.training_file)
@@ -55,7 +64,7 @@ def create_train_dataset(args):
   train_queue = FastDataLoader(
       train_data, batch_size=args.batch_size,
       sampler=sampler,
-      pin_memory=True, num_workers=4)
+      pin_memory=True, num_workers=8)
   return train_queue
 
 
@@ -78,7 +87,7 @@ def create_validation_dataset(args):
   validation_queue = FastDataLoader(
       validation_data, batch_size=args.batch_size,
       sampler=sampler,
-      pin_memory=True, num_workers=4)
+      pin_memory=True, num_workers=8)
   return validation_queue
 
 
@@ -116,18 +125,19 @@ def run_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
 
 def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   print(f"training {len(models)} models on GPU {gpu_id}")
-
-  train_queue = create_train_dataset(args)
-  valid_queue = create_validation_dataset(args)
-
-  print(f"FINISHED creating datasets")
+  models = [model.to(device=f"cuda:{gpu_id}") for model in models]
+  for m in models:
+    m.to_gpu(gpu_id)
 
   train_loggers = create_loggers(model_dir, model_id, len(models), "train")
   validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
 
-  models = [model.to(device=f"cuda:{gpu_id}") for model in models]
-  for m in models:
-    m.to_gpu(gpu_id)
+  dataset_logger = create_dataset_logger(model_dir, model_id)
+ 
+  dataset_logger.info("creating datasets...")
+  train_queue = create_train_dataset(args)
+  valid_queue = create_validation_dataset(args)
+  dataset_logger.info("finished creating datasets")
     
   criterion = nn.MSELoss()
   optimizers = get_optimizers(args, models)
@@ -140,23 +150,22 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   else:
     reuse_lr_search_epoch = False
   experiment_logger.info(f"USING LEARNING RATE {lr_tracker.proposed_lrs[-1]}")
+  experiment_logger.info(f"learning rate stored in args {args.learning_rate}")
 
   if len(train_queue) > args.validation_variance_end_step:
     reuse_lr_search_epoch = False
     
   if not reuse_lr_search_epoch:
-    # erase logs from previous epoch and reset models
-    train_loggers = create_loggers(model_dir, model_id, len(models), "train")
-    validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
     cur_epoch = 0
     for m in models:
       m._initialize_parameters()
-    models = [model.to(device=f"cuda:{gpu_id}") for model in models]
     optimizers = get_optimizers(args, models)
   else: # we can use previous epoch's training 
     cur_epoch = 1
 
-  experiment_logger.info(f"learning rate stored in args {args.learning_rate}")
+  for i in range(len(models)):
+    train_loggers[i].info(f"STARTING TRAINING AT LR {args.learning_rate}") 
+    validation_loggers[i].info(f"STARTING TRAINING AT LR {args.learning_rate}") 
 
   for epoch in range(cur_epoch, args.epochs):
     train_losses, train_psnrs = train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, \
@@ -183,12 +192,8 @@ def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue,
     args.learning_rate = new_lr
     if lr_tracker.proposed_lrs[-1] == lr_tracker.proposed_lrs[-2]: 
       break
-    # trying a new lr - erase logs from previous epoch and reset models
-    train_loggers = create_loggers(model_dir, model_id, len(models), "train")
-    validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
     for m in models:
       m._initialize_parameters()
-    models = [model.to(device=f"cuda:{gpu_id}") for model in models]
         
   return lr_tracker, optimizers, train_loggers, validation_loggers
 
