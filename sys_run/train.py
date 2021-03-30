@@ -35,11 +35,19 @@ def create_loggers(model_dir, model_id, num_models, mode):
   return loggers
 
 
-def create_train_dataset(args, gpu_id):
+def create_dataset_logger(model_dir, model_id):
+  log_format = '%(asctime)s %(levelname)s %(message)s'
+  log_file = os.path.join(model_dir, f'dataloader_log')
+  if os.path.exists(log_file):
+    os.remove(log_file)
+  logger = util.create_logger(f'model_{model_id}_dataloader_logger', logging.INFO, log_format, log_file)
+  return logger
+
+def create_train_dataset(args, gpu_id, shared_data=None, logger=None):
   device = torch.device(f'cuda:{gpu_id}')
 
   if args.full_model:
-    train_data = FullPredictionQuadDataset(data_file=args.training_file)
+    train_data = FullPredictionQuadDataset(data_file=args.training_file, RAM=args.ram, logger=logger, shared_data=shared_data)
   elif args.rgb8chan:
     train_data = RGB8ChanDataset(data_file=args.training_file)
   else:
@@ -53,21 +61,24 @@ def create_train_dataset(args, gpu_id):
   else:
     sampler = torch.utils.data.sampler.SubsetRandomSampler(train_indices)
 
+  logger.info("Creating FastDataLoader...")
   train_queue = FastDataLoader(
       train_data, batch_size=args.batch_size,
       sampler=sampler,
       pin_memory=True, num_workers=8)
+  logger.info("Finished creating FastDataLoader")
 
+  logger.info("Creating AsyncLoader...")
   loader = AsynchronousLoader(train_queue, device)
-
+  logger.info("Finished creating AsyncLoader")
   return loader
 
 
-def create_validation_dataset(args, gpu_id):
+def create_validation_dataset(args, gpu_id, shared_data=None):
   device = torch.device(f'cuda:{gpu_id}')
 
   if args.full_model:
-    validation_data = FullPredictionQuadDataset(data_file=args.validation_file)
+    validation_data = FullPredictionQuadDataset(data_file=args.validation_file, RAM=args.ram, shared_data=shared_data)
   elif args.rgb8chan:
     validation_data = RGB8ChanDataset(data_file=args.validation_file)
   else:
@@ -123,23 +134,25 @@ def run_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   return valid_psnrs
 
 
-def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
+def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, train_data, val_data):
   print(f"training {len(models)} models on GPU {gpu_id}")
-
-  train_queue = create_train_dataset(args, gpu_id)
-  valid_queue = create_validation_dataset(args, gpu_id)
-
-  train_loggers = create_loggers(model_dir, model_id, len(models), "train")
-  validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
-
   models = [model.to(device=f"cuda:{gpu_id}") for model in models]
   for m in models:
     m.to_gpu(gpu_id)
-    
-  criterion = nn.MSELoss()
-  optimizers = get_optimizers(args, models)
 
-  lr_tracker, optimizers, train_loggers, validation_loggers = lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, valid_queue, validation_loggers)
+  train_loggers = create_loggers(model_dir, model_id, len(models), "train")
+  validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
+  
+  dataset_logger = create_dataset_logger(model_dir, model_id)
+
+  train_queue = create_train_dataset(args, gpu_id, shared_data=train_data, logger=dataset_logger)
+  valid_queue = create_validation_dataset(args, gpu_id, shared_data=val_data)
+
+  criterion = nn.MSELoss()
+
+  dataset_logger.info("finished creating datasets")
+
+  lr_tracker, optimizers, train_loggers, validation_loggers = lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, valid_queue, validation_loggers, dataset_logger)
   if args.lr_search_steps > 0:
     reuse_lr_search_epoch = lr_tracker.proposed_lrs[-1] == lr_tracker.proposed_lrs[-2]
     for lr_search_iter, variance in enumerate(lr_tracker.seen_variances):
@@ -147,23 +160,22 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   else:
     reuse_lr_search_epoch = False
   experiment_logger.info(f"USING LEARNING RATE {lr_tracker.proposed_lrs[-1]}")
+  experiment_logger.info(f"learning rate stored in args {args.learning_rate}")
 
   if len(train_queue) > args.validation_variance_end_step:
     reuse_lr_search_epoch = False
-    
+
   if not reuse_lr_search_epoch:
-    # erase logs from previous epoch and reset models
-    train_loggers = create_loggers(model_dir, model_id, len(models), "train")
-    validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
     cur_epoch = 0
     for m in models:
       m._initialize_parameters()
-    models = [model.to(device=f"cuda:{gpu_id}") for model in models]
     optimizers = get_optimizers(args, models)
   else: # we can use previous epoch's training 
     cur_epoch = 1
 
-  experiment_logger.info(f"learning rate stored in args {args.learning_rate}")
+  for i in range(len(models)):
+    train_loggers[i].info(f"STARTING TRAINING AT LR {args.learning_rate}") 
+    validation_loggers[i].info(f"STARTING TRAINING AT LR {args.learning_rate}") 
 
   for epoch in range(cur_epoch, args.epochs):
     train_losses = train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, \
@@ -176,26 +188,20 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   return valid_psnrs
 
 
-def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers):
+def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers, dataset_logger):
+  dataset_logger.info(f"BEGINNING LR SEARCH")
   lr_tracker = LRTracker(args.learning_rate, args.variance_max, args.variance_min)
-  if args.lr_search_steps == 0:
-    optimizers = get_optimizers(args, models)
-    train_loggers = create_loggers(model_dir, model_id, len(models), "train")
-    validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
 
   for step in range(args.lr_search_steps):
     optimizers = get_optimizers(args, models)
+    dataset_logger.info(f"performing LR search step {step}")
     losses, validation_variance = get_validation_variance(args, gpu_id, models, criterion, optimizers, train_queue, train_loggers, validation_queue, validation_loggers)
     new_lr = lr_tracker.update_lr(validation_variance)
     args.learning_rate = new_lr
     if lr_tracker.proposed_lrs[-1] == lr_tracker.proposed_lrs[-2]: 
       break
-    # trying a new lr - erase logs from previous epoch and reset models
-    train_loggers = create_loggers(model_dir, model_id, len(models), "train")
-    validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
     for m in models:
       m._initialize_parameters()
-    models = [model.to(device=f"cuda:{gpu_id}") for model in models]
         
   return lr_tracker, optimizers, train_loggers, validation_loggers
 
@@ -209,18 +215,8 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
       bayer, redblue_bayer, green_grgb = input 
-      """    
-      bayer = bayer.to(device=f"cuda:{gpu_id}")
-      redblue_bayer = redblue_bayer.to(device=f"cuda:{gpu_id}")
-      green_grgb = green_grgb.to(device=f"cuda:{gpu_id}")
-      target = target.to(device=f"cuda:{gpu_id}")
-      """
     else:
       bayer = input
-      """
-      bayer = bayer.to(device=f"cuda:{gpu_id}")
-      target = target.to(device=f"cuda:{gpu_id}")
-      """
     n = bayer.size(0)
 
     for i, model in enumerate(models):
@@ -267,18 +263,8 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
       bayer, redblue_bayer, green_grgb = input 
-      """
-      bayer = bayer.to(device=f"cuda:{gpu_id}")
-      redblue_bayer = redblue_bayer.to(device=f"cuda:{gpu_id}")
-      green_grgb = green_grgb.to(device=f"cuda:{gpu_id}")
-      target = target.to(device=f"cuda:{gpu_id}")
-      """
     else:
       bayer = input
-      """
-      bayer = bayer.to(device=f"cuda:{gpu_id}")
-      target = target.to(device=f"cuda:{gpu_id}")
-      """
     target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
     n = bayer.size(0)

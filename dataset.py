@@ -6,6 +6,8 @@ import numpy as np
 from torch.utils import data
 from imageio import imread
 from config import IMG_H, IMG_W
+from util import ids_from_file
+from multiprocessing import shared_memory
 
 
 class _RepeatSampler(object):
@@ -70,16 +72,6 @@ def bayer(im, return_mask=False):
   mask[2, 1::2, 1::2] = 0
 
   return im*mask
-
-
-def ids_from_file(filename):
-  # Assume the list file has relative paths
-  root = os.getcwd()
-  ids = [os.path.join(root, l.strip()) for l in open(filename, "r")]
-  if not os.path.exists(ids[0]):
-      raise RuntimeError(f"Dataset filelist is invalid, coult not find {ids[0]}")
-  return ids
-
 
 
 class GreenSharedDataset(data.Dataset):
@@ -244,54 +236,41 @@ provides bayer quad, red and blue from bayer, gr and gb from bayer
 as inputs and the full RGB image as the target
 """
 class FullPredictionQuadDataset(data.Dataset):
-  def __init__(self, data_file=None, data_filenames=None, RAM=False, return_index=False):
+  def __init__(self, data_file=None, data_filenames=None, RAM=False, \
+              shared_data=None, return_index=False, logger=None):
+    assert not (RAM and not (shared_data is None)), "RAM and shared data are mutually exclusive"
+
+    if RAM:
+      assert (shared_data is None), "RAM and shared data are mutually exclusive"
+      if not logger is None:
+        logger.info(f"USING RAM")
+    if not (shared_data is None):
+      assert not RAM, "RAM and shared data are mutually exclusive"
+      if not logger is None:
+        logger.info("USING SHARED MEMORY")
+
     self.RAM = RAM
-    
+    self.return_index = return_index
+    self.shared_data = shared_data
+
     if data_file:
       self.list_IDs = ids_from_file(data_file) # patch filenames
     else:
       self.list_IDs = data_filenames
-    self.return_index = return_index
-
-    if RAM: 
+    
+    if RAM:
       self.data_array = [None for i in range(len(self.list_IDs))]
+
       for i, image_f in enumerate(self.list_IDs):
+        if not logger is None:
+          if i % 2000 == 0:
+            logger.info(f"loaded {i} images")
         img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-       
         img = np.transpose(img, [2, 0, 1])
-
-        mosaic = bayer(img)
-        mosaic = np.sum(mosaic, axis=0, keepdims=True)
-
-        image_size = list(img.shape)
-        quad_h = image_size[1] // 2
-        quad_w = image_size[2] // 2
-
-        redblue_bayer = np.zeros((2, quad_h, quad_w))
-        bayer_quad = np.zeros((4, quad_h, quad_w))
-        green_grgb = np.zeros((2, quad_h, quad_w))
-
-        bayer_quad[0,:,:] = mosaic[0,0::2,0::2]
-        bayer_quad[1,:,:] = mosaic[0,0::2,1::2]
-        bayer_quad[2,:,:] = mosaic[0,1::2,0::2]
-        bayer_quad[3,:,:] = mosaic[0,1::2,1::2]
-
-        redblue_bayer[0,:,:] = bayer_quad[1,:,:]
-        redblue_bayer[1,:,:] = bayer_quad[2,:,:]
-
-        green_grgb[0,:,:] = bayer_quad[0,:,:]
-        green_grgb[1,:,:] = bayer_quad[3,:,:]
-
-        target = img
-
-        bayer_quad = torch.Tensor(bayer_quad)
-        redblue_bayer = torch.Tensor(redblue_bayer)
-        green_grgb = torch.Tensor(green_grgb)
-        target = torch.Tensor(target)
-
-        image_data = [bayer_quad, redblue_bayer, green_grgb, target]
-
-        self.data_array[i] = image_data
+        self.data_array[i] = img
+    elif self.shared_data:
+      self.existing_shm = shared_memory.SharedMemory(name=self.shared_data)
+      #self.data_array = np.ndarray((len(self.list_IDs), 3, 128, 128), dtype=np.float32, buffer=existing_shm.buf)
 
   def __len__(self):
     return len(self.list_IDs)
@@ -300,39 +279,44 @@ class FullPredictionQuadDataset(data.Dataset):
     image_f = self.list_IDs[index]
 
     if self.RAM:
-      bayer_quad, redblue_bayer, green_grgb, target = self.data_array[index]
+      # bayer_quad, redblue_bayer, green_grgb, target = self.data_array[index]
+      img = self.data_array[index]
+    elif self.shared_data:
+      #existing_shm = shared_memory.SharedMemory(name=self.shared_data)
+      data_array = np.ndarray((len(self.list_IDs), 3, 128, 128), dtype=np.float32, buffer=self.existing_shm.buf)
+      img = data_array[index] 
     else:
       img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
       img = np.transpose(img, [2, 0, 1])
 
-      mosaic = bayer(img)
-      mosaic = np.sum(mosaic, axis=0, keepdims=True)
+    mosaic = bayer(img)
+    mosaic = np.sum(mosaic, axis=0, keepdims=True)
 
-      image_size = list(img.shape)
-      quad_h = image_size[1] // 2
-      quad_w = image_size[2] // 2
+    image_size = list(img.shape)
+    quad_h = image_size[1] // 2
+    quad_w = image_size[2] // 2
 
-      redblue_bayer = np.zeros((2, quad_h, quad_w))
-      bayer_quad = np.zeros((4, quad_h, quad_w))
-      green_grgb = np.zeros((2, quad_h, quad_w))
+    redblue_bayer = np.zeros((2, quad_h, quad_w))
+    bayer_quad = np.zeros((4, quad_h, quad_w))
+    green_grgb = np.zeros((2, quad_h, quad_w))
 
-      bayer_quad[0,:,:] = mosaic[0,0::2,0::2]
-      bayer_quad[1,:,:] = mosaic[0,0::2,1::2]
-      bayer_quad[2,:,:] = mosaic[0,1::2,0::2]
-      bayer_quad[3,:,:] = mosaic[0,1::2,1::2]
+    bayer_quad[0,:,:] = mosaic[0,0::2,0::2]
+    bayer_quad[1,:,:] = mosaic[0,0::2,1::2]
+    bayer_quad[2,:,:] = mosaic[0,1::2,0::2]
+    bayer_quad[3,:,:] = mosaic[0,1::2,1::2]
 
-      redblue_bayer[0,:,:] = bayer_quad[1,:,:]
-      redblue_bayer[1,:,:] = bayer_quad[2,:,:]
+    redblue_bayer[0,:,:] = bayer_quad[1,:,:]
+    redblue_bayer[1,:,:] = bayer_quad[2,:,:]
 
-      green_grgb[0,:,:] = bayer_quad[0,:,:]
-      green_grgb[1,:,:] = bayer_quad[3,:,:]
+    green_grgb[0,:,:] = bayer_quad[0,:,:]
+    green_grgb[1,:,:] = bayer_quad[3,:,:]
 
-      target = img
+    target = img
 
-      bayer_quad = torch.Tensor(bayer_quad)
-      redblue_bayer = torch.Tensor(redblue_bayer)
-      green_grgb = torch.Tensor(green_grgb)
-      target = torch.Tensor(target)
+    bayer_quad = torch.Tensor(bayer_quad)
+    redblue_bayer = torch.Tensor(redblue_bayer)
+    green_grgb = torch.Tensor(green_grgb)
+    target = torch.Tensor(target)
 
     input = (bayer_quad, redblue_bayer, green_grgb)
 
