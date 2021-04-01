@@ -7,7 +7,7 @@ from torch.utils import data
 from imageio import imread
 from config import IMG_H, IMG_W
 from util import ids_from_file
-from multiprocessing import shared_memory
+# from multiprocessing import shared_memory
 
 
 class _RepeatSampler(object):
@@ -236,7 +236,7 @@ provides bayer quad, red and blue from bayer, gr and gb from bayer
 as inputs and the full RGB image as the target
 """
 class FullPredictionQuadDataset(data.Dataset):
-  def __init__(self, data_file=None, data_filenames=None, RAM=False, \
+  def __init__(self, data_file=None, data_filenames=None, RAM=False, lazyRAM=False, \
               shared_data=None, return_index=False, logger=None):
     assert not (RAM and not (shared_data is None)), "RAM and shared data are mutually exclusive"
 
@@ -250,6 +250,7 @@ class FullPredictionQuadDataset(data.Dataset):
         logger.info("USING SHARED MEMORY")
 
     self.RAM = RAM
+    self.lazyRAM = lazyRAM
     self.return_index = return_index
     self.shared_data = shared_data
 
@@ -258,7 +259,7 @@ class FullPredictionQuadDataset(data.Dataset):
     else:
       self.list_IDs = data_filenames
     
-    if RAM:
+    if self.RAM:
       self.data_array = [None for i in range(len(self.list_IDs))]
 
       for i, image_f in enumerate(self.list_IDs):
@@ -268,8 +269,11 @@ class FullPredictionQuadDataset(data.Dataset):
         img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
         img = np.transpose(img, [2, 0, 1])
         self.data_array[i] = img
-    elif self.shared_data:
-      self.existing_shm = shared_memory.SharedMemory(name=self.shared_data)
+
+    if self.lazyRAM:
+      self.data_array = [None for i in range(len(self.list_IDs))]
+    # elif self.shared_data:
+    #   self.existing_shm = shared_memory.SharedMemory(name=self.shared_data)
       #self.data_array = np.ndarray((len(self.list_IDs), 3, 128, 128), dtype=np.float32, buffer=existing_shm.buf)
 
   def __len__(self):
@@ -277,10 +281,16 @@ class FullPredictionQuadDataset(data.Dataset):
 
   def __getitem__(self, index):
     image_f = self.list_IDs[index]
-
     if self.RAM:
       # bayer_quad, redblue_bayer, green_grgb, target = self.data_array[index]
       img = self.data_array[index]
+    elif self.lazyRAM:
+      if self.data_array[index] is None:
+        img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+        img = np.transpose(img, [2, 0, 1])
+        self.data_array[index] = img
+      else:
+        img = self.data_array[index]
     elif self.shared_data:
       #existing_shm = shared_memory.SharedMemory(name=self.shared_data)
       data_array = np.ndarray((len(self.list_IDs), 3, 128, 128), dtype=np.float32, buffer=self.existing_shm.buf)
@@ -321,7 +331,7 @@ class FullPredictionQuadDataset(data.Dataset):
     input = (bayer_quad, redblue_bayer, green_grgb)
 
     if self.return_index:
-      return (image_f, input, target)
+      return (index, input, target)
 
     return (input, target) 
  

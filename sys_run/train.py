@@ -7,6 +7,7 @@ import logging
 import argparse
 import os
 import sys
+import time
 
 sys.path.append(sys.path[0].split("/")[0])
 sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
@@ -34,20 +35,12 @@ def create_loggers(model_dir, model_id, num_models, mode):
   loggers = [util.create_logger(f'model_{model_id}_v{i}_{mode}_logger', logging.INFO, log_format, log_files[i]) for i in range(num_models)]
   return loggers
 
-
-def create_dataset_logger(model_dir, model_id):
-  log_format = '%(asctime)s %(levelname)s %(message)s'
-  log_file = os.path.join(model_dir, f'dataloader_log')
-  if os.path.exists(log_file):
-    os.remove(log_file)
-  logger = util.create_logger(f'model_{model_id}_dataloader_logger', logging.INFO, log_format, log_file)
-  return logger
-
 def create_train_dataset(args, gpu_id, shared_data=None, logger=None):
   device = torch.device(f'cuda:{gpu_id}')
 
   if args.full_model:
-    train_data = FullPredictionQuadDataset(data_file=args.training_file, RAM=args.ram, logger=logger, shared_data=shared_data)
+    train_data = FullPredictionQuadDataset(data_file=args.training_file, RAM=args.ram, lazyRAM=args.lazyram, \
+                                          shared_data=shared_data, logger=logger)
   elif args.rgb8chan:
     train_data = RGB8ChanDataset(data_file=args.training_file)
   else:
@@ -78,7 +71,8 @@ def create_validation_dataset(args, gpu_id, shared_data=None):
   device = torch.device(f'cuda:{gpu_id}')
 
   if args.full_model:
-    validation_data = FullPredictionQuadDataset(data_file=args.validation_file, RAM=args.ram, shared_data=shared_data)
+    validation_data = FullPredictionQuadDataset(data_file=args.validation_file, RAM=args.ram, lazyRAM=args.lazyram,\
+                                               shared_data=shared_data)
   elif args.rgb8chan:
     validation_data = RGB8ChanDataset(data_file=args.validation_file)
   else:
@@ -134,7 +128,7 @@ def run_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   return valid_psnrs
 
 
-def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, train_data, val_data):
+def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, train_data=None, val_data=None):
   print(f"training {len(models)} models on GPU {gpu_id}")
   models = [model.to(device=f"cuda:{gpu_id}") for model in models]
   for m in models:
@@ -143,16 +137,17 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
   train_loggers = create_loggers(model_dir, model_id, len(models), "train")
   validation_loggers = create_loggers(model_dir, model_id, len(models), "validation")
   
-  dataset_logger = create_dataset_logger(model_dir, model_id)
-
-  train_queue = create_train_dataset(args, gpu_id, shared_data=train_data, logger=dataset_logger)
+  train_queue = create_train_dataset(args, gpu_id, shared_data=train_data, logger=experiment_logger)
   valid_queue = create_validation_dataset(args, gpu_id, shared_data=val_data)
 
   criterion = nn.MSELoss()
 
-  dataset_logger.info("finished creating datasets")
+  lr_search_start = time.time()
+  lr_tracker, optimizers = lr_search(args, gpu_id, models, model_id, model_dir, criterion, \
+                                    train_queue, train_loggers, valid_queue, validation_loggers, experiment_logger)
+  lr_search_end = time.time()
+  experiment_logger.info(f"time to perform lr search: {lr_search_end - lr_search_start}")
 
-  lr_tracker, optimizers, train_loggers, validation_loggers = lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, valid_queue, validation_loggers, dataset_logger)
   if args.lr_search_steps > 0:
     reuse_lr_search_epoch = lr_tracker.proposed_lrs[-1] == lr_tracker.proposed_lrs[-2]
     for lr_search_iter, variance in enumerate(lr_tracker.seen_variances):
@@ -178,8 +173,12 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
     validation_loggers[i].info(f"STARTING TRAINING AT LR {args.learning_rate}") 
 
   for epoch in range(cur_epoch, args.epochs):
+    start_time = time.time()
     train_losses = train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, \
                                             valid_queue, validation_loggers, epoch)
+    end_time = time.time()
+    print(f"finished epoch {epoch}")
+    experiment_logger.info(f"time to finish epoch {epoch} : {end_time-start_time}")
     valid_losses, valid_psnrs = infer(args, gpu_id, valid_queue, models, criterion)
 
     for i in range(len(models)):
@@ -188,13 +187,13 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
   return valid_psnrs
 
 
-def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers, dataset_logger):
-  dataset_logger.info(f"BEGINNING LR SEARCH")
+def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers, experiment_logger):
+  experiment_logger.info(f"BEGINNING LR SEARCH")
   lr_tracker = LRTracker(args.learning_rate, args.variance_max, args.variance_min)
 
   for step in range(args.lr_search_steps):
     optimizers = get_optimizers(args, models)
-    dataset_logger.info(f"performing LR search step {step}")
+    experiment_logger.info(f"performing LR search step {step}")
     losses, validation_variance = get_validation_variance(args, gpu_id, models, criterion, optimizers, train_queue, train_loggers, validation_queue, validation_loggers)
     new_lr = lr_tracker.update_lr(validation_variance)
     args.learning_rate = new_lr
@@ -203,7 +202,7 @@ def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue,
     for m in models:
       m._initialize_parameters()
         
-  return lr_tracker, optimizers, train_loggers, validation_loggers
+  return lr_tracker, optimizers
 
 
 def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_queue, train_loggers, validation_queue, validation_loggers):
@@ -298,7 +297,6 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
       # psnr_trackers[i].update(batch_avg_psnr.item(), n)
 
       if step % args.report_freq == 0 or step == len(train_queue)-1:
-        #train_loggers[i].info('train %03d %e %2.3f', epoch*len(train_queue)+step, loss.item(), batch_avg_psnr)
         train_loggers[i].info(f"train step {epoch*len(train_queue)+step} loss {loss.item():.5f}")
 
     if step % args.save_freq == 0 or step == len(train_queue)-1:
