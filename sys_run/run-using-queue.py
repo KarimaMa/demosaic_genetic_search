@@ -11,7 +11,6 @@ import random
 import numpy as np
 from orderedset import OrderedSet
 import torch
-import torch.backends.cudnn as cudnn
 import sys
 sys.path.append(sys.path[0].split("/")[0])
 from tree import has_loop
@@ -31,8 +30,8 @@ import ctypes
 import datetime
 from job_queue import ProcessQueue
 import mysql_db
-from dataset import bayer
-from imageio import imread
+# from dataset import bayer
+# from imageio import imread
 #from multiprocessing import shared_memory
 from queue import Empty
 
@@ -40,7 +39,7 @@ from queue import Empty
 def build_model_database(args):
   fields = ["model_id", "id_str", "hash", "structural_hash", "generation", "occurrences", "best_init"]
   field_types = [int, str, int, int, int, int, int]
-  for model_init in range(args.model_initializations):
+  for model_init in range(args.keep_initializations):
     fields += [f"psnr_{model_init}"]
     field_types += [float]
   fields += ["compute_cost", "parent_id", "failed_births", "failed_mutations",\
@@ -193,8 +192,6 @@ def run_train(work_q, pending_q, pending_l, finished_tasks, gpu_id, args, valida
       task_id = train_task_info.task_id
       model_dir = train_task_info.model_dir 
       models = train_task_info.models
-
-      inits = args.model_initializations
     
       for m in models:
         m._initialize_parameters()
@@ -202,13 +199,13 @@ def run_train(work_q, pending_q, pending_l, finished_tasks, gpu_id, args, valida
       util.create_dir(model_dir)
       train_logger = util.create_logger(f'model_{model_id}_train_logger', logging.INFO, log_format, \
                                   os.path.join(model_dir, f'model_{model_id}_training_log'))
-      
+
       model_val_psnrs = train_model(args, gpu_id, model_id, models, model_dir, train_logger)
       
       logger.info(f"worker on gpu {gpu_id} with task {task_id} writing to validation psnrs")
 
-      for i in range(args.model_initializations):
-        index = args.model_initializations * task_id + i 
+      for i in range(args.keep_initializations):
+        index = args.keep_initializations * task_id + i 
         validation_psnrs[index] = model_val_psnrs[i]
 
       pending_l.acquire()
@@ -289,7 +286,7 @@ class Searcher():
       self.failure_database.cntr += 1
 
   def update_model_database(self, mutation_task_info, validation_psnrs):
-    model_inits = self.args.model_initializations
+    model_inits = self.args.keep_initializations
     new_model_id = mutation_task_info.model_id 
 
     best_psnr = max(validation_psnrs)
@@ -628,7 +625,7 @@ class Searcher():
 
     self.search_logger.info(f"--- STARTING SEARCH AT GENERATION {start_generation} AND ENDING AT {end_generation} ---")
       
-    models_per_gen = self.args.mutations_per_generation * self.args.model_initializations * len(cost_tiers.tiers)
+    models_per_gen = self.args.mutations_per_generation * self.args.keep_initializations * len(cost_tiers.tiers)
    
     for generation in range(start_generation, end_generation):
       generational_tier_sizes = [len(tier.items()) for tier in cost_tiers.tiers]
@@ -740,12 +737,12 @@ class Searcher():
       for wid, finished_tasks in enumerate(self.finished_tasks):
         for task_info, train_time in finished_tasks:
           task_id = task_info.task_id 
-          index = task_id * self.args.model_initializations
+          index = task_id * self.args.keep_initializations
 
-          model_psnrs = valid_psnrs[index:(index+model_inits)]
+          model_psnrs = valid_psnrs[index:(index+self.args.keep_initializations)]
 
           if self.args.deterministic:
-            model_psnrs = [random.uniform(0,1) * (33 - 28) + 28 for i in range(args.model_initializations)]
+            model_psnrs = [random.uniform(0,1) * (33 - 28) + 28 for i in range(args.keep_initializations)]
           print(f"model {task_info.model_id} psnrs {model_psnrs}")
 
           # add model to cost tiers
@@ -887,7 +884,9 @@ if __name__ == "__main__":
   parser.add_argument('--report_freq', type=float, default=200, help='training report frequency')
   parser.add_argument('--save_freq', type=float, default=2000, help='trained weights save frequency')
   parser.add_argument('--epochs', type=int, default=3, help='num of training epochs')
-  parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
+  parser.add_argument('--model_initializations', type=int, default=3, help='number of initializations to train per model for the first epoch')
+  parser.add_argument('--keep_initializations', type=int, default=1, help='how many initializations to keep per model after the first epoch')
+
   parser.add_argument('--train_portion', type=int, default=1e5, help='portion of training data to use')
   parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of validation data image files')
@@ -909,18 +908,13 @@ if __name__ == "__main__":
 
   args = parser.parse_args()
 
-  if not torch.cuda.is_available():
-    print("CUDA not found, aborting job.")
-    sys.exit(1)
+  # if not torch.cuda.is_available():
+  #   print("CUDA not found, aborting job.")
+  #   sys.exit(1)
 
   random.seed(args.seed)
   np.random.seed(args.seed)
-  cudnn.benchmark = False
   torch.manual_seed(args.seed)
-
-  cudnn.enabled=True
-  # cudnn.deterministic=True
-  torch.cuda.manual_seed(args.seed)
 
   if args.full_model:
     args.seed_model_files = args.chroma_seed_model_files

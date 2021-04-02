@@ -128,8 +128,45 @@ def run_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
   return valid_psnrs
 
 
+def keep_best_model(models, val_psnrs, train_loggers, validation_loggers, optimizers):
+  best_index = -1
+  best_psnr = -1
+  
+  for i, psnr in enumerate(val_psnrs):
+    if psnr > best_psnr:
+      best_psnr = psnr
+      best_index = i
+
+  best_model = models[best_index]
+  train_logger = train_loggers[best_index]
+  val_logger = validation_loggers[best_index]
+  optimizer = optimizers[best_index]
+
+  for i, m in enumerate(models):
+    if i != best_index:
+      m = m.cpu()
+      del m
+  for i, l in enumerate(train_loggers):
+    if i != best_index:
+      del l
+  for i, l in enumerate(validation_loggers):
+    if i != best_index:
+      del l
+  for i, o in enumerate(optimizers):
+    if i != best_index:
+      del o
+
+  torch.cuda.empty_cache()
+  return [best_model], [train_logger], [val_logger], [optimizer], best_index
+
+
 def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, train_data=None, val_data=None):
   print(f"training {len(models)} models on GPU {gpu_id}")
+  torch.cuda.set_device(gpu_id)
+  cudnn.benchmark = False
+  cudnn.enabled=True
+  torch.cuda.manual_seed(args.seed)
+
   models = [model.to(device=f"cuda:{gpu_id}") for model in models]
   for m in models:
     m.to_gpu(gpu_id)
@@ -154,8 +191,8 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
       experiment_logger.info(f"LEARNING RATE {lr_tracker.proposed_lrs[lr_search_iter]} INDUCES VALIDATION VARIANCE {variance} AT A VALIDATION FRE0QUENCY OF {args.validation_freq}")
   else:
     reuse_lr_search_epoch = False
-  experiment_logger.info(f"USING LEARNING RATE {lr_tracker.proposed_lrs[-1]}")
-  experiment_logger.info(f"learning rate stored in args {args.learning_rate}")
+
+  experiment_logger.info(f"USING LEARNING RATE {args.learning_rate}")
 
   if len(train_queue) > args.validation_variance_end_step:
     reuse_lr_search_epoch = False
@@ -167,24 +204,30 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
     optimizers = get_optimizers(args, models)
   else: # we can use previous epoch's training 
     cur_epoch = 1
+    val_losses, val_psnrs = infer(args, gpu_id, valid_queue, models, criterion) # compute psnrs to select which model to keep 
 
   for i in range(len(models)):
     train_loggers[i].info(f"STARTING TRAINING AT LR {args.learning_rate}") 
     validation_loggers[i].info(f"STARTING TRAINING AT LR {args.learning_rate}") 
 
   for epoch in range(cur_epoch, args.epochs):
+    if epoch == 1:
+      models, train_loggers, validation_loggers, optimizers, model_index = keep_best_model(models, val_psnrs, train_loggers, validation_loggers, optimizers)
+      experiment_logger.info(f"after first epoch, validation psnrs {val_psnrs} keeping best model {model_index}")
+  
     start_time = time.time()
     train_losses = train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, \
-                                            valid_queue, validation_loggers, epoch)
+                              valid_queue, validation_loggers, epoch)
     end_time = time.time()
-    print(f"finished epoch {epoch}")
     experiment_logger.info(f"time to finish epoch {epoch} : {end_time-start_time}")
-    valid_losses, valid_psnrs = infer(args, gpu_id, valid_queue, models, criterion)
+    val_losses, val_psnrs = infer(args, gpu_id, valid_queue, models, criterion)
 
+    start_time = time.time()
     for i in range(len(models)):
-      validation_loggers[i].info('validation epoch %03d %e %2.3f', epoch, valid_losses[i], valid_psnrs[i])
-
-  return valid_psnrs
+      validation_loggers[i].info('validation epoch %03d %e %2.3f', epoch, val_losses[i], val_psnrs[i])
+    end_time = time.time()
+    experiment_logger.info(f"time to validate after epoch {epoch} : {end_time - start_time}")
+  return val_psnrs
 
 
 def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers, experiment_logger):
@@ -254,7 +297,6 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
 
 def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, validation_queue, validation_loggers, epoch):
   loss_trackers = [util.AvgrageMeter() for m in models]
-  #psnr_trackers = [util.AvgrageMeter() for m in models]
 
   for m in models:
     m.train()
@@ -290,19 +332,17 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
 
       loss_trackers[i].update(loss.item(), n)
 
-      # compute running psnr
-      # per_image_mse = (pred-target).square().mean(-1).mean(-1).mean(-1)
-      # per_image_psnr = -10.0*torch.log10(per_image_mse)
-      # batch_avg_psnr = per_image_psnr.sum(0) / n
-      # psnr_trackers[i].update(batch_avg_psnr.item(), n)
-
       if step % args.report_freq == 0 or step == len(train_queue)-1:
         train_loggers[i].info(f"train step {epoch*len(train_queue)+step} loss {loss.item():.5f}")
 
     if step % args.save_freq == 0 or step == len(train_queue)-1:
-      model_pytorch_files = [util.get_model_pytorch_file(model_dir, model_version, epoch) for model_version in range(len(models))]
-      for i in range(len(models)):
-        torch.save(models[i].state_dict(), model_pytorch_files[i])
+      if len(models) == 1: 
+        model_pytorch_file = os.path.join(model_dir, "model_weights")
+        torch.save(models[0].state_dict(), model_pytorch_file)
+      else:
+        model_pytorch_files = [util.get_model_pytorch_file(model_dir, model_version, epoch) for model_version in range(len(models))]
+        for i in range(len(models)):
+          torch.save(models[i].state_dict(), model_pytorch_files[i])
 
   return [loss_tracker.avg for loss_tracker in loss_trackers] #, [psnr_tracker.avg for psnr_tracker in psnr_trackers]
 
