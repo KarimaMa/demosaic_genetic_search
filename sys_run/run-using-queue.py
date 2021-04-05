@@ -181,9 +181,6 @@ def run_train(work_q, pending_q, pending_l, finished_tasks, gpu_id, args, valida
         work_q.task_done()
         return
 
-      logger.info(f'---worker on gpu {gpu_id} running task {train_task_info.task_id}---')
-      print(f'--- worker on gpu {gpu_id} running task {train_task_info} ---')
-
       pending_l.acquire()
       pending_q.put((train_task_info, time.time()))
       pending_l.release()
@@ -192,6 +189,9 @@ def run_train(work_q, pending_q, pending_l, finished_tasks, gpu_id, args, valida
       task_id = train_task_info.task_id
       model_dir = train_task_info.model_dir 
       models = train_task_info.models
+
+      logger.info(f'---worker on gpu {gpu_id} running task {train_task_info.task_id} model {train_task_info.model_id} ---')
+      print(f'--- worker on gpu {gpu_id} running model {train_task_info.model_id} with {len([p for p in models[0].parameters()])} params ---')
     
       for m in models:
         m._initialize_parameters()
@@ -207,15 +207,17 @@ def run_train(work_q, pending_q, pending_l, finished_tasks, gpu_id, args, valida
       for i in range(args.keep_initializations):
         index = args.keep_initializations * task_id + i 
         validation_psnrs[index] = model_val_psnrs[i]
+        print(f"worker on gpu {gpu_id} task {task_id} psnr {model_val_psnrs[i]}")
 
       pending_l.acquire()
-      finished_task = pending_q.get()
+      done_task = pending_q.get()
       pending_l.release()
       pending_q.task_done()
       work_q.task_done()
 
-      start_time = finished_task[1]
-      finished_tasks.append((finished_task[0], time.time()-start_time))
+      start_time = done_task[1]
+      print(f"task {done_task[0].task_id} took {time.time() - start_time}")
+      finished_tasks[done_task[0].task_id] = time.time() - start_time # store time task took
 
     except Empty:
       time.sleep(10)
@@ -438,10 +440,8 @@ class Searcher():
 
   def create_worker(self, worker_id, validation_psnrs):
     gpu_id = worker_id
-    worker = mp.Process(target=run_train, args=(self.work_queue, self.pending_queues[worker_id], self.pending_locks[worker_id], self.finished_tasks[worker_id],\
+    worker = mp.Process(target=run_train, args=(self.work_queue, self.pending_queues[worker_id], self.pending_locks[worker_id], self.finished_tasks,\
                                            gpu_id, self.args, validation_psnrs, self.log_format, self.work_loggers[worker_id]))
-    # run_train(self.work_queue, self.pending_queues[worker_id], self.finished_tasks[worker_id],\
-    #                                        gpu_id, self.args, validation_psnrs, self.log_format, self.work_loggers[worker_id])
     return worker
 
 
@@ -645,7 +645,9 @@ class Searcher():
 
       task_id = 0
       validation_psnrs = mp.Array(ctypes.c_double, [-1]*models_per_gen)
-      self.finished_tasks = [[] for w in range(self.num_workers)]
+      self.finished_tasks = mp.Array(ctypes.c_double, [-1]*models_per_gen)
+      self.training_tasks = []
+
       self.workers = [self.create_worker(worker_id, validation_psnrs) for worker_id in range(self.num_workers)]
 
       for tid, tier in enumerate(cost_tiers.tiers):
@@ -725,7 +727,7 @@ class Searcher():
             new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
           else:
             self.work_queue.put(task_info)
-
+            self.training_tasks.append(task_info)
             task_id += 1
         
       for w in range(self.num_workers):
@@ -733,36 +735,41 @@ class Searcher():
 
       failed_tasks = self.monitor_training_tasks(validation_psnrs)
 
+      print("finished tasks")
       # update model database 
-      for wid, finished_tasks in enumerate(self.finished_tasks):
-        for task_info, train_time in finished_tasks:
-          task_id = task_info.task_id 
-          index = task_id * self.args.keep_initializations
+      for task_id, task_time in enumerate(self.finished_tasks):
+        if task_time < 0: 
+          continue # this task was not run
+        task_info = self.training_tasks[task_id]
+        task_id = task_info.task_id 
+        print(f"task_id {task_id} task id in task info: {task_info.task_id} model id {task_info.model_id}")
 
-          model_psnrs = valid_psnrs[index:(index+self.args.keep_initializations)]
+        index = task_id * self.args.keep_initializations
+        model_psnrs = validation_psnrs[index:(index+self.args.keep_initializations)]
+ 
+        if self.args.deterministic:
+          model_psnrs = [random.uniform(0,1) * (33 - 28) + 28 for i in range(args.keep_initializations)]
+        print(f"model {task_info.model_id} psnrs {model_psnrs}")
 
-          if self.args.deterministic:
-            model_psnrs = [random.uniform(0,1) * (33 - 28) + 28 for i in range(args.keep_initializations)]
-          print(f"model {task_info.model_id} psnrs {model_psnrs}")
+        # add model to cost tiers
+        best_psnr = max(model_psnrs)
+        if math.isnan(best_psnr) or best_psnr < 0:
+          continue # don't add model to tier 
 
-          # add model to cost tiers
-          best_psnr = max(model_psnrs)
-          if math.isnan(best_psnr) or best_psnr < 0:
-            continue # don't add model to tier 
+        self.search_logger.info(f"adding model {task_info.model_id} with psnrs {model_psnrs} to db")
 
-          self.search_logger.info(f"adding model {task_info.model_id} with psnrs {model_psnrs} to db")
+        compute_cost = task_info.database_entry["compute_cost"]
+        new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
+        
+        self.update_model_database(task_info, model_psnrs)
+        self.update_perf_database(task_info.model_id, compute_cost, task_time)
+        """
+        mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
+                              self.args.save, self.args.experiment_name, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
+        """
 
-          compute_cost = task_info.database_entry["compute_cost"]
-          new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
-          
-          self.update_model_database(task_info, model_psnrs)
-          self.update_perf_database(task_info.model_id, compute_cost, train_time)
-          """
-          mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
-                                self.args.save, self.args.experiment_name, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
-          """
-        self.model_database.save()
-        new_cost_tiers.save_snapshot(generation, tid)
+      self.model_database.save()
+      new_cost_tiers.save_snapshot(generation, tid)
         
       if self.args.pareto_sampling:
         new_cost_tiers.pareto_keep_topk(tier_size)

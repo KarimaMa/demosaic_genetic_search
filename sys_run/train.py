@@ -19,11 +19,11 @@ import util
 from validation_variance_tracker import  VarianceTracker, LRTracker
 
 
-def get_optimizers(args, models):
+def get_optimizers(weight_decay, lr, models):
   optimizers = [torch.optim.Adam(
       m.parameters(),
-      lr=args.learning_rate,
-      weight_decay=args.weight_decay) for m in models]
+      lr=lr,
+      weight_decay=weight_decay) for m in models]
   return optimizers
 
 def create_loggers(model_dir, model_id, num_models, mode):
@@ -35,7 +35,7 @@ def create_loggers(model_dir, model_id, num_models, mode):
   loggers = [util.create_logger(f'model_{model_id}_v{i}_{mode}_logger', logging.INFO, log_format, log_files[i]) for i in range(num_models)]
   return loggers
 
-def create_train_dataset(args, gpu_id, shared_data=None, logger=None):
+def create_train_dataset(args, gpu_id, shared_data=None, logger=None, batch_size=None):
   device = torch.device(f'cuda:{gpu_id}')
 
   if args.full_model:
@@ -55,8 +55,13 @@ def create_train_dataset(args, gpu_id, shared_data=None, logger=None):
     sampler = torch.utils.data.sampler.SubsetRandomSampler(train_indices)
 
   logger.info("Creating FastDataLoader...")
+  if not batch_size is None:
+    bs = batch_size
+  else:
+    bs = args.batch_size
+
   train_queue = FastDataLoader(
-      train_data, batch_size=args.batch_size,
+      train_data, batch_size=bs,
       sampler=sampler,
       pin_memory=True, num_workers=8)
   logger.info("Finished creating FastDataLoader")
@@ -67,7 +72,7 @@ def create_train_dataset(args, gpu_id, shared_data=None, logger=None):
   return loader
 
 
-def create_validation_dataset(args, gpu_id, shared_data=None):
+def create_validation_dataset(args, gpu_id, shared_data=None, batch_size=None):
   device = torch.device(f'cuda:{gpu_id}')
 
   if args.full_model:
@@ -86,8 +91,13 @@ def create_validation_dataset(args, gpu_id, shared_data=None):
   else:
     sampler = torch.utils.data.sampler.SubsetRandomSampler(validation_indices)
 
+  if not batch_size is None:
+    bs = batch_size
+  else:
+    bs = args.batch_size
+
   validation_queue = FastDataLoader(
-      validation_data, batch_size=args.batch_size,
+      validation_data, batch_size=bs,
       sampler=sampler,
       pin_memory=True, num_workers=8)
 
@@ -179,20 +189,20 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
 
   criterion = nn.MSELoss()
 
-  lr_search_start = time.time()
-  lr_tracker, optimizers = lr_search(args, gpu_id, models, model_id, model_dir, criterion, \
-                                    train_queue, train_loggers, valid_queue, validation_loggers, experiment_logger)
-  lr_search_end = time.time()
-  experiment_logger.info(f"time to perform lr search: {lr_search_end - lr_search_start}")
-
   if args.lr_search_steps > 0:
+    lr_search_start = time.time()
+    lr_tracker, optimizers, chosen_lr = lr_search(args, gpu_id, models, model_id, model_dir, criterion, \
+                                      train_queue, train_loggers, valid_queue, validation_loggers, experiment_logger)
+    lr_search_end = time.time()
+    experiment_logger.info(f"time to perform lr search: {lr_search_end - lr_search_start}")
     reuse_lr_search_epoch = lr_tracker.proposed_lrs[-1] == lr_tracker.proposed_lrs[-2]
     for lr_search_iter, variance in enumerate(lr_tracker.seen_variances):
       experiment_logger.info(f"LEARNING RATE {lr_tracker.proposed_lrs[lr_search_iter]} INDUCES VALIDATION VARIANCE {variance} AT A VALIDATION FRE0QUENCY OF {args.validation_freq}")
   else:
     reuse_lr_search_epoch = False
+    chosen_lr = args.learning_rate
 
-  experiment_logger.info(f"USING LEARNING RATE {args.learning_rate}")
+  experiment_logger.info(f"USING LEARNING RATE {chosen_lr}")
 
   if len(train_queue) > args.validation_variance_end_step:
     reuse_lr_search_epoch = False
@@ -201,14 +211,14 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
     cur_epoch = 0
     for m in models:
       m._initialize_parameters()
-    optimizers = get_optimizers(args, models)
+    optimizers = get_optimizers(args.weight_decay, chosen_lr, models)
   else: # we can use previous epoch's training 
     cur_epoch = 1
     val_losses, val_psnrs = infer(args, gpu_id, valid_queue, models, criterion) # compute psnrs to select which model to keep 
 
   for i in range(len(models)):
-    train_loggers[i].info(f"STARTING TRAINING AT LR {args.learning_rate}") 
-    validation_loggers[i].info(f"STARTING TRAINING AT LR {args.learning_rate}") 
+    train_loggers[i].info(f"STARTING TRAINING AT LR {chosen_lr}") 
+    validation_loggers[i].info(f"STARTING TRAINING AT LR {chosen_lr}") 
 
   for epoch in range(cur_epoch, args.epochs):
     if epoch == 1:
@@ -233,19 +243,20 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
 def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers, experiment_logger):
   experiment_logger.info(f"BEGINNING LR SEARCH")
   lr_tracker = LRTracker(args.learning_rate, args.variance_max, args.variance_min)
+  new_lr = args.learning_rate
 
   for step in range(args.lr_search_steps):
-    optimizers = get_optimizers(args, models)
+    optimizers = get_optimizers(args.weight_decay, new_lr, models)
     experiment_logger.info(f"performing LR search step {step}")
     losses, validation_variance = get_validation_variance(args, gpu_id, models, criterion, optimizers, train_queue, train_loggers, validation_queue, validation_loggers)
     new_lr = lr_tracker.update_lr(validation_variance)
-    args.learning_rate = new_lr
+
     if lr_tracker.proposed_lrs[-1] == lr_tracker.proposed_lrs[-2]: 
       break
     for m in models:
       m._initialize_parameters()
         
-  return lr_tracker, optimizers
+  return lr_tracker, optimizers, new_lr
 
 
 def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_queue, train_loggers, validation_queue, validation_loggers):
