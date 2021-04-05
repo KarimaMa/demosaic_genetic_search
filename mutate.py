@@ -1786,6 +1786,10 @@ rejects stupid trees
 """
 @extclass(Mutator)
 def accept_tree(self, tree):
+  if tree.parent is None and not tree.has_parameters():
+    self.debug_logger.debug(f"rejecting tree without learnable parameters\n {tree.dump()}\n")
+    return False, f"rejecting tree without learnable parameters"
+
   if len(tree.preorder()) > self.args.max_nodes:
     self.debug_logger.debug(f"rejecting tree with size {len(tree.preorder())} larger than max tree size")
     return False, f"rejecting tree with size {len(tree.preorder())} larger than max tree size"

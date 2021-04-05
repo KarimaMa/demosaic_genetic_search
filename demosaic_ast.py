@@ -1053,6 +1053,19 @@ def find_closest_children(node, OpClasses):
   return OrderedSet()
 
 
+"""
+returns whether ast has any learnable parameters
+"""
+@extclass(Node)
+def has_parameters(self):
+  learnables = [Conv1x1, Conv1D, Conv2D]
+  preorder = self.preorder()
+  for n in preorder:
+    if type(n) in learnables:
+      return True
+  return False
+
+
 # ops to choose from for insertion
 linear_insert_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
 nonlinear_insert_ops = OrderedSet((Relu,)) # only allow Softmax to be used with Mul insertion 

@@ -291,14 +291,15 @@ class FullPredictionQuadDataset(data.Dataset):
         self.data_array[index] = img
       else:
         img = self.data_array[index]
+    else:
+      img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+      img = np.transpose(img, [2, 0, 1])
+    """
     elif self.shared_data:
       #existing_shm = shared_memory.SharedMemory(name=self.shared_data)
       data_array = np.ndarray((len(self.list_IDs), 3, 128, 128), dtype=np.float32, buffer=self.existing_shm.buf)
       img = data_array[index] 
-    else:
-      img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-      img = np.transpose(img, [2, 0, 1])
-
+    """
     mosaic = bayer(img)
     mosaic = np.sum(mosaic, axis=0, keepdims=True)
 
