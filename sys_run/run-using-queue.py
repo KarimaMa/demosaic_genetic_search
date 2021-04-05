@@ -28,7 +28,6 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import ctypes
 import datetime
-from job_queue import ProcessQueue
 import mysql_db
 # from dataset import bayer
 # from imageio import imread
@@ -644,9 +643,9 @@ class Searcher():
       new_cost_tiers = copy.deepcopy(cost_tiers)
 
       task_id = 0
+      self.training_tasks = []
       validation_psnrs = mp.Array(ctypes.c_double, [-1]*models_per_gen)
       self.finished_tasks = mp.Array(ctypes.c_double, [-1]*models_per_gen)
-      self.training_tasks = []
 
       self.workers = [self.create_worker(worker_id, validation_psnrs) for worker_id in range(self.num_workers)]
 
@@ -789,8 +788,6 @@ class Searcher():
             + f" structural_rejections {generation_stats.structural_rejections} failed_mutations {generation_stats.failed_mutations}")
   
     self.work_queue.join()
-    for worker in self.workers:
-      worker.join()
 
     print(f"downsample\ntries: {self.mutator.binop_tries} loc select fails {self.mutator.binop_loc_selection_failures} \
         insert fail {self.mutator.binop_insertion_failures} reject {self.mutator.binop_rejects} success {self.mutator.binop_success} seen {self.mutator.binop_seen}")
