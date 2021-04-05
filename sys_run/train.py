@@ -221,10 +221,11 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
     validation_loggers[i].info(f"STARTING TRAINING AT LR {chosen_lr}") 
 
   for epoch in range(cur_epoch, args.epochs):
-    if epoch == 1:
-      models, train_loggers, validation_loggers, optimizers, model_index = keep_best_model(models, val_psnrs, train_loggers, validation_loggers, optimizers)
-      experiment_logger.info(f"after first epoch, validation psnrs {val_psnrs} keeping best model {model_index}")
-  
+    if args.keep_initializations < args.model_initializations:
+      if epoch == 1:
+        models, train_loggers, validation_loggers, optimizers, model_index = keep_best_model(models, val_psnrs, train_loggers, validation_loggers, optimizers)
+        experiment_logger.info(f"after first epoch, validation psnrs {val_psnrs} keeping best model {model_index}")
+    
     start_time = time.time()
     train_losses = train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, \
                               valid_queue, validation_loggers, epoch)
