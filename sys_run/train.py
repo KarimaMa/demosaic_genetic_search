@@ -189,7 +189,7 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
 
   criterion = nn.MSELoss()
 
-  if args.lr_search_steps > 0:
+  if args.lrsearch:
     lr_search_start = time.time()
     lr_tracker, optimizers, chosen_lr = lr_search(args, gpu_id, models, model_id, model_dir, criterion, \
                                       train_queue, train_loggers, valid_queue, validation_loggers, experiment_logger)

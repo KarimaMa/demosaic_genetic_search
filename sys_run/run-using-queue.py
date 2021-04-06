@@ -457,9 +457,11 @@ class Searcher():
       worker.start()
       alive.add(wid)
 
+    tick = 0
     while True:
-      self.work_manager_logger.info(f"alive workers: {alive}")
-      print(f"work queue size {self.work_queue.qsize()}")
+      if tick % 30 == 0:
+        self.work_manager_logger.info(f"alive workers: {alive}")
+        print(f"work queue size {self.work_queue.qsize()}")
 
       if self.work_queue.empty():
         self.work_manager_logger.info("No more models in work queue, waiting for all tasks to complete")
@@ -517,7 +519,8 @@ class Searcher():
         self.work_manager_logger.info("All tasks are done")
         break
 
-      time.sleep(15)
+      time.sleep(10)
+      tick += 1
 
     return failed_tasks
 
@@ -881,6 +884,7 @@ if __name__ == "__main__":
   parser.add_argument('--num_gpus', type=int, default=4, help='number of available GPUs') # change this to use all available GPUs
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
   parser.add_argument('--learning_rate', type=float, default=0.01, help='initial learning rate')
+  parser.add_argument('--lrsearch', action='store_true', help='whether or not to use lr search')
   parser.add_argument('--lr_search_steps', type=int, default=1, help='how many line search iters for finding learning rate')
   parser.add_argument('--variance_min', type=float, default=0.003, help='minimum validation psnr variance')
   parser.add_argument('--variance_max', type=float, default=0.02, help='maximum validation psnr variance')
