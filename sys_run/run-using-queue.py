@@ -179,7 +179,6 @@ def run_train(work_q, worker_id, pending_start_times, pending_tasks, pending_l, 
     try:
       train_task_info = work_q.get(block=False)
       if train_task_info is None:
-        work_q.task_done()
         return
 
       model_id = train_task_info["model_id"]
@@ -265,7 +264,7 @@ class Searcher():
 
     self.num_workers = self.args.num_gpus
     self.models_per_gen = self.args.mutations_per_generation * self.args.keep_initializations * len(args.cost_tiers)
-    self.work_queue = mp.Queue(self.models_per_gen)
+    self.work_queue = mp.Queue(self.models_per_gen + self.num_workers)
     self.pending_locks = [mp.Lock() for w in range(self.num_workers)]
     self.work_loggers = [util.create_logger('work_logger', logging.INFO, self.log_format, \
                         os.path.join(args.save, f'work_log_{i}')) for i in range(self.num_workers)]
@@ -442,8 +441,8 @@ class Searcher():
 
   def create_worker(self, worker_id, validation_psnrs):
     gpu_id = worker_id
-    worker = mp.Process(target=run_train, args=(self.work_queue, worker_id, self.pending_start_times, self.pending_locks[worker_id], self.finished_tasks,\
-                                           gpu_id, self.args, validation_psnrs, self.log_format, self.work_loggers[worker_id]))
+    worker = mp.Process(target=run_train, args=(self.work_queue, worker_id, self.pending_start_times, self.pending_tasks, self.pending_locks[worker_id], \
+                                              self.finished_tasks, gpu_id, self.args, validation_psnrs, self.log_format, self.work_loggers[worker_id]))
     return worker
 
 
@@ -483,7 +482,7 @@ class Searcher():
           start_time = self.pending_start_times[wid]
           task_id = self.pending_tasks[wid]
 
-          if pending_start >= 0 and task_id >= 0:
+          if start_time >= 0 and task_id >= 0:
             curr_time = time.time()
 
             terminated = False 
@@ -644,7 +643,7 @@ class Searcher():
       self.pending_start_times = mp.Array(ctypes.c_double, [-1]*self.num_workers)
       self.pending_tasks = mp.Array(ctypes.c_double, [-1]*self.num_workers)
 
-      #self.workers = [self.create_worker(worker_id, validation_psnrs) for worker_id in range(self.num_workers)]
+      self.workers = [self.create_worker(worker_id, validation_psnrs) for worker_id in range(self.num_workers)]
 
       for tid, tier in enumerate(cost_tiers.tiers):
         if self.args.restart_generation and (generation == self.args.restart_generation) and (tid < self.args.restart_tier):
