@@ -474,9 +474,11 @@ class GreenQuadDataset(data.Dataset):
     bayer_quad[2,:,:] = mosaic[0,1::2,0::2]
     bayer_quad[3,:,:] = mosaic[0,1::2,1::2]
 
+    bayer_quad = torch.Tensor(bayer_quad)
     input = bayer_quad
-
+  
     target = np.expand_dims(img[1,...], axis=0)
+    target = torch.Tensor(target)
 
     if self.return_index:
       return (index, input, target)
