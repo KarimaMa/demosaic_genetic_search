@@ -461,7 +461,7 @@ class Searcher():
 
     tick = 0
     while True:
-      if tick % 3 == 0:
+      if tick % 6 == 0:
         self.work_manager_logger.info(f"alive workers: {alive}")
         print(f"work queue size {self.work_queue.qsize()}")
 
@@ -747,7 +747,6 @@ class Searcher():
  
         if self.args.deterministic:
           model_psnrs = [random.uniform(0,1) * (33 - 28) + 28 for i in range(args.keep_initializations)]
-        print(f"model {task_info.model_id} psnrs {model_psnrs}")
 
         # add model to cost tiers
         best_psnr = max(model_psnrs)

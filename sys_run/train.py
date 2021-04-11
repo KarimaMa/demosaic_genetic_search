@@ -107,8 +107,6 @@ def create_validation_dataset(args, gpu_id, shared_data=None, batch_size=None):
 
 
 def run_model(args, gpu_id, model_id, models, model_dir, experiment_logger):
-  print(f"running inference for {len(models)} models on GPU {gpu_id}")
-
   valid_queue = create_validation_dataset(args, gpu_id)
 
   print(f"FINISHED creating datasets")
@@ -171,7 +169,6 @@ def keep_best_model(models, val_psnrs, train_loggers, validation_loggers, optimi
 
 
 def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, train_data=None, val_data=None):
-  print(f"training {len(models)} models on GPU {gpu_id}")
   torch.cuda.set_device(gpu_id)
   cudnn.benchmark = False
   cudnn.enabled=True

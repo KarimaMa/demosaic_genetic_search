@@ -1,4 +1,5 @@
 import logging
+import math
 import sys
 import asyncio
 import time
@@ -167,9 +168,11 @@ class Analyzer():
       worker.start()
       alive.add(wid)
 
+    tick = 0
     while True:
-      self.work_manager_logger.info(f"alive workers: {alive}")
-      print(f"work queue size {self.work_queue.qsize()}")
+      if tick % 30 == 0:
+        self.work_manager_logger.info(f"alive workers: {alive}")
+        print(f"work queue size {self.work_queue.qsize()}")
 
       if self.work_queue.empty():
         self.work_manager_logger.info("No more models in work queue, waiting for all tasks to complete")
@@ -220,7 +223,8 @@ class Analyzer():
         self.work_manager_logger.info("All tasks are done")
         break
 
-      time.sleep(15)
+      time.sleep(10)
+      tick += 1
 
     return failed_tasks
 
@@ -325,7 +329,7 @@ if __name__ == "__main__":
   # training parameters
   parser.add_argument('--num_gpus', type=int, default=4, help='number of available GPUs') # change this to use all available GPUs
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
-  parser.add_argument('--learning_rates', type=str, default="0.00015,0.003,0.006,0.009", help='list of learning rates to test')
+  parser.add_argument('--learning_rates', type=str, default="0.0015,0.003,0.006,0.012", help='list of learning rates to test')
 
   parser.add_argument('--weight_decay', type=float, default=1e-16, help='weight decay')
   parser.add_argument('--epochs', type=int, default=3, help='num of training epochs')
@@ -340,11 +344,13 @@ if __name__ == "__main__":
   args = parser.parse_args()
 
   args.learning_rates = [float(lr.strip()) for lr in args.learning_rates.split(",")]
-  args.report_freq = (args.train_size * 0.1) // args.batch_size
-  args.save_freq = (args.train_size * 0.5) // args.batch_size   
-  args.validation_freq = (args.train_size * args.validation_freq) // args.batch_size
+  args.report_freq = math.ceil((args.train_size * 0.1) / args.batch_size)
+  args.save_freq = math.ceil((args.train_size * 0.5) / args.batch_size)
+  args.validation_freq = math.ceil((args.train_size * args.validation_freq) / args.batch_size)
   args.validation_variance_start_step = 0
   args.validation_variance_end_step = args.train_size // args.batch_size
+
+  print(f"validation frequency: {args.validation_freq}")
 
   random.seed(args.seed)
   np.random.seed(args.seed)
