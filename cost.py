@@ -212,8 +212,21 @@ class ModelEvaluator():
 		self.args = training_args
 		self.log_format = '%(asctime)s %(levelname)s %(message)s'
 
-	def compute_cost(self, root):
-		return self.compute_cost_helper(root, set()) / 4 
+	def compute_cost(self, root, xtrans=False):
+		if xtrans:
+			if isinstance(root, XFlatGreenExtractor):
+				ratio = 16/36
+			elif isinstance(root, XGreenExtractor):
+				ratio = 1/36
+			else:
+				ratio = 1
+		else: # bayer mosaic
+			if isinstance(root, GreenExtractor) or isinstance(root, RGBExtractor) or isinstance(root, RGB8ChanExtractor):
+				ratio = 1/4
+			else: # superres task
+				ratio = 1
+
+		return self.compute_cost_helper(root, set()) * ratio
 		
 	def compute_cost_helper(self, root, seen):
 		cost = 0
@@ -252,6 +265,12 @@ class ModelEvaluator():
 		elif isinstance(root, GreenExtractor):
 			cost += self.compute_cost_helper(root.lchild, seen)
 			cost += self.compute_cost_helper(root.rchild, seen) 
+		elif isinstance(root, XGreenExtractor):
+			cost += self.compute_cost_helper(root.lchild, seen)
+			cost += self.compute_cost_helper(root.rchild, seen)
+		elif isinstance(root, XFlatGreenExtractor):
+			cost += self.compute_cost_helper(root.lchild, seen)
+			cost += self.compute_cost_helper(root.rchild, seen)    
 		elif isinstance(root, GreenRBExtractor):
 			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Softmax):
@@ -270,6 +289,8 @@ class ModelEvaluator():
 		elif isinstance(root, Upsample):
 			cost += root.in_c * BILINEAR_COST
 			cost += self.compute_cost_helper(root.child, seen) / (SCALE_FACTOR**2)
+		elif isinstance(root, Unpack):
+			cost += self.compute_cost_helper(root.child, seen) / (root.factor**2)
 		elif isinstance(root, Conv1x1):
 			cost += root.groups * ((root.in_c // root.groups) * (root.out_c // root.groups) * MUL_COST)
 			cost += self.compute_cost_helper(root.child, seen)

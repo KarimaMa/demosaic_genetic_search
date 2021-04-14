@@ -250,6 +250,44 @@ class GreenExtractor(BinopIcJcKc, Special, Node):
     return 1
 
 
+"""
+Xtrans extractor for green channel 
+16 missing green values per 36 mosaic values
+"""
+class XGreenExtractor(BinopIcJcKc, Special, Node):
+  def __init__(self, lchild, rchild, name=None):
+    if name is None:
+      name = "XGreenExtractor"
+    Node.__init__(self, name, 2)
+    self.lchild = lchild
+    self.rchild = rchild
+    self.in_c = (36, 16) # bayer, missing green
+    self.out_c = 1
+  def Ic(self):
+    return 36
+  def Jc(self):
+    return 16
+  def Kc(self):
+    return 1
+
+
+class XFlatGreenExtractor(BinopIcJcKc, Special, Node):
+  def __init__(self, lchild, rchild, name=None):
+    if name is None:
+      name = "XFlatGreenExtractor"
+    Node.__init__(self, name, 2)
+    self.lchild = lchild
+    self.rchild = rchild
+    self.in_c = (3, 1) # bayer, missing green
+    self.out_c = 1
+  def Ic(self):
+    return 3
+  def Jc(self):
+    return 1
+  def Kc(self):
+    return 1
+
+
 class Flat2Quad(UnopIcJc, Special, Node):
   def __init__(self, child, name=None):
     if name is None:
@@ -318,6 +356,17 @@ class Downsample(UnopII, Special, Node):
       name = "Downsample"
     Node.__init__(self, name, 1)
     self.child = child
+    self.out_c = None
+    self.in_c = None
+
+class Unpack(UnopII, Special, Node):
+  def __init__(self, child, factor=None, name=None):
+    print(f"building unpack factor is: {factor}")
+    if name is None:
+      name = "Unpack"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.factor = factor
     self.out_c = None
     self.in_c = None
 
@@ -461,6 +510,18 @@ def compute_input_output_channels(self):
   self.rchild.compute_input_output_channels()
   return self.in_c, self.out_c
 
+@extclass(XGreenExtractor)
+def compute_input_output_channels(self):
+  self.lchild.compute_input_output_channels()
+  self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(XFlatGreenExtractor)
+def compute_input_output_channels(self):
+  self.lchild.compute_input_output_channels()
+  self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
 @extclass(Flat2Quad)
 def compute_input_output_channels(self):
   self.child.compute_input_output_channels()
@@ -504,6 +565,14 @@ def compute_input_output_channels(self):
   _, lout_c = self.child.compute_input_output_channels()
   self.in_c = lout_c
   self.out_c = lout_c
+  return self.in_c, self.out_c
+
+@extclass(Unpack)
+def compute_input_output_channels(self):
+  _, lout_c = self.child.compute_input_output_channels()
+  self.in_c = lout_c
+  print(f"computing input output channels {self.factor}")
+  self.out_c = lout_c // self.factor**2
   return self.in_c, self.out_c
 
 @extclass(Upsample)
@@ -636,6 +705,9 @@ def structure_to_array(self):
     if hasattr(n, 'groups'):
       node_info["groups"] = n.groups
 
+    if hasattr(n, 'factor'):
+      node_info['factor'] = n.factor
+
     if hasattr(n, 'node'):
       if hasattr(n, 'green_model_id'):
         node_info['green_model_id'] = n.green_model_id # only has meaning given the current search run's choice of green models
@@ -683,17 +755,18 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None, shared_i
         child_node = build_tree_from_data(children_ids[i], preorder_nodes, shared_children, shared_input_models)
       child_nodes.append(child_node)
 
-    if issubclass(node_class, UnopIJ) or issubclass(node_class, UnopIIdiv):
-      extra_kwargs = {}
-      if "kwidth" in node_info:
-        extra_kwargs["kwidth"] = node_info["kwidth"]
-      if "groups" in node_info:
-        extra_kwargs["groups"] = node_info["groups"]
-        
-      if len(extra_kwargs) > 0:
-        new_node = node_class(*child_nodes, node_info["out_c"], name=node_name, **extra_kwargs)
-      else:
-        new_node = node_class(*child_nodes, node_info["out_c"], name=node_name)
+    extra_kwargs = {}
+    if "kwidth" in node_info:
+      extra_kwargs["kwidth"] = node_info["kwidth"]
+    if "groups" in node_info:
+      extra_kwargs["groups"] = node_info["groups"]
+    if "factor" in node_info:
+      extra_kwargs["factor"] = node_info["factor"]
+    if "out_c" in node_info and (issubclass(node_class, UnopIJ) or issubclass(node_class, UnopIIdiv)):
+      extra_kwargs["out_c"] = node_info["out_c"]
+
+    if len(extra_kwargs) > 0:
+      new_node = node_class(*child_nodes, name=node_name, **extra_kwargs)
     else:
       new_node = node_class(*child_nodes, name=node_name)
 

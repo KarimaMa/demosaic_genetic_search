@@ -14,9 +14,10 @@ sys.path.append(sys.path[0].split("/")[0])
 
 import cost
 import util
-import model_lib
+import superres_model_lib
 from torch_model import ast_to_model
-from dataset import GreenQuadDataset, XGreenDataset, FullPredictionQuadDataset, FastDataLoader, FullPredictionProcessedDataset, GreenProcessedQuadDataset
+from superres_dataset import GreenQuadDataset
+from dataset import FastDataLoader
 from tree import print_parents
 import demosaic_ast
 
@@ -52,33 +53,13 @@ def run(args, models, model_id, model_dir):
       args.learning_rate) for m in models]
  
   if args.full_model:
-    if args.train:
-      if args.xtrans:
-        raise NotImplementedError
+      raise NotImplementedError
       train_data = FullPredictionProcessedDataset(data_file=args.training_file)
-    validation_data = FullPredictionProcessedDataset(data_file=args.validation_file)
-    test_data = FullPredictionProcessedDataset(data_file=args.test_file)
-
   else:
     if args.train:
-      if args.xtrans:
-        if args.flat:
-          if args.precomputed:
-            train_data = XGreenDataset(data_file=args.training_file, precomputed=args.training_mosaic_file, flat=True)
-            validation_data = XGreenDataset(data_file=args.validation_file, precomputed=args.validation_mosaic_file, flat=True)
-            test_data = XGreenDataset(data_file=args.test_file, precomputed=args.test_mosaic_file, flat=True)
-          else:
-            train_data = XGreenDataset(data_file=args.training_file, flat=True)
-            validation_data = XGreenDataset(data_file=args.validation_file, flat=True)
-            test_data = XGreenDataset(data_file=args.test_file, flat=True)
-        else:
-          train_data = XGreenDataset(data_file=args.training_file, precomputed=args.training_mosaic_file)
-          validation_data = XGreenDataset(data_file=args.validation_file, precomputed=args.validation_mosaic_file)
-          test_data = XGreenDataset(data_file=args.test_file, precomputed=args.test_mosaic_file)
-      else:
-        train_data = GreenProcessedQuadDataset(data_file=args.training_file) 
-        validation_data = GreenProcessedQuadDataset(data_file=args.validation_file)
-        test_data = GreenProcessedQuadDataset(data_file=args.test_file)
+      train_data = GreenQuadDataset(data_file=args.training_file) 
+    validation_data = GreenQuadDataset(data_file=args.validation_file)
+    test_data = GreenQuadDataset(data_file=args.test_file)
     
   if args.train:
     num_train = len(train_data)
@@ -106,11 +87,9 @@ def run(args, models, model_id, model_dir):
  
   if args.train:
     for epoch in range(args.epochs):
-      # training
       train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, \
         model_pytorch_files, validation_queue, validation_loggers, epoch)
       print(f"finished epoch {epoch}")
-      # validation
       valid_losses, val_psnrs = infer(args, validation_queue, models, criterion, validation_loggers)
       test_losses, test_psnrs = infer(args, test_queue, models, criterion, test_loggers)
 
@@ -158,10 +137,7 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
       print("target")
       print(target[0,:,6:12,6:12])
       print("mosaic")
-      if args.flat:
-        print(mosaic[0,:,6:12,6:12])
-      else:
-        print(mosaic[0,:,1,1])
+      print(mosaic[0,:,1,1])
 
     if args.crop > 0:
       target = target[..., args.crop:-args.crop, args.crop:-args.crop]
@@ -190,7 +166,6 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
         print("diff")
         print(diff[0,:,6:12,6:12])
         exit()
-
 
       loss = criterion(pred, target) 
       loss.backward()
@@ -295,22 +270,8 @@ if __name__ == "__main__":
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
 
   parser.add_argument('--green_demosaicnet', action='store_true')
-  parser.add_argument('--xgreen_demosaicnet', action='store_true')
-  parser.add_argument('--xflatgreen_demosaicnet', action='store_true')    
-  parser.add_argument('--ahd', action='store_true')
-  parser.add_argument('--ahd2d', action='store_true')
   parser.add_argument('--multiresquadgreen', action='store_true')
-  parser.add_argument('--xmultiresquadgreen', action='store_true')
-  parser.add_argument('--gradienthalide', action='store_true')
-  parser.add_argument('--bilinear', action='store_true')
-  parser.add_argument('--chromagradienthalide', action='store_true')
-  parser.add_argument('--chromaseed1', action='store_true')
-  parser.add_argument('--chromaseed2', action='store_true')
-  parser.add_argument('--chromaseed3', action='store_true')
-  parser.add_argument('--chromagradhalideseed', action='store_true')
-  parser.add_argument('--fullrgbgradienthalide', action='store_true')
-  parser.add_argument('--fullrgbdemosaicnet', action='store_true')
-
+ 
   parser.add_argument('--green_model_ast', type=str, help="green model ast to use for chroma model")
   parser.add_argument('--no_grad', action='store_true', help='whether or not to backprop through green model')
   parser.add_argument('--green_model_id', type=int, help='id of green model used')
@@ -337,11 +298,9 @@ if __name__ == "__main__":
   parser.add_argument('--validation_freq', type=int, default=None, help='validation frequency')
 
   parser.add_argument('--full_model', action="store_true")
-  parser.add_argument('--xtrans', action='store_true')
-  parser.add_argument('--flat', action='store_true')
   parser.add_argument('--testing', action='store_true')
-
   parser.add_argument('--train', action='store_true')
+
   parser.add_argument('--pretrained', action='store_true')
   parser.add_argument('--weights', type=str, help="pretrained weights")
   parser.add_argument('--green_pretrained', action='store_true')
@@ -368,60 +327,7 @@ if __name__ == "__main__":
 
   if args.green_demosaicnet:
     logger.info("TRAINING DEMOSAICNET GREEN")
-    model = model_lib.GreenDemosaicknet(args.depth, args.width)
-  elif args.xgreen_demosaicnet:
-    logger.info("TRAINING XTRANS DEMOSAICNET GREEN")
-    model = model_lib.XGreenDemosaicknet(args.depth, args.width)
-  elif args.xflatgreen_demosaicnet:
-    logger.info("TRAINING XTRANS FLAT DEMOSAICNET GREEN")
-    model = model_lib.XFlatGreenDemosaicknet(args.depth, args.width)
-  elif args.ahd:
-    logger.info(f"TRAINING AHD GREEN")
-    model = model_lib.ahd1D_green_model()
-  elif args.ahd2d:
-    logger.info(f"TRAINING AHD2D GREEN")
-    model = model_lib.ahd2D_green_model()
-  elif args.multiresquadgreen:
-    logger.info("TRAINING MULTIRES QUAD GREEN")
-    model = model_lib.MultiresQuadGreenModel(args.depth, args.width)
-  elif args.xmultiresquadgreen:
-    logger.info("TRAINING XTRANS MULTIRES QUAD GREEN")
-    model = model_lib.XtransMultiresQuadGreenModel(args.depth, args.width)
-  elif args.gradienthalide:
-    logger.info("TRAINING GRADIENT HALIDE GREEN")
-    model = model_lib.GradientHalideModel(args.width, args.k)
-  elif args.bilinear:
-    logger.info("TRAINING GRADIENT HALIDE GREEN")
-    model = model_lib.Bilinear(args.width, args.k)
-  elif args.chromagradienthalide:
-    logger.info("TRAINING CHROMA GRADIENT HALIDE")
-    model = model_lib.RGBGradientHalideModel(args.width, args.k)
-  elif args.fullrgbgradienthalide:
-    logger.info("TRAINING RGB8Chan GRADIENT HALIDE")
-    model = model_lib.RGB8ChanGradientHalideModel(args.width, args.k)
-  elif args.fullrgbdemosaicnet:
-    logger.info("TRAINING RGB8Chan DEMOSAICNET")
-    model = model_lib.RGB8ChanDemosaicknet(args.depth, args.width)
-  elif args.chromaseed1:
-    logger.info("TRAINING CHROMA SEED MODEL1")
-    green_model = demosaic_ast.load_ast(args.green_model_ast)
-    model = model_lib.ChromaSeedModel1(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
-  elif args.chromaseed2:
-    logger.info("TRAINING CHROMA SEED MODEL2")
-    green_model = demosaic_ast.load_ast(args.green_model_ast)
-    model = model_lib.ChromaSeedModel2(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
-  elif args.chromaseed3:
-    logger.info("TRAINING CHROMA SEED MODEL3")
-    green_model = demosaic_ast.load_ast(args.green_model_ast)
-    model = model_lib.ChromaSeedModel3(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
-  elif args.chromagradhalideseed:
-    logger.info("TRAINING CHROMA GRADIENT HALIDE SEED")
-    green_model = demosaic_ast.load_ast(args.green_model_ast)
-    model = model_lib.ChromaGradientHalideModel(args.width, args.k, args.no_grad, green_model, args.green_model_id)
-  else:
-    logger.info("TRAINING BASIC GREEN")
-    model = model_lib.basic1D_green_model()
-
+    model = superres_model_lib.GreenDemosaicknet(args.depth, args.width)
 
   if args.full_model and not (args.chromagradienthalide or args.fullrgbdemosaicnet or args.fullrgbgradienthalide):
     print(f'--- setting the no_grad parameter in green model {args.no_grad} ---')

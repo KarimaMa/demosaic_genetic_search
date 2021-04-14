@@ -479,6 +479,144 @@ class GreenExtractorOp(nn.Module):
     self._operands[1].to_gpu(gpu_id)
 
 
+class XGreenExtractorOp(nn.Module):
+  def __init__(self, operand1, operand2):
+    super(XGreenExtractorOp, self).__init__()
+    self._operands = nn.ModuleList([operand1, operand2])
+    self.pixel_shuffle = nn.PixelShuffle(upscale_factor=6)
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+    self._operands[1]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand1 = self._operands[0].run(model_inputs)
+      operand2 = self._operands[1].run(model_inputs)
+      self.output = self.forward(operand1, operand2)
+    return self.output
+
+  """
+  Takes Xtrans mosaic and 16 channel green prediction
+  Spits out full green channel 
+  """
+  def forward(self, xtrans, green_pred):
+    out = self.pixel_shuffle(xtrans)
+    # fill in red locations
+    out[:,0,0::6,4::6] = green_pred[:,0,:,:]
+    
+    out[:,0,1::6,0::6] = green_pred[:,1,:,:]
+    out[:,0,1::6,2::6] = green_pred[:,2,:,:]
+    
+    out[:,0,2::6,4::6] = green_pred[:,3,:,:]
+    
+    out[:,0,3::6,1::6] = green_pred[:,4,:,:]
+    
+    out[:,0,4::6,3::6] = green_pred[:,5,:,:]
+    out[:,0,4::6,5::6] = green_pred[:,6,:,:]
+
+    out[:,0,5::6,1::6] = green_pred[:,7,:,:]
+
+    # fill in blue locations
+    out[:,0,0::6,1::6] = green_pred[:,8,:,:]
+    
+    out[:,0,1::6,3::6] = green_pred[:,9,:,:]
+    out[:,0,1::6,5::6] = green_pred[:,10,:,:]
+    
+    out[:,0,2::6,1::6] = green_pred[:,11,:,:]
+    
+    out[:,0,3::6,4::6] = green_pred[:,12,:,:]
+    
+    out[:,0,4::6,0::6] = green_pred[:,13,:,:]
+    out[:,0,4::6,2::6] = green_pred[:,14,:,:]
+    
+    out[:,0,5::6,4::6] = green_pred[:,15,:,:]
+
+    return out
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+
+
+
+class XFlatGreenExtractorOp(nn.Module):
+  def __init__(self, operand1, operand2):
+    super(XFlatGreenExtractorOp, self).__init__()
+    self._operands = nn.ModuleList([operand1, operand2])
+    self.pixel_shuffle = nn.PixelShuffle(upscale_factor=6)
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+    self._operands[1]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand1 = self._operands[0].run(model_inputs)
+      operand2 = self._operands[1].run(model_inputs)
+      self.output = self.forward(operand1, operand2)
+    return self.output
+
+  """
+  Takes 3 channel flat Xtrans mosaic and 1 channel green prediction
+  Spits out full green channel 
+  """
+  def forward(self, xtrans, green_pred):
+    outsize = list(xtrans.shape)
+    outsize[1] = 1
+    out = torch.empty(torch.Size(outsize), device=xtrans.device)
+    out[:,0,:,:] = xtrans[:,1,:,:]
+
+    # fill in red locations
+    out[:,0,0::6,4::6] = green_pred[:,0,0::6,4::6]
+    
+    out[:,0,1::6,0::6] = green_pred[:,0,1::6,0::6]
+    out[:,0,1::6,2::6] = green_pred[:,0,1::6,2::6]
+    
+    out[:,0,2::6,4::6] = green_pred[:,0,2::6,4::6]
+    
+    out[:,0,3::6,1::6] = green_pred[:,0,3::6,1::6]
+    
+    out[:,0,4::6,3::6] = green_pred[:,0,4::6,3::6]
+    out[:,0,4::6,5::6] = green_pred[:,0,4::6,5::6]
+
+    out[:,0,5::6,1::6] = green_pred[:,0,5::6,1::6]
+
+    # fill in blue locations
+    out[:,0,0::6,1::6] = green_pred[:,0,0::6,1::6]
+    
+    out[:,0,1::6,3::6] = green_pred[:,0,1::6,3::6]
+    out[:,0,1::6,5::6] = green_pred[:,0,1::6,5::6]
+    
+    out[:,0,2::6,1::6] = green_pred[:,0,2::6,1::6]
+
+    out[:,0,3::6,4::6] = green_pred[:,0,3::6,4::6]
+    
+    out[:,0,4::6,0::6] = green_pred[:,0,4::6,0::6]
+    out[:,0,4::6,2::6] = green_pred[:,0,4::6,2::6]
+
+    out[:,0,5::6,4::6] = green_pred[:,0,5::6,4::6]
+
+    return out
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+
+
+
 """
 takes flat green prediction and extracts out 2 channel
 green predicted values at Red and Blue bayer quad locations
@@ -702,6 +840,38 @@ class DownsampleOp(nn.Module):
     downsampler = getattr(self, self.param_name)
     return downsampler(x)
 
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
+"""
+Unpacks the mosaic
+"""
+class UnpackOp(nn.Module):
+  def __init__(self, operand, C_in, factor):
+    super(UnpackOp, self).__init__()
+    self._operands = nn.ModuleList([operand])
+    self.in_c = C_in
+    self.scale_factor = factor
+    self.pixel_shuffle = nn.PixelShuffle(upscale_factor=factor)
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
+
+  def forward(self, x):
+    return self.pixel_shuffle(x)
+    
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
 
@@ -1129,6 +1299,34 @@ def ast_to_model(self, shared_children=None):
   shared_children[id(self)] = model 
   return model
 
+@extclass(XGreenExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
+  model = XGreenExtractorOp(lmodel, rmodel)
+  
+  shared_children[id(self)] = model 
+  return model
+
+@extclass(XFlatGreenExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
+  model = XFlatGreenExtractorOp(lmodel, rmodel)
+  
+  shared_children[id(self)] = model 
+  return model
+
 @extclass(GreenRBExtractor)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
@@ -1216,6 +1414,19 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = DownsampleOp(child_model, self.in_c, 2, self.name)
+
+  shared_children[id(self)] = model 
+  return model
+
+@extclass(Unpack)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child_model = self.child.ast_to_model(shared_children)
+  model = UnpackOp(child_model, self.in_c, self.factor)
 
   shared_children[id(self)] = model 
   return model

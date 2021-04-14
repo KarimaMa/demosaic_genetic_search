@@ -7,6 +7,9 @@ from torch.utils import data
 from imageio import imread
 from config import IMG_H, IMG_W
 from util import ids_from_file
+from mosaic_gen import bayer, xtrans, xtrans_invariant, xtrans_cell
+from skimage import color
+
 # from multiprocessing import shared_memory
 
 
@@ -35,43 +38,6 @@ class FastDataLoader(torch.utils.data.dataloader.DataLoader):
   def __iter__(self):
     for i in range(len(self)):
       yield next(self.iterator)
-
-
-"""
-from mgharbi demosaicnet code
-"""
-def bayer(im, return_mask=False):
-  """Bayer mosaic.
-  The patterned assumed is::
-  G r
-  b G
-
-  Args:
-  im (np.array): image to mosaic. Dimensions are [c, h, w]
-  return_mask (bool): if true return the binary mosaic mask, instead of the mosaic image.
-
-  Returns:
-  np.array: mosaicked image (if return_mask==False), or binary mask if (return_mask==True)
-  """
-
-  mask = np.ones_like(im)
-
-  if return_mask:
-    return mask
-
-  # red
-  mask[0, ::2, 0::2] = 0
-  mask[0, 1::2, :] = 0
-
-  # green
-  mask[1, ::2, 1::2] = 0
-  mask[1, 1::2, ::2] = 0
-
-  # blue
-  mask[2, 0::2, :] = 0
-  mask[2, 1::2, 1::2] = 0
-
-  return im*mask
 
 
 class GreenSharedDataset(data.Dataset):
@@ -484,9 +450,65 @@ class GreenQuadDataset(data.Dataset):
       return (index, input, target)
   
     return (input, target) 
+
+
+def sort_ids(ids):
+  sorted_ids = sorted(ids, key = lambda x: x.split("/")[-1].replace('.png', ''))
+  return sorted_ids
+
+
+class XGreenDataset(data.Dataset):
+  def __init__(self, data_file=None, data_filenames=None, precomputed=None, flat=False, return_index=False):
+    if data_file:
+      self.list_IDs = sort_ids(ids_from_file(data_file)) # patch filenames
+    else:
+      self.list_IDs = data_filenames
+
+    if precomputed: # read precomputed mosaic
+      self.mosaic_IDs = sort_ids(ids_from_file(precomputed))
+      self.precomputed = True
+    else:
+      self.precomputed = False
+      self.mask = xtrans_cell(h=120, w=120)
+
+    self.flat = flat
+    self.return_index = return_index
+
+  def __len__(self):
+    return len(self.list_IDs)
+
+  def __getitem__(self, index):
+    image_f = self.list_IDs[index]
+    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+    img = np.transpose(img, [2, 0, 1])
+    img = img[:,4:-4,4:-4]
+
+    if self.precomputed:
+      mosaic_f = self.mosaic_IDs[index]
+      if self.flat:
+        mosaic = np.fromfile(mosaic_f, dtype=np.float32).reshape(3, 120, 120)
+      else:        
+        mosaic = np.fromfile(mosaic_f, dtype=np.float32).reshape(36, 20, 20)
+
+      mosaic = torch.Tensor(mosaic)
+    else:
+      if self.flat:
+        mosaic = xtrans(img, mask=self.mask)
+      else:
+        mosaic = xtrans_invariant(img)
+
+    input = mosaic
+  
+    target = np.expand_dims(img[1,...], axis=0)
+    target = torch.Tensor(target)
+
+    if self.return_index:
+      return (index, input, target)
+  
+    return (input, target) 
  
 
- 
+
 class GreenProcessedQuadDataset(data.Dataset):
   def __init__(self, data_file=None, return_index=False):
     self.list_IDs = ids_from_file(data_file) # patch filenames
