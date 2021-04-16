@@ -86,6 +86,10 @@ class UnopIIdiv(Unop):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
 
+class UnopIJFixed(Unop):
+  def __init__(self):
+    assert False, "Do not try to instantiate abstract expressions"
+
 class Const(ABC):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
@@ -359,9 +363,8 @@ class Downsample(UnopII, Special, Node):
     self.out_c = None
     self.in_c = None
 
-class Unpack(UnopII, Special, Node):
+class Unpack(UnopIJFixed, Special, Node):
   def __init__(self, child, factor=None, name=None):
-    print(f"building unpack factor is: {factor}")
     if name is None:
       name = "Unpack"
     Node.__init__(self, name, 1)
@@ -376,6 +379,23 @@ class Upsample(UnopII, Special, Node):
       name = "Upsample"
     Node.__init__(self, name, 1)
     self.child = child
+    self.out_c = None
+    self.in_c = None
+
+"""
+Scale factor cannot be mutated, thus the output channels is 
+a fixed function of the input channels, specifically, 
+out_c = in_c / factor^2
+Grouping can be changed since this is implemented with a transposed conv
+"""
+class LearnedUpsample(UnopIJFixed, Special, Node):
+  def __init__(self, child, factor=None, groups=1, name=None):
+    if name is None:
+      name = "LearnedUpsample"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.factor = factor
+    self.groups = groups 
     self.out_c = None
     self.in_c = None
 
@@ -571,7 +591,6 @@ def compute_input_output_channels(self):
 def compute_input_output_channels(self):
   _, lout_c = self.child.compute_input_output_channels()
   self.in_c = lout_c
-  print(f"computing input output channels {self.factor}")
   self.out_c = lout_c // self.factor**2
   return self.in_c, self.out_c
 
@@ -580,6 +599,13 @@ def compute_input_output_channels(self):
   _, lout_c = self.child.compute_input_output_channels()
   self.in_c = lout_c
   self.out_c = lout_c
+  return self.in_c, self.out_c
+
+@extclass(LearnedUpsample)
+def compute_input_output_channels(self):
+  _, lout_c = self.child.compute_input_output_channels()
+  self.in_c = lout_c
+  self.out_c = self.in_c // (self.factor**2)
   return self.in_c, self.out_c
 
 @extclass(FastUpsample)
@@ -1142,33 +1168,26 @@ def has_parameters(self):
 # ops to choose from for insertion
 linear_insert_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
 nonlinear_insert_ops = OrderedSet((Relu,)) # only allow Softmax to be used with Mul insertion 
-#special_insert_ops = OrderedSet((Mul, Add, Sub, Stack, Downsample, SumR, LogSub))
 special_insert_ops = OrderedSet((Mul, Add, Sub, Stack, Downsample, InterleavedSum, GroupedSum))
 
 nl_sp_insert_ops = nonlinear_insert_ops.union(special_insert_ops)
 l_sp_insert_ops = linear_insert_ops.union(special_insert_ops)
-all_insert_ops = nl_sp_insert_ops.union(l_sp_insert_ops)
+all_insert_ops = linear_insert_ops.union(nonlinear_insert_ops).union(special_insert_ops)
 
+move_ops = OrderedSet((LearnedUpsample,))
 
 linear_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
+special_linear_ops = OrderedSet((LearnedUpsample,))
 nonlinear_ops = OrderedSet((Softmax, Relu)) 
 special_ops = OrderedSet((Mul, Add, Sub, Stack, Upsample, Downsample, InterleavedSum, GroupedSum))
 
-"""
-special_ops = OrderedSet((Mul, Add, Sub, AddExp, LogSub, Stack, Upsample, Downsample, SumR))
-sandwich_ops = OrderedSet((LogSub, AddExp, Downsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
-sandwich_pairs = {
-  LogSub: AddExp,
-  Downsample: Upsample
-}
-"""
 sandwich_ops = OrderedSet((Downsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
 
 sandwich_pairs = {
   Downsample: Upsample
 }
 
-border_ops = OrderedSet((RGBExtractor, RGB8ChanExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input))
+border_ops = OrderedSet((RGBExtractor, RGB8ChanExtractor, GreenExtractor, XGreenExtractor, XFlatGreenExtractor, GreenRBExtractor, Flat2Quad, Input))
 nl_and_sp = nonlinear_ops.union(special_ops)
 l_and_sp = linear_ops.union(special_ops)
 all_ops = nl_and_sp.union(l_and_sp)

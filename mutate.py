@@ -522,7 +522,7 @@ changes grouping factor of randomly chosen conv
 @extclass(Mutator)
 def group_mutation(self, tree):
   preorder_nodes = tree.preorder()
-  convs = list(filter(lambda x: type(x) in linear_ops, preorder_nodes)) 
+  convs = list(filter(lambda x: type(x) in linear_ops.union(special_linear_ops), preorder_nodes)) 
   if len(convs) == 0:
     self.debug_logger.debug("cannot perform grouped conv mutation on tree with no convs")
     assert False, "cannot perform grouped conv mutation on tree with no convs"
@@ -1035,6 +1035,9 @@ def insert_binop(self, tree, input_set, insert_op, insert_parent, insert_child, 
   if subtree_res != insert_child_res:
     # NOTE: if we're inserting an InputOp as the subtree, it will always be rejected if the resolution 
     # is Downsampled ll input ops are set to full res
+
+    # TODO: ALLOW INSERTION OF DOWNSAMPLE OR UPSAMPLE TO MAKE RESOLUTIONS MATCH 
+    # upsamples to use should depend on the task: demosaicking vs superres
     self.debug_logger.debug(f"resolution of chosen subtree for binary op does not match insert_child resolution")
     assert False, f"resolution of chosen subtree for binary op does not match insert_child resolution"
   elif subtree_res == Resolution.DOWNSAMPLED:

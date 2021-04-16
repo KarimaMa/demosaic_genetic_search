@@ -908,6 +908,39 @@ class UpsampleOp(nn.Module):
     self._operands[0].to_gpu(gpu_id)
 
 
+class LearnedUpsampleOp(nn.Module):
+  def __init__(self, operand, C_in, scale_factor, param_name):
+    super(LearnedUpsampleOp, self).__init__()
+    self._operands = nn.ModuleList([operand])
+    self.in_c = C_in
+    self.scale_factor = scale_factor
+    self.param_name = param_name
+    upsampler = nn.ConvTranspose2d(self.in_c, self.in_c//(scale_factor**2), scale_factor, stride=scale_factor)
+
+    setattr(self, self.param_name, upsampler)
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
+
+  def forward(self, x):
+    upsampler = getattr(self, self.param_name)
+    return upsampler(x)
+    
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
 class Conv1x1Op(nn.Module):
   def __init__(self, operand, C_in, C_out, groups, param_name):
     super(Conv1x1Op, self).__init__()
@@ -1440,6 +1473,19 @@ def ast_to_model(self, shared_children=None):
 
   child_model = self.child.ast_to_model(shared_children)
   model = UpsampleOp(child_model, self.in_c, 2, self.name)
+
+  shared_children[id(self)] = model 
+  return model
+
+@extclass(LearnedUpsample)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child_model = self.child.ast_to_model(shared_children)
+  model = LearnedUpsampleOp(child_model, self.in_c, 2, self.name)
 
   shared_children[id(self)] = model 
   return model

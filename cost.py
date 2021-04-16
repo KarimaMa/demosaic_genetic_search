@@ -284,11 +284,14 @@ class ModelEvaluator():
 			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Downsample):
 			downsample_k = SCALE_FACTOR * 2
-			cost += root.in_c * root.out_c * downsample_k * downsample_k * MUL_COST
+			cost += root.in_c * root.out_c * downsample_k**2 * MUL_COST
 			cost += (SCALE_FACTOR**2) * self.compute_cost_helper(root.child, seen) 
 		elif isinstance(root, Upsample):
 			cost += root.in_c * BILINEAR_COST
 			cost += self.compute_cost_helper(root.child, seen) / (SCALE_FACTOR**2)
+		elif isinstance(root, LearnedUpsample):
+			cost += root.groups * ((root.in_c // root.groups)) * (root.out_c // root.groups) * root.factor**2
+			cost += self.compute_cost_helper(root.child, seen) / (root.factor**2)
 		elif isinstance(root, Unpack):
 			cost += self.compute_cost_helper(root.child, seen) / (root.factor**2)
 		elif isinstance(root, Conv1x1):
