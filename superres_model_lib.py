@@ -10,15 +10,24 @@ def GreenDemosaicknet(depth, width):
       conv = Conv2D(relu, width, kwidth=3)
     relu = Relu(conv)
 
-  # unpack bayer and upsample
-  flat_residual = Unpack(relu, factor=4)
-  flat_bayer = Unpack(bayer, factor=2)
-  upsampled_bayer = Upsample(flat_bayer)
-  stacked = Stack(upsampled_bayer, flat_residual) 
+  # unpack the learned residual twice
+  # with a conv in between to ease the growing pains
+  up1_residual = LearnedUpsample(relu, factor=2)
+  conv_up1res = Conv2D(up1_residual, width//4, kwidth=3)
+  up2_residual = LearnedUpsample(conv_up1res, factor=2)
+  
+  # upsample and unpack the bayer quad 
+  # with a conv in between to ease the growing pains
+  up1_bayer = Upsample(bayer)
+  conv_up1bayer = Conv2D(up1_bayer, width//4, kwidth=3)
+  up2_bayer = LearnedUpsample(conv_up1bayer, factor=2)
 
-  post_conv = Conv2D(stacked, width, kwidth=3)
-  post_relu = Relu(post_conv)
-  highres_green = Conv1x1(post_relu, 1)
+  # now we're in the upsampled image resolution
+  stacked = Stack(up2_bayer, up2_residual) 
+
+  highres_green = Conv2D(stacked, width//16, kwidth=3)
+  # post_relu = Relu(post_conv)
+  # highres_green = Conv1x1(post_relu, 1)
 
   # predicing all the missing values
   highres_green.assign_parents()

@@ -54,12 +54,15 @@ def run(args, models, model_id, model_dir):
  
   if args.full_model:
       raise NotImplementedError
-      train_data = FullPredictionProcessedDataset(data_file=args.training_file)
   else:
     if args.train:
-      train_data = GreenQuadDataset(data_file=args.training_file) 
-    validation_data = GreenQuadDataset(data_file=args.validation_file)
-    test_data = GreenQuadDataset(data_file=args.test_file)
+         train_data = GreenQuadDataset(data_file=args.training_file) 
+    validation_data = GreenQuadDataset(data_file=args.validation_file) 
+    test_data = GreenQuadDataset(data_file=args.test_file) 
+
+    #   train_data = GreenQuadDataset(input_data_file=args.train_input, target_data_file=args.train_target) 
+    # validation_data = GreenQuadDataset(input_data_file=args.val_input, target_data_file=args.val_target) 
+    # test_data = GreenQuadDataset(input_data_file=args.test_input, target_data_file=args.test_target) 
     
   if args.train:
     num_train = len(train_data)
@@ -307,6 +310,17 @@ if __name__ == "__main__":
   parser.add_argument('--green_weights', type=str, help="pretrained weights")
 
   args = parser.parse_args()
+
+
+  args.train_input = "/home/karima/cnn-data/lowres-subset7-train.txt"
+  args.train_target = "/home/karima/cnn-data/fullres-subset7-train.txt"
+
+  args.val_input = "/home/karima/cnn-data/lowres-subset7-val.txt"
+  args.val_target = "/home/karima/cnn-data/fullres-subset7-val.txt"
+
+  args.test_input = "/home/karima/cnn-data/lowres-subset7-test.txt"
+  args.test_target = "/home/karima/cnn-data/fullres-subset7-test.txt"
+
 
   args.model_path = os.path.join(args.save, args.model_path)
   args.results_file = os.path.join(args.save, args.results_file)
