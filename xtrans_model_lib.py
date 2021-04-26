@@ -217,7 +217,7 @@ def XGreenDemosaicknet6(depth, width):
   stacked = Stack(full_res, flat_mosaic) 
 
   post_conv = Conv2D(stacked, 36*(width//9), kwidth=3) # learning 36 convolutions
-  post_relu = Relu(periodic_conv)
+  post_relu = Relu(post_conv)
   missing_green = Conv1x1(post_relu, 1)
 
   mosaic3chan = Input(3, "Mosaic")
