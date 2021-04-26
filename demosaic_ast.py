@@ -1,4 +1,4 @@
-"""
+f"""
 TODO:
   ADD GREEN AND CHROMA EXTRACTORS
 """
@@ -8,6 +8,7 @@ import copy
 import sys
 import pickle
 from orderedset import OrderedSet
+from inspect import signature
 
 # from a github gist by victorlei
 def extclass(cls):
@@ -213,6 +214,67 @@ class RGBExtractor(TernaryHcIcJcKc, Special, Node):
     return 3 # full rgb image
 
 
+class XRGBExtractor(TernaryHcIcJcKc, Special, Node):
+  def __init__(self, child1, child2, child3, name=None):
+    if name is None:
+      name = "XRGBExtractor"
+    Node.__init__(self, name, 3)
+    self.child1 = child1
+    self.child2 = child2
+    self.child3 = child3
+    self.in_c = (36, 36, 56) # fullgreen, redbluebayer, missing chroma
+    self.out_c = 3
+
+  def Hc(self):
+    return 36 # fullgreen
+  def Ic(self):
+    return 36 #  xtrans
+  def Jc(self):
+    return 56 # missing chroma
+  def Kc(self): 
+    return 3 # full rgb image
+
+class XFlatRGBExtractor(TernaryHcIcJcKc, Special, Node):
+  def __init__(self, child1, child2, child3, name=None):
+    if name is None:
+      name = "XFlatRGBExtractor"
+    Node.__init__(self, name, 3)
+    self.child1 = child1
+    self.child2 = child2
+    self.child3 = child3
+    self.in_c = (1, 3, 2) # flat green, xtrans 3 channel, chroma pred 
+    self.out_c = 3
+
+  def Hc(self):
+    return 1 # fullgreen
+  def Ic(self):
+    return 3 #  xtrans
+  def Jc(self):
+    return 2 # missing chroma
+  def Kc(self): 
+    return 3 # full rgb image
+
+
+class RGBSuperResExtractor(BinopIcJcKc, Special, Node):
+  def __init__(self, lchild, rchild, name=None):
+    if name is None:
+      name = "RGBSuperResExtractor"
+    Node.__init__(self, name, 2)
+    self.lchild = lchild
+    self.rchild = rchild
+    self.in_c = (1, 2) # green, red and blue
+    self.out_c = 3
+
+  def Ic(self):
+    return 1 # superres green
+  def Jc(self):
+    return 2 # missing chroma
+  def Kc(self): 
+    return 3 # full rgb image
+
+
+
+
 # Takes bayer quad, 8 channel predction
 # spits out full RGB Image at full resolution
 class RGB8ChanExtractor(BinopIcJcKc, Special, Node):
@@ -317,6 +379,20 @@ class GreenRBExtractor(UnopIcJc, Special, Node):
     return 1
   def Jc(self):
     return 2
+
+class XGreenRBExtractor(UnopIcJc, Special, Node):
+  def __init__(self, child, name=None):
+    if name is None:
+      name = "XGreenRBExtractorOp"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.in_c = 1
+    self.out_c = 16
+  def Ic(self):
+    return 1
+  def Jc(self):
+    return 16
+ 
  
 class Softmax(UnopII, NonLinear, Node):
   def __init__(self, child, name=None):
@@ -354,12 +430,47 @@ class Exp(UnopII, NonLinear, Node):
     self.out_c = None
     self.in_c = None
 
-class Downsample(UnopII, Special, Node):
-  def __init__(self, child, name=None):
+class LearnedDownsample(UnopII, Special, Node):
+  def __init__(self, child, out_c:int, factor=None, groups=1, name=None):
     if name is None:
-      name = "Downsample"
+      name = "LearnedDownsample"
     Node.__init__(self, name, 1)
     self.child = child
+    self.factor = factor
+    self.out_c = out_c
+    self.in_c = None
+    self.groups = groups
+
+
+class PeriodicConv(UnopIJFixed, Special, Node):
+  def __init__(self, child, out_c:int, period=None, kwidth=3, name=None):
+    if name is None:
+      name = "PeriodicConv"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.period = period
+    self.kwidth = kwidth
+    self.out_c = out_c
+    self.in_c = None  
+
+
+class Pack(UnopIJFixed, Special, Node):
+  def __init__(self, child, factor=None, name=None):
+    if name is None:
+      name = "Pack"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.factor = factor
+    self.out_c = None
+    self.in_c = None
+
+class LearnedPack(UnopIJFixed, Special, Node):
+  def __init__(self, child, factor=None, name=None):
+    if name is None:
+      name = "LearnedPack"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.factor = factor
     self.out_c = None
     self.in_c = None
 
@@ -373,12 +484,16 @@ class Unpack(UnopIJFixed, Special, Node):
     self.out_c = None
     self.in_c = None
 
+"""
+Fixed Upsample op, no learned parameters
+"""
 class Upsample(UnopII, Special, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, factor=None, name=None):
     if name is None:
       name = "Upsample"
     Node.__init__(self, name, 1)
     self.child = child
+    self.factor = factor
     self.out_c = None
     self.in_c = None
 
@@ -389,14 +504,14 @@ out_c = in_c / factor^2
 Grouping can be changed since this is implemented with a transposed conv
 """
 class LearnedUpsample(UnopIJFixed, Special, Node):
-  def __init__(self, child, factor=None, groups=1, name=None):
+  def __init__(self, child, out_c: int, factor, groups=1, name=None):
     if name is None:
       name = "LearnedUpsample"
     Node.__init__(self, name, 1)
     self.child = child
     self.factor = factor
     self.groups = groups 
-    self.out_c = None
+    self.out_c = out_c
     self.in_c = None
 
 class FastUpsample(UnopII, Special, Node):
@@ -518,6 +633,26 @@ def compute_input_output_channels(self):
   self.child3.compute_input_output_channels()
   return self.in_c, self.out_c
 
+@extclass(XRGBExtractor)
+def compute_input_output_channels(self):
+  self.child1.compute_input_output_channels()
+  self.child2.compute_input_output_channels()
+  self.child3.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(XFlatRGBExtractor)
+def compute_input_output_channels(self):
+  self.child1.compute_input_output_channels()
+  self.child2.compute_input_output_channels()
+  self.child3.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(RGBSuperResExtractor)
+def compute_input_output_channels(self):
+  self.lchild.compute_input_output_channels()
+  self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
 @extclass(RGB8ChanExtractor)
 def compute_input_output_channels(self):
   self.lchild.compute_input_output_channels()
@@ -552,6 +687,11 @@ def compute_input_output_channels(self):
   self.child.compute_input_output_channels()
   return self.in_c, self.out_c
 
+@extclass(XGreenRBExtractor)
+def compute_input_output_channels(self):
+  self.child.compute_input_output_channels()
+  return self.in_c, self.out_c
+
 @extclass(Softmax)
 def compute_input_output_channels(self):
   _, lout_c = self.child.compute_input_output_channels()
@@ -580,11 +720,30 @@ def compute_input_output_channels(self):
   self.out_c = lout_c
   return self.in_c, self.out_c
 
-@extclass(Downsample)
+@extclass(LearnedDownsample)
+def compute_input_output_channels(self):
+  child_in_c, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
+  return self.in_c, self.out_c
+
+@extclass(PeriodicConv)
+def compute_input_output_channels(self):
+  _, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
+  return self.in_c, self.out_c
+
+@extclass(Pack)
 def compute_input_output_channels(self):
   _, lout_c = self.child.compute_input_output_channels()
   self.in_c = lout_c
-  self.out_c = lout_c
+  self.out_c = lout_c * self.factor**2
+  return self.in_c, self.out_c
+
+@extclass(LearnedPack)
+def compute_input_output_channels(self):
+  child_in_c, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
+  self.out_c = self.in_c * self.factor**2
   return self.in_c, self.out_c
 
 @extclass(Unpack)
@@ -603,9 +762,8 @@ def compute_input_output_channels(self):
 
 @extclass(LearnedUpsample)
 def compute_input_output_channels(self):
-  _, lout_c = self.child.compute_input_output_channels()
-  self.in_c = lout_c
-  self.out_c = self.in_c // (self.factor**2)
+  child_in_c, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
   return self.in_c, self.out_c
 
 @extclass(FastUpsample)
@@ -788,7 +946,7 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None, shared_i
       extra_kwargs["groups"] = node_info["groups"]
     if "factor" in node_info:
       extra_kwargs["factor"] = node_info["factor"]
-    if "out_c" in node_info and (issubclass(node_class, UnopIJ) or issubclass(node_class, UnopIIdiv)):
+    if "out_c" in node_info and "out_c" in signature(node_class).parameters: #(issubclass(node_class, UnopIJ) or issubclass(node_class, UnopIIdiv)):
       extra_kwargs["out_c"] = node_info["out_c"]
 
     if len(extra_kwargs) > 0:
@@ -896,7 +1054,7 @@ def structural_hash(tree):
       h += 1 << i
 
   op_list = [Conv1x1, Conv1D, Conv2D, Softmax, Relu, Mul, Add, Sub, \
-            AddExp, LogSub, Stack, Upsample, Downsample, InterleavedSum, \
+            AddExp, LogSub, Stack, Upsample, LearnedDownsample, InterleavedSum, \
             GroupedSum, RGBExtractor, RGB8ChanExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input]
 
   ops_used = OrderedSet([type(n) for n in nodes])
@@ -1168,7 +1326,7 @@ def has_parameters(self):
 # ops to choose from for insertion
 linear_insert_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
 nonlinear_insert_ops = OrderedSet((Relu,)) # only allow Softmax to be used with Mul insertion 
-special_insert_ops = OrderedSet((Mul, Add, Sub, Stack, Downsample, InterleavedSum, GroupedSum))
+special_insert_ops = OrderedSet((Mul, Add, Sub, Stack, LearnedDownsample, InterleavedSum, GroupedSum))
 
 nl_sp_insert_ops = nonlinear_insert_ops.union(special_insert_ops)
 l_sp_insert_ops = linear_insert_ops.union(special_insert_ops)
@@ -1179,12 +1337,12 @@ move_ops = OrderedSet((LearnedUpsample,))
 linear_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
 special_linear_ops = OrderedSet((LearnedUpsample,))
 nonlinear_ops = OrderedSet((Softmax, Relu)) 
-special_ops = OrderedSet((Mul, Add, Sub, Stack, Upsample, Downsample, InterleavedSum, GroupedSum))
+special_ops = OrderedSet((Mul, Add, Sub, Stack, Upsample, LearnedDownsample, InterleavedSum, GroupedSum))
 
-sandwich_ops = OrderedSet((Downsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
+sandwich_ops = OrderedSet((LearnedDownsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
 
 sandwich_pairs = {
-  Downsample: Upsample
+  LearnedDownsample: Upsample
 }
 
 border_ops = OrderedSet((RGBExtractor, RGB8ChanExtractor, GreenExtractor, XGreenExtractor, XFlatGreenExtractor, GreenRBExtractor, Flat2Quad, Input))

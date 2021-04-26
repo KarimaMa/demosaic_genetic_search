@@ -2,7 +2,7 @@
       ieturn out
 lowered representation of AST to pytorch model
 """
-
+import math
 import torch 
 import torch.nn as nn
 from demosaic_ast import *
@@ -315,6 +315,45 @@ class StackOp(nn.Module):
     self._operands[1].to_gpu(gpu_id)
 
 
+class RGBSuperResExtractorOp(nn.Module):
+  def __init__(self, green, chromapred):
+    super(RGBSuperResExtractorOp, self).__init__()
+    self._operands = nn.ModuleList([green, chromapred])
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+    self._operands[1]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand1 = self._operands[0].run(model_inputs)
+      operand2 = self._operands[1].run(model_inputs)
+      self.output = self.forward(operand1, operand2)
+    return self.output 
+
+  def forward(self, green, chromapred):
+    out_shape = green.shape
+    img = torch.empty(torch.Size(out_shape), device=green.device)
+
+    # fill in reds
+    img[:,0,:,:] = chromapred[:,0,:,:]
+    img[:,1,:,:] = green[:,:,:,:]
+    img[:,2,:,:] = chromapred[:,1,:,:]
+
+    return img 
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+
+
+
 # Takes FullGreenQuad predction, RedBlueQuad from Bayer, and 
 # 6 channel chroma quad prection: R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
 # spits out full RGB Image at full resolution
@@ -366,6 +405,207 @@ class RGBExtractorOp(nn.Module):
     img[:,2,0::2,1::2] = chromapred[:,1,:,:]
     img[:,2,1::2,0::2] = redbluebayer[:,1,:,:]
     img[:,2,1::2,1::2] = chromapred[:,5,:,:]
+    
+    return img 
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+    self._operands[2].to_gpu(gpu_id)
+
+
+"""
+Inputs are all on flat xtrans resolution = image resolution
+  green prediction: 1 channels
+  xtrans: 3 channels
+  chroma predctions: 2 channels
+"""
+class XFlatRGBExtractorOp(nn.Module):
+  def __init__(self, green_pred, xtrans, chroma_pred):
+    super(XFlatRGBExtractorOp, self).__init__()
+    self._operands = nn.ModuleList([green_pred, xtrans, chroma_pred])
+    self.pixel_shuffle = nn.PixelShuffle(upscale_factor=6)
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+    self._operands[1]._initialize_parameters()
+    self._operands[2]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+    self._operands[2].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand1 = self._operands[0].run(model_inputs)
+      operand2 = self._operands[1].run(model_inputs)
+      operand3 = self._operands[2].run(model_inputs)
+      self.output = self.forward(operand1, operand2, operand3)
+    return self.output 
+
+  def forward(self, green_pred, xtrans, chroma_pred):
+    out_shape = list(xtrans.shape)
+    out_shape[1] = 3
+
+    img = torch.empty(torch.Size(out_shape), device=xtrans.device)
+    img[:,1,:,:] = green_pred[:,0,:,:]
+    img[:,0,:,:] = xtrans[:,0,:,:]
+    img[:,2,:,:] = xtrans[:,2,:,:]
+
+    factor = 6
+
+    g_pos = [(0,0),        (0,2), (0,3),        (0,5),
+                  (1,1),               (1,4),
+           (2,0),        (2,2), (2,3),        (2,5),
+           (3,0),        (3,2), (3,3),        (3,5),
+                  (4,1),               (4,4),
+           (5,0),        (5,2), (5,3),        (5,5)]
+    r_pos = [(0,4),
+             (1,0), (1,2),
+             (2,4),
+             (3,1),
+             (4,3), (4,5),
+             (5,1)]
+    b_pos = [(0,1),
+             (1,3), (1,5),
+             (2,1),
+             (3,4),
+             (4,0), (4,2),
+             (5,4)]
+
+    # chroma at green
+    for i, pos in enumerate(g_pos):
+      img[:,0,pos[0]::factor, pos[1]::factor] = chroma_pred[:, 0, pos[0]::factor, pos[1]::factor]
+      img[:,2,pos[0]::factor, pos[1]::factor] = chroma_pred[:, 1, pos[0]::factor, pos[1]::factor]
+
+    for i, pos in enumerate(b_pos):
+      img[:,0,pos[0]::factor, pos[1]::factor] = chroma_pred[:, 0, pos[0]::factor, pos[1]::factor]
+    for i, pos in enumerate(r_pos):
+      img[:,2,pos[0]::factor, pos[1]::factor] = chroma_pred[:, 1, pos[0]::factor, pos[1]::factor]
+
+    return img
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+    self._operands[2].to_gpu(gpu_id)
+
+
+class XRGBExtractorOp(nn.Module):
+  def __init__(self, green_pred, xtrans, chroma_pred):
+    super(XRGBExtractorOp, self).__init__()
+    self._operands = nn.ModuleList([green_pred, xtrans, chroma_pred])
+    self.pixel_shuffle = nn.PixelShuffle(upscale_factor=6)
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+    self._operands[1]._initialize_parameters()
+    self._operands[2]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+    self._operands[2].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand1 = self._operands[0].run(model_inputs)
+      operand2 = self._operands[1].run(model_inputs)
+      operand3 = self._operands[2].run(model_inputs)
+      self.output = self.forward(operand1, operand2, operand3)
+    return self.output 
+
+  def forward(self, green_pred, xtrans, chroma_pred):
+    # green_pred : 36 channels
+    # rb_xtrans : 16 channels  
+    # chroma_pred: 56 channels red at greens, red at blues, blue at reds, blue at greens
+    packed_out_shape = list(green_pred.shape)
+    packed_out_shape[1] = 108
+
+    packed_img = torch.empty(torch.Size(packed_out_shape), device=green_pred.device)
+
+    g_block1_pos = [(0,0),        (0,2), 
+                          (1,1),             
+                   (2,0),        (2,2)]
+    g_block2_pos = [(0,3),        (0,5),
+                          (1,4),
+                   (2,3),        (2,5)]
+    g_block3_pos = [(3,0),        (3,2),
+                          (4,1),            
+                   (5,0),        (5,2)]
+    g_block4_pos = [(3,3),        (3,5),
+                          (4,4),
+                   (5,3),        (5,5)]
+    g_pos = g_block1_pos + g_block2_pos + g_block3_pos + g_block4_pos
+
+    r_block1_pos = [(1,0), (1,2)]
+    r_block2_pos = [(0,4), (2,4)]
+    r_block3_pos = [(3,1), (5,1)]
+    r_block4_pos = [(4,3), (4,5)]
+
+    r_pos = r_block1_pos + r_block2_pos + r_block3_pos + r_block4_pos
+
+    b_block1_pos = [(0,1), (2,1)]
+    b_block2_pos = [(1,3), (1,5)]
+    b_block3_pos = [(4,0), (4,2)]
+    b_block4_pos = [(3,4), (5,4)]
+ 
+    b_pos = b_block1_pos + b_block2_pos + b_block3_pos + b_block4_pos
+
+    r_at_b_pred_pos = [0,3,5,6,9,10,12,15]
+    b_at_r_pred_pos = [1,2,4,7,8,11,13,14]
+
+    out_offset = 0
+    in_offset = 0
+    # red at green
+    for i, pos in enumerate(g_pos):
+      out_c = pos[0]*6 + pos[1] + out_offset
+      in_c = in_offset + i
+      packed_img[:,out_c,:,:] = chroma_pred[:,in_c,:,:]
+
+    # red at blue
+    in_offset += len(g_pos)
+    for i, pos in enumerate(b_pos):
+      out_c = pos[0]*6 + pos[1] + out_offset
+      in_c = in_offset + r_at_b_pred_pos[i]
+      packed_img[:,out_c,:,:] = chromapred[:,in_c,:,:]
+
+    # red from xtrans
+    for i, pos in enumerate(r_pos):
+      out_c = pos[0]*6 + pos[1] + out_offset
+      in_c = pos[0]*6 + pos[1]
+      packed_img[:,out_c,:,:] = xtrans[:,in_c,:,:]
+
+    # green 
+    out_offset += 36
+    packed_img[:,out_offset:out_offset+36,:,:] = green_pred[:,:,:,:]
+
+    # blue at red
+    out_offset += 36
+    for i, pos in enumerate(r_pos):
+      out_c = pos[0]*6 + pos[1] + out_offset
+      in_c = in_offset + b_at_r_pred_pos[i]
+      packed_img[:,out_c,:,:] = chromapred[:,in_c,:,:]
+
+    # blue at green
+    in_offset += (len(r_pos) + len(b_pos))
+    for i, pos in enumerate(g_pos):
+      out_c = pos[0]*6 + pos[1] + out_offset
+      in_c = in_offset + i
+      packed_img[:,out_c,:,:] = chroma_pred[:,in_c,:,:]
+
+    # blue from xtrans
+    for i, pos in enumerate(b_pos):
+      out_c = pos[0]*6 + pos[1] + out_offset
+      in_c = pos[0]*6 + pos[1]
+      packed_img[:,out_c,:,:] = xtrans[:,in_c,:,:]
+
+    img = self.pixel_shuffle(packed_img)
     
     return img 
 
@@ -659,6 +899,63 @@ class GreenRBExtractorOp(nn.Module):
     self._operands[0].to_gpu(gpu_id)
 
 
+
+"""
+takes flat 1 channel green prediction and extracts out green predicted 
+values at Red and Blue Xtrans locations in 3x3 grid row major order
+returning values in packed 6x6 resolution
+"""
+class XGreenRBExtractorOp(nn.Module):
+  def __init__(self, operand):
+    super(XGreenRBExtractorOp, self).__init__()
+    self._operands = nn.ModuleList([operand])
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
+
+  def forward(self, flat_green):
+    factor = 6
+
+    out_shape = list(flat_green.shape)
+    out_shape[1] = 16
+    out_shape[2] //= factor
+    out_shape[3] //= factor
+
+    num_blocks = 4
+    blocks_x = 2
+    blocks_y = 2
+
+    block_w = 3
+    block_h = 3
+    block_size = 4 # 4 red and blue locations per 3x3 block
+    
+    green_rb = torch.empty(torch.Size(out_shape), device=flat_green.device)
+
+    for block in range(num_blocks):
+      for i in range(block_size):
+        c = block * block_size + i 
+        # coordinate within the 6x6 group of 2x2 blocks 
+        x = (block % blocks_y) * block_w + (i*2+1) % block_w
+        y = (block // blocks_x) * block_h + (i*2+1) // block_w
+        green_rb[:,c,:,:] = flat_green[:,0, y::factor, x::factor] 
+
+    return green_rb
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
 """
 takes flat channel prediction and returns full 
 channel in bayer quad format
@@ -809,14 +1106,14 @@ class ExpOp(nn.Module):
     self._operands[0].to_gpu(gpu_id)
 
 
-class DownsampleOp(nn.Module):
-  def __init__(self, operand, C_in, scale_factor, param_name):
-    super(DownsampleOp, self).__init__()
+class LearnedDownsampleOp(nn.Module):
+  def __init__(self, operand, C_in, C_out, scale_factor, groups, param_name):
+    super(LearnedDownsampleOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.scale_factor = scale_factor
-    self.downsample_w = scale_factor * 2
+    self.downsample_w = scale_factor * 2 + (scale_factor % 2) # use odd kernel width for odd sampling factors 
 
-    downsampler = nn.Conv2d(C_in, C_in, self.downsample_w, stride=scale_factor, padding=(self.downsample_w-self.scale_factor)//2, bias=False)
+    downsampler = nn.Conv2d(C_in, C_out, self.downsample_w, stride=scale_factor, groups=groups, padding=math.ceil((self.downsample_w-self.scale_factor)/2), bias=False)
     self.param_name = param_name
     setattr(self, param_name, downsampler)
     self.output = None
@@ -839,6 +1136,201 @@ class DownsampleOp(nn.Module):
   def forward(self, x):
     downsampler = getattr(self, self.param_name)
     return downsampler(x)
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
+"""
+performs a unique convolution per spatial location within a period
+"""
+class PeriodicConvOp(nn.Module):
+  def __init__(self, operand, C_in, C_out, period, kwidth, param_name):
+    super(PeriodicConvOp, self).__init__()
+    self._operands = nn.ModuleList([operand])
+    self.period = period
+    self.kwidth = kwidth
+    self.param_name = param_name
+
+    im2col = nn.Unfold(kwidth, padding=kwidth//2)
+
+    input_c = (period**2 * C_in * kwidth**2)
+    output_c = (period**2 * C_out)
+    conv = nn.Conv2d(input_c, output_c, 1, groups=self.period**2, padding=0, bias=False)
+    unpack = nn.PixelShuffle(upscale_factor=period)
+    
+    setattr(self, param_name+"_im2col", im2col)
+    setattr(self, param_name+"_conv", conv)
+    setattr(self, param_name+"_unpack", unpack)
+
+    self.output = None
+
+  def _initialize_parameters(self):
+    conv = getattr(self, self.param_name+"_conv")
+    nn.init.xavier_normal_(conv.weight)
+    self._operands[0]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
+
+  def forward(self, x):
+    im2col = getattr(self, self.param_name+"_im2col")
+    conv = getattr(self, self.param_name+"_conv")
+    unpack = getattr(self, self.param_name+"_unpack")
+
+    tiles = im2col(x) # batch_size, c * kwidth**2, h * w
+    # reshape back to h, w dimensions
+    tiled = torch.reshape(tiles, (-1, (x.shape[1]*self.kwidth**2), x.shape[2], x.shape[3]))
+
+    # pack image by period
+    packed_size = list(tiled.shape) 
+    packed_size[1] *= self.period**2
+    packed_size[2] //= self.period
+    packed_size[3] //= self.period
+    packed = torch.empty(torch.Size(packed_size), device=x.device) # batch_size, (period**2 * c_in * kwidth**2), h//period, w//period
+
+    period_size = self.period**2
+    channels_per_conv = tiled.shape[1]
+    for i in range(period_size):
+      outc = i * channels_per_conv 
+      x_loc = i % self.period
+      y_loc = i // self.period
+      packed[:,outc:outc+channels_per_conv,:,:] = tiled[:, :, y_loc::self.period, x_loc::self.period] 
+    
+    conv_output = conv(packed) # batch_size, (c_out * period**2), h//period, w//period
+    out = unpack(conv_output) # batch_size, c_out, h, w
+    return out
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
+class PeriodicConvV2Op(nn.Module):
+  def __init__(self, operand, C_in, C_out, period, kwidth, param_name):
+    super(PeriodicConvV2Op, self).__init__()
+    self._operands = nn.ModuleList([operand])
+    self.period = period
+    self.kwidth = kwidth
+    self.param_name = param_name
+    self.out_c = C_out 
+    conv = nn.Conv2d(C_in, C_out*period**2, kwidth, padding=kwidth//2, bias=False)
+    setattr(self, param_name, conv)
+
+    self.output = None
+
+  def _initialize_parameters(self):
+    conv = getattr(self, self.param_name)
+    nn.init.xavier_normal_(conv.weight)
+    self._operands[0]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
+
+  def forward(self, x):
+   
+    conv = getattr(self, self.param_name)
+    conv_out = conv(x)
+
+    out_size = list(x.shape) 
+    out_size[1] = self.out_c 
+    out = torch.empty(torch.Size(out_size), device=x.device) 
+
+    period_size = self.period**2
+
+    period_size = self.period**2
+    for p in range(period_size):
+      x = p % self.period
+      y = p // self.period 
+      out[:, :, y::self.period, x::self.period] = conv_out[:, p:p+self.out_c, y::self.period, x::self.period]
+
+    return out
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
+class PackOp(nn.Module):
+  def __init__(self, operand, factor):
+    super(PackOp, self).__init__()
+    self._operands = nn.ModuleList([operand])
+    self.scale_factor = factor
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
+
+  def forward(self, x):
+    factor = self.scale_factor
+    packed_size = list(x.shape)
+    packed_size[1] *= factor**2
+    packed_size[2] //= factor
+    packed_size[3] //= factor
+    packed = torch.empty(torch.Size(packed_size), device=x.device)
+
+    for c in range(x.shape[1]):
+      for i in range(factor):
+        for j in range(factor):
+          outc = c * factor**2 + i * factor + j
+          packed[:,outc,:,:] = x[:, c, i::factor, j::factor] 
+    return packed
+    
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
+
+class LearnedPackOp(nn.Module):
+  def __init__(self, operand, C_in, C_out, factor, param_name):
+    super(LearnedPackOp, self).__init__()
+    self._operands = nn.ModuleList([operand])
+    self.scale_factor = factor
+    f = nn.Conv2d(C_in, C_out, factor, stride=factor, bias=False, padding=0)
+    self.param_name = param_name
+    setattr(self, param_name, f)
+    self.output = None
+
+  def _initialize_parameters(self):
+    f = getattr(self, self.param_name)
+    nn.init.xavier_normal_(f.weight)
+    self._operands[0]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output 
+
+  def forward(self, x): 
+    f = getattr(self, self.param_name)
+    out = f(x)
+    return out
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -909,13 +1401,14 @@ class UpsampleOp(nn.Module):
 
 
 class LearnedUpsampleOp(nn.Module):
-  def __init__(self, operand, C_in, scale_factor, param_name):
+  def __init__(self, operand, C_in, C_out, scale_factor, groups, param_name):
     super(LearnedUpsampleOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.in_c = C_in
+    self.out_c = C_out
     self.scale_factor = scale_factor
     self.param_name = param_name
-    upsampler = nn.ConvTranspose2d(self.in_c, self.in_c//(scale_factor**2), scale_factor, stride=scale_factor)
+    upsampler = nn.ConvTranspose2d(self.in_c, self.out_c, scale_factor, groups=groups, stride=scale_factor)
 
     setattr(self, self.param_name, upsampler)
     self.output = None
@@ -1304,6 +1797,51 @@ def ast_to_model(self, shared_children=None):
   shared_children[id(self)] = model 
   return model
 
+@extclass(XFlatRGBExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child1_model = self.child1.ast_to_model(shared_children)
+  child2_model = self.child2.ast_to_model(shared_children)
+  child3_model = self.child3.ast_to_model(shared_children)
+  model = XFlatRGBExtractorOp(child1_model, child2_model, child3_model)
+
+  shared_children[id(self)] = model 
+  return model
+
+@extclass(XRGBExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child1_model = self.child1.ast_to_model(shared_children)
+  child2_model = self.child2.ast_to_model(shared_children)
+  child3_model = self.child3.ast_to_model(shared_children)
+  model = XRGBExtractorOp(child1_model, child2_model, child3_model)
+
+  shared_children[id(self)] = model 
+  return model
+
+
+@extclass(RGBSuperResExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child1_model = self.child1.ast_to_model(shared_children)
+  child2_model = self.child2.ast_to_model(shared_children)
+  model = RGBSuperResExtractorOp(child1_model, child2_model)
+
+  shared_children[id(self)] = model 
+  return mode
+
 @extclass(RGB8ChanExtractor)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
@@ -1373,6 +1911,20 @@ def ast_to_model(self, shared_children=None):
   shared_children[id(self)] = model 
   return model
 
+@extclass(XGreenRBExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child_model = self.child.ast_to_model(shared_children)
+  model = XGreenRBExtractorOp(child_model)
+
+  shared_children[id(self)] = model 
+  return model
+
+
 @extclass(Flat2Quad)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
@@ -1438,7 +1990,7 @@ def ast_to_model(self, shared_children=None):
   shared_children[id(self)] = model 
   return model
 
-@extclass(Downsample)
+@extclass(LearnedDownsample)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
@@ -1446,10 +1998,50 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = DownsampleOp(child_model, self.in_c, 2, self.name)
+  model = LearnedDownsampleOp(child_model, self.in_c, self.out_c, self.factor, self.groups, self.name)
 
   shared_children[id(self)] = model 
   return model
+
+@extclass(PeriodicConv)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child_model = self.child.ast_to_model(shared_children)
+  model = PeriodicConvV2Op(child_model, self.in_c, self.out_c, self.period, self.kwidth, self.name)
+
+  shared_children[id(self)] = model 
+  return model
+
+@extclass(Pack)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child_model = self.child.ast_to_model(shared_children)
+  model = PackOp(child_model, self.factor)
+
+  shared_children[id(self)] = model 
+  return model
+
+@extclass(LearnedPack)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child_model = self.child.ast_to_model(shared_children)
+  model = LearnedPackOp(child_model, self.in_c, self.out_c, self.factor, self.name)
+
+  shared_children[id(self)] = model 
+  return model
+
 
 @extclass(Unpack)
 def ast_to_model(self, shared_children=None):
@@ -1472,7 +2064,7 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = UpsampleOp(child_model, self.in_c, 2, self.name)
+  model = UpsampleOp(child_model, self.in_c, self.factor, self.name)
 
   shared_children[id(self)] = model 
   return model
@@ -1485,7 +2077,7 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = LearnedUpsampleOp(child_model, self.in_c, 2, self.name)
+  model = LearnedUpsampleOp(child_model, self.in_c, self.out_c, self.factor, self.groups, self.name)
 
   shared_children[id(self)] = model 
   return model
