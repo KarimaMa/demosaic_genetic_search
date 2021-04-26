@@ -213,20 +213,7 @@ class ModelEvaluator():
 		self.log_format = '%(asctime)s %(levelname)s %(message)s'
 
 	def compute_cost(self, root, xtrans=False):
-		if xtrans:
-			if isinstance(root, XFlatGreenExtractor):
-				ratio = 16/36
-			elif isinstance(root, XGreenExtractor):
-				ratio = 1/36
-			else:
-				ratio = 1
-		else: # bayer mosaic
-			if isinstance(root, GreenExtractor) or isinstance(root, RGBExtractor) or isinstance(root, RGB8ChanExtractor):
-				ratio = 1/4
-			else: # superres task
-				ratio = 1
-
-		return self.compute_cost_helper(root, set()) * ratio
+		return self.compute_cost_helper(root, set())
 		
 	def compute_cost_helper(self, root, seen):
 		cost = 0
@@ -259,18 +246,28 @@ class ModelEvaluator():
 			cost += self.compute_cost_helper(root.child1, seen)
 			cost += self.compute_cost_helper(root.child2, seen)
 			cost += self.compute_cost_helper(root.child3, seen)
+			ratio = 1/4 
+			cost *= ratio
 		elif isinstance(root, RGB8ChanExtractor):
 			cost += self.compute_cost_helper(root.lchild, seen)
 			cost += self.compute_cost_helper(root.rchild, seen) 
+			ratio = 1/4
+			cost *= ratio
 		elif isinstance(root, GreenExtractor):
 			cost += self.compute_cost_helper(root.lchild, seen)
 			cost += self.compute_cost_helper(root.rchild, seen) 
+			ratio = 1/4
+			cost *= ratio
 		elif isinstance(root, XGreenExtractor):
 			cost += self.compute_cost_helper(root.lchild, seen)
 			cost += self.compute_cost_helper(root.rchild, seen)
+			ratio = 1/36
+			cost *= ratio
 		elif isinstance(root, XFlatGreenExtractor):
 			cost += self.compute_cost_helper(root.lchild, seen)
 			cost += self.compute_cost_helper(root.rchild, seen)    
+			ratio = 16/36
+			cost *= ratio
 		elif isinstance(root, GreenRBExtractor):
 			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Softmax):
@@ -282,7 +279,7 @@ class ModelEvaluator():
 		elif isinstance(root, Log) or isinstance(root, Exp):
 			cost += root.in_c * LOGEXP_COST	
 			cost += self.compute_cost_helper(root.child, seen)
-		elif isinstance(root, Downsample):
+		elif isinstance(root, LearnedDownsample):
 			downsample_k = SCALE_FACTOR * 2
 			cost += root.in_c * root.out_c * downsample_k**2 * MUL_COST
 			cost += (SCALE_FACTOR**2) * self.compute_cost_helper(root.child, seen) 
@@ -302,6 +299,9 @@ class ModelEvaluator():
 			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Conv2D):
 			cost += root.groups * ((root.in_c // root.groups) * (root.out_c // root.groups) * root.kwidth**2 * MUL_COST)
+			cost += self.compute_cost_helper(root.child, seen)
+		elif isinstance(root, PeriodicConv):
+			cost += root.in_c * root.out_c * root.kwidth**2 * MUL_COST
 			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, InterleavedSum) or isinstance(root, GroupedSum):
 			cost += ((root.in_c / root.out_c) - 1) * root.out_c * ADD_COST
