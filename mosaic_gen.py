@@ -143,28 +143,35 @@ def unshuffle(x, factor):
 
 
 """
+packs every 6x6 pixels in 3x3 grid order
+"""
+def pack3x3(input):
+  period = 6
+  outshape = list(input.shape)
+  outshape[0] = period**2
+  outshape[1] //= period
+  outshape[2] //= period
+
+  out = torch.empty(outshape)
+  num_blocks = 4
+  block_size = 9
+
+  for b in range(num_blocks):
+    for i in range(block_size):
+      bx = b % 2
+      by = b // 2
+      x = bx * 2 + i % 3
+      y = by * 2 + i // 3
+      c = b * block_size + i
+      out[c, :, :] = input[0, y::period, x::period]
+ 
+  return out
+
+
+"""
 returns the spatially invarian† xtrans mosaic
 """
 def xtrans_invariant(im):
-  g_pos = [(0,0),        (0,2), (0,3),        (0,5),
-                  (1,1),               (1,4),
-           (2,0),        (2,2), (2,3),        (2,5),
-           (3,0),        (3,2), (3,3),        (3,5),
-                  (4,1),               (4,4),
-           (5,0),        (5,2), (5,3),        (5,5)]
-  r_pos = [(0,4),
-           (1,0), (1,2),
-           (2,4),
-           (3,1),
-           (4,3), (4,5),
-           (5,1)]
-  b_pos = [(0,1),
-           (1,3), (1,5),
-           (2,1),
-           (3,4),
-           (4,0), (4,2),
-           (5,4)]
-
   m_size = list(im.shape)
   m_size[0] = 36
   m_size[1] //= 6
@@ -176,6 +183,25 @@ def xtrans_invariant(im):
   mosaic = torch.Tensor(mosaic)
   #pixel_unshuffle = nn.PixelUnshuffle(6)
   packed = unshuffle(mosaic, 6)
+  return packed
+
+
+"""
+returns the spatially invarian† xtrans mosaic
+packed in 3x3 grid format
+"""
+def xtrans_3x3_invariant(im):
+  m_size = list(im.shape)
+  m_size[0] = 36
+  m_size[1] //= 6
+  m_size[2] //= 6
+
+  mosaic = xtrans(im)
+
+  mosaic = np.sum(mosaic, axis=0, keepdims=True)
+  mosaic = torch.Tensor(mosaic)
+  #pixel_unshuffle = nn.PixelUnshuffle(6)
+  packed = pack3x3(mosaic, 6)
   return packed
 
 
