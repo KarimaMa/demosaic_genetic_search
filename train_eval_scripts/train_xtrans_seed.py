@@ -124,12 +124,9 @@ def train_epoch(args, train_queue, models, model_dir, criterion, optimizers, tra
 
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
-      mosaic, mosaic3x3, flat_mosaic, rb_xtrans = input 
+      packed_mosaic, mosaic3chan, flat_mosaic, rb_xtrans = input 
     else:
-      if args.flat:
-        mosaic, mosaic3x3, flat_mosaic = input
-      else:
-        mosaic, mosaic3x3 = input
+      packed_mosaic, mosaic3chan, flat_mosaic = input
 
     if args.testing:
       print("target")
@@ -150,16 +147,13 @@ def train_epoch(args, train_queue, models, model_dir, criterion, optimizers, tra
       optimizers[i].zero_grad()
       model.reset()
       if args.full_model:
-        model_inputs = {"Input(Mosaic)": mosaic,
-                        "Input(Mosaic3x3)": mosaic3x3, 
+        model_inputs = {"Input(Mosaic)": mosaic3chan,
+                        "Input(Mosaic3x3)": packed_mosaic, 
                         "Input(FlatMosaic)": flat_mosaic,
                         "Input(RBXtrans)": rb_xtrans}
         pred = model.run(model_inputs)
       else:
-        if args.flat:
-          model_inputs = {"Input(Mosaic)": mosaic, "Input(Mosaic3x3)": mosaic3x3, "Input(FlatMosaic)": flat_mosaic}
-        else:
-          model_inputs = {"Input(Mosaic)": mosaic, "Input(Mosaic3x3)": mosaic3x3}
+        model_inputs = {"Input(Mosaic)": mosaic3chan, "Input(Mosaic3x3)": packed_mosaic, "Input(FlatMosaic)": flat_mosaic}
         pred = model.run(model_inputs)
 
       if args.crop > 0:
@@ -210,12 +204,9 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
   with torch.no_grad():
     for step, (input, target) in enumerate(valid_queue):
       if args.full_model:
-        mosaic, mosaic3x3, flat_mosaic, rb_xtrans = input 
+        packed_mosaic, mosaic3chan, flat_mosaic, rb_xtrans = input 
       else:
-        if args.flat:
-          mosaic, mosaic3x3, flat_mosaic = input
-        else:
-          mosaic, mosaic3x3 = input
+        packed_mosaic, mosaic3chan, flat_mosaic = input
       
       if args.crop > 0:
         target = target[..., args.crop:-args.crop, args.crop:-args.crop]
@@ -232,10 +223,7 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
 
           pred = model.run(model_inputs)
         else:
-          if args.flat:
-            model_inputs = {"Input(Mosaic)": mosaic, "Input(Mosaic3x3)": mosaic3x3, "Input(FlatMosaic)": flat_mosaic}
-          else:
-            model_inputs = {"Input(Mosaic)": mosaic, "Input(Mosaic3x3)": mosaic3x3}
+          model_inputs = {"Input(Mosaic)": mosaic3chan, "Input(Mosaic3x3)": packed_mosaic, "Input(FlatMosaic)": flat_mosaic}
           pred = model.run(model_inputs)
 
         clamped = torch.clamp(pred, min=0, max=1)
@@ -284,6 +272,7 @@ if __name__ == "__main__":
   parser.add_argument('--xgreen_dnet3', action='store_true')
   parser.add_argument('--xgreen_dnet4', action='store_true')
   parser.add_argument('--xgreen_dnet5', action='store_true')
+  parser.add_argument('--xgreen_dnet6', action='store_true')
 
   parser.add_argument('--xflatgreen_dnet', action='store_true')    
   parser.add_argument('--xrgb_dnet1', action='store_true')    
@@ -356,6 +345,8 @@ if __name__ == "__main__":
     model = xtrans_model_lib.XGreenDemosaicknet4(args.depth, args.width)
   elif args.xgreen_dnet5:
     model = xtrans_model_lib.XGreenDemosaicknet5(args.depth, args.width)
+  elif args.xgreen_dnet6:
+    model = xtrans_model_lib.XGreenDemosaicknet6(args.depth, args.width)
   elif args.xrgb_dnet1:
     green_model = demosaic_ast.load_ast(args.green_model_ast)
     model = xtrans_model_lib.XRGBDemosaicknet1(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
