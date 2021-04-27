@@ -268,7 +268,15 @@ class ModelEvaluator():
 			cost += self.compute_cost_helper(root.rchild, seen)    
 			ratio = 16/36
 			cost *= ratio
+		elif isinstance(root, XFlatRGBExtractor):
+			cost += self.compute_cost_helper(root.child1, seen)
+			cost += self.compute_cost_helper(root.child2, seen)
+			cost += self.compute_cost_helper(root.child3, seen)
+			ratio = 28/36
+			cost *= ratio
 		elif isinstance(root, GreenRBExtractor):
+			cost += self.compute_cost_helper(root.child, seen)
+		elif isinstance(root, XGreenRBExtractor):
 			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Softmax):
 			cost += root.in_c * (LOGEXP_COST + DIV_COST + ADD_COST)
@@ -280,9 +288,11 @@ class ModelEvaluator():
 			cost += root.in_c * LOGEXP_COST	
 			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, LearnedDownsample):
-			downsample_k = SCALE_FACTOR * 2
+			downsample_k = root.factor * 2
 			cost += root.in_c * root.out_c * downsample_k**2 * MUL_COST
-			cost += (SCALE_FACTOR**2) * self.compute_cost_helper(root.child, seen) 
+			cost += (root.factor**2) * self.compute_cost_helper(root.child, seen) 
+		elif isinstance(root, Pack):
+			cost += (root.factor**2) * self.compute_cost_helper(root.child, seen) 
 		elif isinstance(root, Upsample):
 			cost += root.in_c * BILINEAR_COST
 			cost += self.compute_cost_helper(root.child, seen) / (SCALE_FACTOR**2)
@@ -299,6 +309,7 @@ class ModelEvaluator():
 			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Conv2D):
 			cost += root.groups * ((root.in_c // root.groups) * (root.out_c // root.groups) * root.kwidth**2 * MUL_COST)
+			print(f"cost of conv2D {root.groups * ((root.in_c // root.groups) * (root.out_c // root.groups) * root.kwidth**2 * MUL_COST)}")
 			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, PeriodicConv):
 			cost += root.in_c * root.out_c * root.kwidth**2 * MUL_COST
@@ -309,8 +320,7 @@ class ModelEvaluator():
 		elif isinstance(root, Flat2Quad):
 			cost += self.compute_cost_helper(root.child, seen)
 		else:
-			print(type(root))
-			assert False, "compute cost encountered unexpected node type"
+			assert False, f"compute cost encountered unexpected node type {type(root)}"
 
 		return cost
 
