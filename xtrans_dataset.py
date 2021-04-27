@@ -34,7 +34,7 @@ class XGreenDataset(data.Dataset):
 
     mosaic3chan = xtrans(img, mask=self.mask)
     flat_mosaic = np.sum(mosaic3chan, axis=0, keepdims=True)
-    packed_mosaic = xtrans_3x3_invariant(img)
+    packed_mosaic = xtrans_3x3_invariant(flat_mosaic)
 
     input = packed_mosaic, mosaic3chan, flat_mosaic
   
@@ -51,12 +51,12 @@ class XGreenDataset(data.Dataset):
 class XRGBDataset(data.Dataset):
   def __init__(self, data_file=None, data_filenames=None, precomputed=None, flat=False, return_index=False):
     if data_file:
-      self.list_IDs = sort_ids(ids_from_file(data_file)) # patch filenames
+      self.list_IDs = ids_from_file(data_file) # patch filenames
     else:
       self.list_IDs = data_filenames
 
     if precomputed: # read precomputed mosaic
-      self.mosaic_IDs = sort_ids(ids_from_file(precomputed))
+      self.mosaic_IDs = ids_from_file(precomputed)
       self.precomputed = True
     else:
       self.precomputed = False
@@ -76,9 +76,31 @@ class XRGBDataset(data.Dataset):
 
     mosaic3chan = xtrans(img, mask=self.mask)
     flat_mosaic = np.sum(mosaic3chan, axis=0, keepdims=True)
-    packed_mosaic = xtrans_3x3_invariant(img)
+    packed_mosaic = xtrans_3x3_invariant(flat_mosaic)
 
-    input = packed_mosaic, mosaic3chan, flat_mosaic
+    # extract out the RB values from the mosaic
+    period = 6
+    num_blocks = 4
+    rb_shape = list(flat_mosaic.shape)
+    rb_shape[0] = 16
+    rb_shape[1] //= period
+    rb_shape[2] //= period
+
+    rb = np.zeros(rb_shape, dtype=np.float32)
+    num_blocks = 4
+    block_size = 4 # 4 red and blue values per 3x3
+
+    for b in range(num_blocks):
+      for i in range(block_size):
+        bx = b % 2
+        by = b // 2
+        x = bx * 2 + (i*2+1) % 3
+        y = by * 2 + (i*2+1) // 3
+        c = b * block_size + i
+        rb[c, :, :] = flat_mosaic[0, y::period, x::period]
+ 
+    rb = torch.Tensor(rb)
+    input = packed_mosaic, mosaic3chan, flat_mosaic, rb
   
     target = img
     target = torch.Tensor(target)

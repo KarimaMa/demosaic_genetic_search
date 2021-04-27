@@ -124,7 +124,7 @@ def train_epoch(args, train_queue, models, model_dir, criterion, optimizers, tra
 
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
-      packed_mosaic, mosaic3chan, flat_mosaic, rb_xtrans = input 
+      packed_mosaic, mosaic3chan, flat_mosaic, rb = input 
     else:
       packed_mosaic, mosaic3chan, flat_mosaic = input
 
@@ -150,7 +150,7 @@ def train_epoch(args, train_queue, models, model_dir, criterion, optimizers, tra
         model_inputs = {"Input(Mosaic)": mosaic3chan,
                         "Input(Mosaic3x3)": packed_mosaic, 
                         "Input(FlatMosaic)": flat_mosaic,
-                        "Input(RBXtrans)": rb_xtrans}
+                        "Input(RBXtrans)": rb}
         pred = model.run(model_inputs)
       else:
         model_inputs = {"Input(Mosaic)": mosaic3chan, "Input(Mosaic3x3)": packed_mosaic, "Input(FlatMosaic)": flat_mosaic}
@@ -204,7 +204,7 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
   with torch.no_grad():
     for step, (input, target) in enumerate(valid_queue):
       if args.full_model:
-        packed_mosaic, mosaic3chan, flat_mosaic, rb_xtrans = input 
+        packed_mosaic, mosaic3chan, flat_mosaic, rb = input 
       else:
         packed_mosaic, mosaic3chan, flat_mosaic = input
       
@@ -216,10 +216,10 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
       for i, model in enumerate(models):
         model.reset()
         if args.full_model:
-          model_inputs = {"Input(Mosaic)": mosaic,
-                          "Input(Mosaic3x3)": mosaic3x3, 
+          model_inputs = {"Input(Mosaic)": mosaic3chan,
+                          "Input(Mosaic3x3)": packed_mosaic, 
                           "Input(FlatMosaic)": flat_mosaic,
-                          "Input(RBXtrans)": rb_xtrans}
+                          "Input(RBXtrans)": rb}
 
           pred = model.run(model_inputs)
         else:
