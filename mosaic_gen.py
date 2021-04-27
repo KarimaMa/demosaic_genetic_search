@@ -152,7 +152,7 @@ def pack3x3(input):
   outshape[1] //= period
   outshape[2] //= period
 
-  out = torch.empty(outshape)
+  out = np.zeros(outshape, dtype=np.float32)
   num_blocks = 4
   block_size = 9
 
@@ -187,21 +187,12 @@ def xtrans_invariant(im):
 
 
 """
+takes flat 1 channel xtrans mosaic
 returns the spatially invarian† xtrans mosaic
 packed in 3x3 grid format
 """
-def xtrans_3x3_invariant(im):
-  m_size = list(im.shape)
-  m_size[0] = 36
-  m_size[1] //= 6
-  m_size[2] //= 6
-
-  mosaic = xtrans(im)
-
-  mosaic = np.sum(mosaic, axis=0, keepdims=True)
-  mosaic = torch.Tensor(mosaic)
-  #pixel_unshuffle = nn.PixelUnshuffle(6)
-  packed = pack3x3(mosaic, 6)
+def xtrans_3x3_invariant(flat_xtrans):
+  packed = pack3x3(flat_xtrans)
   return packed
 
 
