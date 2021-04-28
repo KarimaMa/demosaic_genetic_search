@@ -111,7 +111,7 @@ class Special(ABC):
 """----------------------------------------------------------------------"""
 
 class Input(Const, Special, Node):
-  def __init__(self, out_c, name=None, node=None, no_grad=None, green_model_id=None):
+  def __init__(self, out_c, resolution=None, name=None, node=None, no_grad=None, green_model_id=None):
     if node:
       if name is None:
         name = node.name
@@ -126,6 +126,7 @@ class Input(Const, Special, Node):
       self.no_grad = no_grad
 
     Node.__init__(self, "Input({})".format(name), 0)
+    self.resolution = resolution
     self.in_c = out_c
     self.out_c = out_c 
 
@@ -430,7 +431,7 @@ class Exp(UnopII, NonLinear, Node):
     self.out_c = None
     self.in_c = None
 
-class LearnedDownsample(UnopII, Special, Node):
+class LearnedDownsample(UnopIJ, Special, Node):
   def __init__(self, child, out_c:int, factor=None, groups=1, name=None):
     if name is None:
       name = "LearnedDownsample"
@@ -503,7 +504,7 @@ a fixed function of the input channels, specifically,
 out_c = in_c / factor^2
 Grouping can be changed since this is implemented with a transposed conv
 """
-class LearnedUpsample(UnopIJFixed, Special, Node):
+class LearnedUpsample(UnopIJ, Special, Node):
   def __init__(self, child, out_c: int, factor, groups=1, name=None):
     if name is None:
       name = "LearnedUpsample"
@@ -892,6 +893,9 @@ def structure_to_array(self):
     if hasattr(n, 'factor'):
       node_info['factor'] = n.factor
 
+    if hasattr(n, 'resolution'):
+      node_info['resolution'] = n.factor
+
     if hasattr(n, 'node'):
       if hasattr(n, 'green_model_id'):
         node_info['green_model_id'] = n.green_model_id # only has meaning given the current search run's choice of green models
@@ -971,6 +975,9 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None, shared_i
         extra_kwargs["node"] = input_ast
       if "no_grad" in node_info:
         extra_kwargs["no_grad"] = node_info["no_grad"]
+      if "resolution" in node_info:
+        extra_kwargs["resolution"] = node_info["resolution"]
+
     if len(extra_kwargs) > 0:
       new_node = node_class(node_info["in_c"], name=node_name, **extra_kwargs)
     else:
@@ -1326,29 +1333,26 @@ def has_parameters(self):
 # ops to choose from for insertion
 linear_insert_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
 nonlinear_insert_ops = OrderedSet((Relu,)) # only allow Softmax to be used with Mul insertion 
-special_insert_ops = OrderedSet((Mul, Add, Sub, Stack, LearnedDownsample, InterleavedSum, GroupedSum))
+special_insert_ops = OrderedSet((Mul, Add, Sub, Stack, LearnedDownsample, Pack, InterleavedSum, GroupedSum))
 
-nl_sp_insert_ops = nonlinear_insert_ops.union(special_insert_ops)
-l_sp_insert_ops = linear_insert_ops.union(special_insert_ops)
-all_insert_ops = linear_insert_ops.union(nonlinear_insert_ops).union(special_insert_ops)
+downsample_ops = OrderedSet((LearnedDownsample, Pack))
+upsample_ops = OrderedSet((LearnedUpsample, Upsample, Unpack))
 
-move_ops = OrderedSet((LearnedUpsample,))
+all_insert_ops = linear_insert_ops | nonlinear_insert_ops | special_insert_ops
+
+move_ops = OrderedSet((LearnedUpsample, Upsample, Pack, Unpack, LearnedDownsample))
 
 linear_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
-special_linear_ops = OrderedSet((LearnedUpsample,))
+special_linear_ops = OrderedSet((LearnedUpsample, LearnedDownsample))
 nonlinear_ops = OrderedSet((Softmax, Relu)) 
-special_ops = OrderedSet((Mul, Add, Sub, Stack, Upsample, LearnedDownsample, InterleavedSum, GroupedSum))
 
-sandwich_ops = OrderedSet((LearnedDownsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
+sandwich_ops = OrderedSet((LearnedDownsample, Upsample, Pack, Unpack, LearnedUpsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
 
 sandwich_pairs = {
   LearnedDownsample: Upsample
 }
 
-border_ops = OrderedSet((RGBExtractor, RGB8ChanExtractor, GreenExtractor, XGreenExtractor, XFlatGreenExtractor, GreenRBExtractor, Flat2Quad, Input))
-nl_and_sp = nonlinear_ops.union(special_ops)
-l_and_sp = linear_ops.union(special_ops)
-all_ops = nl_and_sp.union(l_and_sp)
+border_ops = OrderedSet((RGBExtractor, XRGBExtractor, XFlatRGBExtractor, RGB8ChanExtractor, GreenExtractor, XGreenExtractor, XFlatGreenExtractor, GreenRBExtractor, XGreenRBExtractor, Flat2Quad, Input))
 
 demosaicnet_ops = OrderedSet((Conv1x1, Conv2D, Relu))
 
