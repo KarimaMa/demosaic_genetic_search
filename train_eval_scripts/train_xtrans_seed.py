@@ -175,7 +175,7 @@ def train_epoch(args, train_queue, models, model_dir, criterion, optimizers, tra
       if step % args.report_freq == 0 or step == len(train_queue)-1:
         # compute batch average psnr
         clamped = torch.clamp(pred, min=0, max=1).detach()
-        per_image_mse = (clamped-target).square().mean(-1).mean(-1).mean(-1)
+        per_image_mse = (clamped - target).square().mean(-1).mean(-1).mean(-1)
         per_image_psnr = -10.0*torch.log10(per_image_mse)
         batch_avg_psnr = per_image_psnr.sum(0) / n
 
@@ -278,6 +278,7 @@ if __name__ == "__main__":
   parser.add_argument('--xrgb_dnet1', action='store_true')    
   parser.add_argument('--xrgb_dnet2', action='store_true')    
   parser.add_argument('--xrgb_dnet3', action='store_true')    
+  parser.add_argument('--xrgb_dnet4', action='store_true')    
 
   parser.add_argument('--green_model_ast', type=str, help="green model ast to use for chroma model")
   parser.add_argument('--no_grad', action='store_true', help='whether or not to backprop through green model')
@@ -356,6 +357,9 @@ if __name__ == "__main__":
   elif args.xrgb_dnet3:
     green_model = demosaic_ast.load_ast(args.green_model_ast)
     model = xtrans_model_lib.XRGBDemosaicknet3(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
+  elif args.xrgb_dnet4:
+    green_model = demosaic_ast.load_ast(args.green_model_ast)
+    model = xtrans_model_lib.XRGBDemosaicknet4(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
 
   if args.full_model:
     print(f'--- setting the no_grad parameter in green model {args.no_grad} ---')
