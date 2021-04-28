@@ -94,8 +94,8 @@ class XRGBDataset(data.Dataset):
       for i in range(block_size):
         bx = b % 2
         by = b // 2
-        x = bx * 2 + (i*2+1) % 3
-        y = by * 2 + (i*2+1) // 3
+        x = bx * 3 + (i*2+1) % 3
+        y = by * 3 + (i*2+1) // 3
         c = b * block_size + i
         rb[c, :, :] = flat_mosaic[0, y::period, x::period]
  
