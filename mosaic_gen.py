@@ -160,8 +160,8 @@ def pack3x3(input):
     for i in range(block_size):
       bx = b % 2
       by = b // 2
-      x = bx * 2 + i % 3
-      y = by * 2 + i // 3
+      x = bx * 3 + i % 3
+      y = by * 3 + i // 3
       c = b * block_size + i
       out[c, :, :] = input[0, y::period, x::period]
  
