@@ -24,6 +24,8 @@ from util import extclass, get_factors, get_closest_factor
 from enum import Enum
 from footprint import compute_footprint, compute_lowres_branch_footprint
 from search_mutation_type_pdfs import mutation_types_pdfs
+from tree_manipulation import insertion_edge_updates, replace_child, replace_parent
+
 
 channel_options = [8, 10, 12, 16, 20, 24, 28, 32]
 
@@ -1001,6 +1003,7 @@ def link_insertion_parent_to_new_child(self, insert_parent, insert_child, node):
     self.debug_logger.debug(f"Should not be inserting {node} after parent {insert_parent.dump()}")
     assert False, "Should not be inserting after an input node"
 
+
 @extclass(Mutator)
 def insert_binop(self, tree, input_set, insert_op, insert_parent, insert_child, make_copy=False, partner_ast=None):
   OpClass, use_child, use_right = insert_op
@@ -1034,8 +1037,7 @@ def insert_binop(self, tree, input_set, insert_op, insert_parent, insert_child, 
 
   if subtree_res != insert_child_res:
     # NOTE: if we're inserting an InputOp as the subtree, it will always be rejected if the resolution 
-    # is Downsampled ll input ops are set to full res
-
+    # is Downsampled input ops are set to full res
     # TODO: ALLOW INSERTION OF DOWNSAMPLE OR UPSAMPLE TO MAKE RESOLUTIONS MATCH 
     # upsamples to use should depend on the task: demosaicking vs superres
     self.debug_logger.debug(f"resolution of chosen subtree for binary op does not match insert_child resolution")
@@ -1060,25 +1062,11 @@ def insert_binop(self, tree, input_set, insert_op, insert_parent, insert_child, 
     new_node = OpClass(subtree, insert_child)
 
   # parent is not none when inserting a required right child OR not making a copy of the chosen subtree
-  if subtree.parent: 
-    if type(subtree.parent) is tuple: 
-      subtree.parent = subtree.parent + tuple([new_node])
-    else:
-      subtree.parent = (subtree.parent, new_node)
-  else:
-    subtree.parent = new_node
-
-  if type(insert_child.parent) is tuple:
-    parents = list(insert_child.parent)
-    for p in insert_child.parent:
-      if id(p) == id(insert_parent):
-        parents.remove(p)
-        parents += [new_node]
-    insert_child.parent = tuple(parents)
-  else:
-    insert_child.parent = new_node  
-
+  insertion_edge_updates(insert_parent, insert_child, new_node)
+  insertion_edge_updates(insert_parent, subtree, new_node)
+ 
   return new_node
+
 
 """
 Inserts a unary op
@@ -1089,34 +1077,27 @@ INSERT PARENT IS NOT MODIFIED TO POINT TO THE NEW NODE
 @extclass(Mutator)
 def insert_unary_op(self, OpClass, insert_parent, insert_child):
   params = list(signature(OpClass).parameters.items())
-  if len(params) >= 3 and len(params) <= 5: # conv or grouped/interleaved sum, possible params: child, out_c, name, groups, kwidth
-    if issubclass(OpClass, UnopIIdiv):
-      in_c_factors = get_factors(insert_child.out_c)
-      # remove the input channels from the list of output channel options
-      in_c_factors.remove(insert_child.out_c)
-      assert len(in_c_factors) > 0, "Cannot insert {OpClass} without output channels to choose from"
-      out_c = random.sample(in_c_factors, 1)[0]
+  if issubclass(OpClass, UnopIIdiv):
+    in_c_factors = get_factors(insert_child.out_c)
+    # remove the input channels from the list of output channel options
+    in_c_factors.remove(insert_child.out_c)
+    assert len(in_c_factors) > 0, "Cannot insert {OpClass} without output channels to choose from"
+    out_c = random.sample(in_c_factors, 1)[0]
+  elif issubclass(OpClass, UnopIJ):
+    out_c = insert_child.out_c
+    if OpClass in downsample_ops:
+      downsampling_factor = random.sample(self.args.resolutions, 1)[0]
+      new_node = OpClass(insert_child, out_c, factor=downsampling_factor)
     else:
-      out_c = self.args.default_channels
-    new_node = OpClass(insert_child, out_c)
+      new_node = OpClass(insert_child, out_c)
   elif len(params) == 2:
     new_node = OpClass(insert_child)
   else:
     self.debug_logger.debug("Invalid number of parameters for Unary op")
     assert False, "Invalid number of parameters for Unary op"
   
-  if type(insert_child.parent) is tuple:
+  insertion_edge_updates(insert_parent, insert_child, new_node)
 
-    parents = dict([(id(p), p) for p in insert_child.parent])
-
-    for p in insert_child.parent:
-      if id(p) in parents:
-        del parents[id(p)]
-        parents[id(new_node)] = new_node
-
-    insert_child.parent = tuple(parents.values())
-  else:
-    insert_child.parent = new_node  
   return new_node
 
 
@@ -1336,6 +1317,60 @@ def choose_partner_op_loc(self, op_node, OpClass, partner_op_class):
 
 
 """
+chooses were to insert upsample
+"""
+@extclass(Mutator)
+def choose_upsample_loc(self, inserted_downsample):
+
+  # don't insert upsample above any node with multiple parents 
+  # find_closest_ancestor will return if it encounters a node with tuple parents or any of the passed in node types 
+  # allow upsamples to be parent of certain binops: Subs Adds Muls --> requires fixing resolution of children
+  # because we may subtract or add downsampled Green from/to downsampled Bayer
+  # upsample cannot be inserted above a pre-existing downsample or Upsample op or a Softmax, or Stack
+  insertion_child_options = find_closest_ancestor(inserted_downsample, set((Downsample, Upsample, Softmax, Stack)))    
+  if len(insertion_child_options) == 0:
+    assert False, f"unable to find an insertion location for partner op of {op_node}"
+
+  linear_instances = sum([1 for n in insertion_child_options if isinstance(n, Linear)])
+  if linear_instances == 0:
+    assert False, f"unable to find insertion location for Upsample with at least one linear op in between it and the partner Downsample"
+
+  resolution = None
+
+  tries = 0
+  while True:
+    # use poisson with small lambda to favor locations farther away (i.e. smaller index)
+    insert_above_node_loc = np.random.poisson(float(len(insertion_child_options)/5))
+    insert_above_node_loc = min(len(insertion_child_options)-1, insert_above_node_loc)
+
+    insert_child = insertion_child_options[insert_above_node_loc]
+    insert_child_res = spatial_resolution(insert_child)
+
+    footprint = compute_lowres_branch_footprint(insert_child)
+
+    if footprint <= self.args.max_footprint and (resolution is None or insert_child_res == resolution):
+      break
+
+    tries += 1
+    if tries > self.args.partner_insert_loc_tries:
+      self.debug_logger.debug(f"unable to find an insertion location for partner op of {op_node} with resolution {resolution}")
+      assert False, f"unable to find an insertion location for partner op of {op_node} with resolution {resolution}"
+
+  if OpClass is LogSub:
+    # NOTE: we are passing a REFERENCE to LogSub's child -> creating a DAG
+    insert_ops = [(partner_op_class, op_node.rchild, True)] # LogSub subtracts the right child so must add back
+  else:
+    insert_ops = [(partner_op_class, None, None)]
+
+  insert_parent = insert_child.parent
+  if type(insert_parent) is tuple:
+    parent_types = [type(p) for p in insert_parent]
+    if not LogSub in parent_types and not AddExp in parent_types:
+      insert_parent = random.sample(insert_parent, 1)[0]
+  return insert_ops, insert_parent, insert_child
+
+
+"""
 fixes the resolution of children upstream from newly inserted
 master Upsample when upsample is inserted above a Binop by inserting Downsamples
 where needed.
@@ -1426,6 +1461,39 @@ def insert_partner_op(self, tree, input_set, op_class, op_node):
   return insert_nodes, tree
 
 
+"""
+inserts upsamples to fix the resolution of the tree after inserting a downsample 
+"""
+@extclass(Mutator)
+def insert_upsample(self, tree, input_set, op_class, op_node):
+  # pick an upsample type
+  upsample_class = random.sample(upsample_ops, 1)[0]
+  upsampling_factor = new_node.factor
+  try:
+    insert_op, insert_parent, insert_child = self.choose_partner_op_loc(op_node, op_class, op_partner_class)
+  except AssertionError:
+    self.debug_logger.debug(f"failed to find insertion location for partner of {op_node}")
+    self.partner_loc_fails += 1
+    assert False, f"failed to find insertion location for partner of {op_node}"
+  
+  insert_nodes, tree = self.insert(tree, insert_op, insert_parent, insert_child, input_set)
+  
+  partner_node = insert_nodes[0]
+
+  if op_partner_class is Upsample:
+    # fix spatial resolution of downstream children if Upsample inserted above binary op 
+    if find_type_between(partner_node, op_node, Binop):
+      inserted_upsample = partner_node
+      upstream_from_upsample_ids = upstream_reachable_node_ids(inserted_upsample)
+      self.fix_res(tree, inserted_upsample, input_set, partner_node.child, partner_node, upstream_from_upsample_ids) 
+   
+  # assign pointers to partner nodes
+  add_partner(op_node, partner_node)
+  add_partner(partner_node, op_node)
+
+  return insert_nodes, tree
+
+
 def get_out_c_from_parent(child, parent):
   if parent.num_children == 3:
     children = [parent.child1, parent.child2, parent.child3]
@@ -1471,14 +1539,6 @@ def insert(self, tree, insert_ops, insert_parent, insert_child, input_set, partn
     new_nodes = [new_node] + new_nodes
     cur_child = new_node
 
-    cur_child.parent = insert_parent  
-
-  if type(insert_parent) is tuple: 
-    for p in insert_parent:
-      self.link_insertion_parent_to_new_child(p, insert_child, cur_child)
-  else:
-    self.link_insertion_parent_to_new_child(insert_parent, insert_child, cur_child)
-
   # make sure output channels of inserted nodes agree with parent
   cur_child.compute_input_output_channels()
 
@@ -1513,6 +1573,79 @@ def insert(self, tree, insert_ops, insert_parent, insert_child, input_set, partn
 """
 Tries to mutate tree by inserting random op(s) at a random location
 If op is a binary op, picks a subtree to add as the other child
+"""
+# @extclass(Mutator)
+# def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=None, partner_ast=None):
+#   preorder_nodes = tree.preorder()
+
+#   while True:
+#     # pick an op to insert
+#     if not insert_op:
+#       if self.args.demosaicnet_search:
+#         insert_op = random.sample(demosaicnet_ops, 1)[0]
+#       else:
+#         insert_op = random.sample(all_insert_ops, 1)[0]
+#       if insert_op is Add or insert_op is Sub or insert_op is Stack or insert_op is Mul:
+#         self.binop_tries += 1
+
+#     location_selection_failures = 0 
+
+#     while location_selection_failures < self.args.insert_location_tries:
+#       if not insert_above_node_id:
+#         insert_above_node_id = random.randint(1, len(preorder_nodes)-1)
+
+#       insert_child = preorder_nodes[insert_above_node_id]
+#       insert_parent = insert_child.parent
+
+#       if type(insert_parent) is tuple:
+#         parent_types = [type(p) for p in insert_parent]
+#         if not LogSub in parent_types and not AddExp in parent_types:
+#           insert_parent = random.sample(insert_parent, 1)[0]
+
+#       try:
+#         insert_ops = accept_insertion_loc(insert_child, insert_parent, insert_op)
+                
+#       except AssertionError:
+#         insert_above_node_id = None
+#         location_selection_failures += 1
+
+#         if location_selection_failures >= self.args.insert_location_tries:
+#           if insert_op is Add or insert_op is Sub or insert_op is Stack or insert_op is Mul:
+#             self.binop_loc_selection_failures += 1
+#           insert_op = None 
+
+#         continue
+     
+#       new_ops = [format_for_insert(o) for o in insert_ops]
+     
+#       self.current_mutation_info.insert_ops = ";".join([new_op[0].__name__ for new_op in new_ops])
+#       self.current_mutation_info.node_id = insert_above_node_id
+
+#       try:
+#         new_nodes, tree = self.insert(tree, new_ops, insert_parent, insert_child, input_set, partner_ast=partner_ast)
+#       except AssertionError:
+#         if insert_op is Add or insert_op is Sub or insert_op is Stack or insert_op is Mul:
+#           self.binop_insertion_failures += 1
+#         assert False, "insertion mutation failed"
+      
+#       """
+#       if we inserted a sandwich op, we must insert its partner node as well
+#       if we inserted Mul, and neither child is Softmax or Relu, add Softmax or Relu as a child
+#       """
+#       for (OpClass,_,_), new_node in zip(new_ops, new_nodes):
+#         if OpClass is Mul:
+#           _, tree = self.insert_activation_under_mul(tree, input_set, new_node)
+#         if OpClass in sandwich_ops:
+#           _, tree = self.insert_partner_op(tree, input_set, OpClass, new_node)
+
+#       if insert_op is Add or insert_op is Sub or insert_op is Stack or insert_op is Mul:
+#         self.binop_success += 1
+
+#       return tree
+
+
+"""
+NEW TRYING TO SIMPLIFY INSERTING DOWNSAMPLES 
 """
 @extclass(Mutator)
 def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=None, partner_ast=None):
@@ -1569,20 +1702,19 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
         assert False, "insertion mutation failed"
       
       """
-      if we inserted a sandwich op, we must insert its partner node as well
+      if we inserted a downsample we must insert upsample as well
       if we inserted Mul, and neither child is Softmax or Relu, add Softmax or Relu as a child
       """
       for (OpClass,_,_), new_node in zip(new_ops, new_nodes):
         if OpClass is Mul:
           _, tree = self.insert_activation_under_mul(tree, input_set, new_node)
-        if OpClass in sandwich_ops:
-          _, tree = self.insert_partner_op(tree, input_set, OpClass, new_node)
+        if OpClass in downsample_ops:
+          _, tree = self.insert_upsample(tree, input_set, OpClass, new_node)
 
       if insert_op is Add or insert_op is Sub or insert_op is Stack or insert_op is Mul:
         self.binop_success += 1
 
       return tree
-
 
 def has_downsample(tree):
   if isinstance(tree, Downsample):
