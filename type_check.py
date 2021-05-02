@@ -125,16 +125,15 @@ def shrink_channels(node, max_c, out_c=None):
 """
 returns none if resolution is invalid
 """
-
 def compute_resolution(tree):
   if isinstance(tree, Input):
     return tree.resolution
   elif isinstance(tree, LearnedDownsample) or isinstance(tree, Pack):
     child_resolution = compute_resolution(tree.child)
-    return child_resolution / tree.factor 
+    tree.resolution = child_resolution / tree.factor 
   elif isinstance(tree, Upsample) or isinstance(tree, LearnedUpsample) or isinstance(tree, Unpack):
     child_resolution = compute_resolution(tree.child)
-    return child_resolution * tree.factor
+    tree.resolution = child_resolution * tree.factor
   else:
     if tree.num_children == 3:
       res1 = compute_resolution(tree.child1)
@@ -142,16 +141,19 @@ def compute_resolution(tree):
       res3 = compute_resolution(tree.child3)
       if res1 != res2 or res1 != res3:
         return None
-      return res1
+      tree.resolution = res1
     elif tree.num_children == 2:
       lres = compute_resolution(tree.lchild)
       rres = compute_resolution(tree.rchild)
       if lres != rres:
         return None
-      return lres
+      tree.resolution = lres
     elif tree.num_children == 1:
-      return compute_resolution(tree.child)
-      
+      child_res = compute_resolution(tree.child)
+      tree.resolution = child_res
+  
+  return tree.resolution
+
 
 """
 returns the spatial resolution of a subtree
