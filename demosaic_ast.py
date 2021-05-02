@@ -107,6 +107,16 @@ class Special(ABC):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
 
+"""----------------------------------------------------------------------"""
+
+class Upsample(Unop, Special, Node):
+  def __init__(self):
+    assert False, "Do not try to instantiate abstract expressions"
+
+class Downsample(Unop, Special, Node):
+  def __init__(self):
+    assert False, "Do not try to instantiate abstract expressions"
+
 
 """----------------------------------------------------------------------"""
 
@@ -131,7 +141,7 @@ class Input(Const, Special, Node):
     self.out_c = out_c 
 
 class Add(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "Add"
     Node.__init__(self, name, 2)
@@ -139,9 +149,10 @@ class Add(BinopIII, Special, Node):
     self.rchild = rchild
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Sub(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "Sub"
     Node.__init__(self, name, 2)
@@ -149,9 +160,10 @@ class Sub(BinopIII, Special, Node):
     self.rchild = rchild
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Mul(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "Mul"
     Node.__init__(self, name, 2)
@@ -159,9 +171,10 @@ class Mul(BinopIII, Special, Node):
     self.rchild = rchild
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class LogSub(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "LogSub"
     Node.__init__(self, name, 2)
@@ -169,9 +182,10 @@ class LogSub(BinopIII, Special, Node):
     self.rchild = rchild
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class AddExp(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "AddExp"
     Node.__init__(self, name, 2)
@@ -179,9 +193,10 @@ class AddExp(BinopIII, Special, Node):
     self.rchild = rchild
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Stack(BinopIJK, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "Stack"
     Node.__init__(self, name, 2)
@@ -189,13 +204,14 @@ class Stack(BinopIJK, Special, Node):
     self.rchild = rchild
     self.out_c = None
     self.in_c = None 
+    self.resolution = resolution
     
 
 # Takes FullGreenQuad predction, RedBlueQuad from Bayer, and 
 # 6 channel chroma quad prection: R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
 # spits out full RGB Image at full resolution
 class RGBExtractor(TernaryHcIcJcKc, Special, Node):
-  def __init__(self, child1, child2, child3, name=None):
+  def __init__(self, child1, child2, child3, resolution=None, name=None):
     if name is None:
       name = "RGBExtractor"
     Node.__init__(self, name, 3)
@@ -204,6 +220,7 @@ class RGBExtractor(TernaryHcIcJcKc, Special, Node):
     self.child3 = child3
     self.in_c = (4, 2, 6) # fullgreen, redbluebayer, missing chroma
     self.out_c = 3
+    self.resolution = resolution
 
   def Hc(self):
     return 4 # fullgreen
@@ -216,7 +233,7 @@ class RGBExtractor(TernaryHcIcJcKc, Special, Node):
 
 
 class XRGBExtractor(TernaryHcIcJcKc, Special, Node):
-  def __init__(self, child1, child2, child3, name=None):
+  def __init__(self, child1, child2, child3, resolution=None, name=None):
     if name is None:
       name = "XRGBExtractor"
     Node.__init__(self, name, 3)
@@ -225,6 +242,7 @@ class XRGBExtractor(TernaryHcIcJcKc, Special, Node):
     self.child3 = child3
     self.in_c = (36, 36, 56) # fullgreen, redbluebayer, missing chroma
     self.out_c = 3
+    self.resolution = resolution
 
   def Hc(self):
     return 36 # fullgreen
@@ -236,7 +254,7 @@ class XRGBExtractor(TernaryHcIcJcKc, Special, Node):
     return 3 # full rgb image
 
 class XFlatRGBExtractor(TernaryHcIcJcKc, Special, Node):
-  def __init__(self, child1, child2, child3, name=None):
+  def __init__(self, child1, child2, child3, resolution=None, name=None):
     if name is None:
       name = "XFlatRGBExtractor"
     Node.__init__(self, name, 3)
@@ -245,6 +263,7 @@ class XFlatRGBExtractor(TernaryHcIcJcKc, Special, Node):
     self.child3 = child3
     self.in_c = (1, 3, 2) # flat green, xtrans 3 channel, chroma pred 
     self.out_c = 3
+    self.resolution = resolution
 
   def Hc(self):
     return 1 # fullgreen
@@ -257,7 +276,7 @@ class XFlatRGBExtractor(TernaryHcIcJcKc, Special, Node):
 
 
 class RGBSuperResExtractor(BinopIcJcKc, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "RGBSuperResExtractor"
     Node.__init__(self, name, 2)
@@ -265,6 +284,7 @@ class RGBSuperResExtractor(BinopIcJcKc, Special, Node):
     self.rchild = rchild
     self.in_c = (1, 2) # green, red and blue
     self.out_c = 3
+    self.resolution = resolution
 
   def Ic(self):
     return 1 # superres green
@@ -279,7 +299,7 @@ class RGBSuperResExtractor(BinopIcJcKc, Special, Node):
 # Takes bayer quad, 8 channel predction
 # spits out full RGB Image at full resolution
 class RGB8ChanExtractor(BinopIcJcKc, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "RGB8ChanExtractor"
     Node.__init__(self, name, 2)
@@ -287,6 +307,7 @@ class RGB8ChanExtractor(BinopIcJcKc, Special, Node):
     self.rchild = rchild
     self.in_c = (4, 8) # bayer quad, 8 channel prediction
     self.out_c = 3
+    self.resolution = resolution
 
   def Ic(self):
     return 4 
@@ -301,7 +322,7 @@ Takes BayerQuad and 2 channel green prediction
 Spits out full Green image at full resolution  
 """
 class GreenExtractor(BinopIcJcKc, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "GreenExtractor"
     Node.__init__(self, name, 2)
@@ -309,6 +330,8 @@ class GreenExtractor(BinopIcJcKc, Special, Node):
     self.rchild = rchild
     self.in_c = (4, 2) # bayer, missing green
     self.out_c = 1 # output G channel
+    self.resolution = resolution
+  
   def Ic(self):
     return 4
   def Jc(self):
@@ -322,7 +345,7 @@ Xtrans extractor for green channel
 16 missing green values per 36 mosaic values
 """
 class XGreenExtractor(BinopIcJcKc, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "XGreenExtractor"
     Node.__init__(self, name, 2)
@@ -330,6 +353,8 @@ class XGreenExtractor(BinopIcJcKc, Special, Node):
     self.rchild = rchild
     self.in_c = (36, 16) # bayer, missing green
     self.out_c = 1
+    self.resolution = resolution
+ 
   def Ic(self):
     return 36
   def Jc(self):
@@ -339,7 +364,7 @@ class XGreenExtractor(BinopIcJcKc, Special, Node):
 
 
 class XFlatGreenExtractor(BinopIcJcKc, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "XFlatGreenExtractor"
     Node.__init__(self, name, 2)
@@ -347,6 +372,8 @@ class XFlatGreenExtractor(BinopIcJcKc, Special, Node):
     self.rchild = rchild
     self.in_c = (3, 1) # bayer, missing green
     self.out_c = 1
+    self.resolution = resolution
+  
   def Ic(self):
     return 3
   def Jc(self):
@@ -356,39 +383,45 @@ class XFlatGreenExtractor(BinopIcJcKc, Special, Node):
 
 
 class Flat2Quad(UnopIcJc, Special, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "Flat2Quad"
     Node.__init__(self, name, 1)
     self.child = child
     self.in_c = 1
     self.out_c = 4 
+    self.resolution = resolution
+  
   def Ic(self):
     return 1
   def Jc(self):
     return 4
 
 class GreenRBExtractor(UnopIcJc, Special, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "GreenRBExtractorOp"
     Node.__init__(self, name, 1)
     self.child = child
     self.in_c = 1
     self.out_c = 2
+    self.resolution = resolution
+  
   def Ic(self):
     return 1
   def Jc(self):
     return 2
 
 class XGreenRBExtractor(UnopIcJc, Special, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "XGreenRBExtractorOp"
     Node.__init__(self, name, 1)
     self.child = child
     self.in_c = 1
     self.out_c = 16
+    self.resolution = resolution
+  
   def Ic(self):
     return 1
   def Jc(self):
@@ -396,43 +429,47 @@ class XGreenRBExtractor(UnopIcJc, Special, Node):
  
  
 class Softmax(UnopII, NonLinear, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "Softmax"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Relu(UnopII, NonLinear, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "Relu"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Log(UnopII, NonLinear, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "Log"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Exp(UnopII, NonLinear, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "Exp"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
-class LearnedDownsample(UnopIJ, Special, Node):
-  def __init__(self, child, out_c:int, factor=None, groups=1, name=None):
+class LearnedDownsample(UnopIJ, Downsample):
+  def __init__(self, child, out_c:int, factor=None, groups=1, resolution=None, name=None):
     if name is None:
       name = "LearnedDownsample"
     Node.__init__(self, name, 1)
@@ -441,10 +478,11 @@ class LearnedDownsample(UnopIJ, Special, Node):
     self.out_c = out_c
     self.in_c = None
     self.groups = groups
+    self.resolution = resolution
 
 
 class PeriodicConv(UnopIJFixed, Special, Node):
-  def __init__(self, child, out_c:int, period=None, kwidth=3, name=None):
+  def __init__(self, child, out_c:int, period=None, kwidth=3, resolution=None, name=None):
     if name is None:
       name = "PeriodicConv"
     Node.__init__(self, name, 1)
@@ -453,10 +491,11 @@ class PeriodicConv(UnopIJFixed, Special, Node):
     self.kwidth = kwidth
     self.out_c = out_c
     self.in_c = None  
+    self.resolution = resolution
 
 
-class Pack(UnopIJFixed, Special, Node):
-  def __init__(self, child, factor=None, name=None):
+class Pack(UnopIJFixed, Downsample):
+  def __init__(self, child, factor=None, resolution=None, name=None):
     if name is None:
       name = "Pack"
     Node.__init__(self, name, 1)
@@ -464,9 +503,10 @@ class Pack(UnopIJFixed, Special, Node):
     self.factor = factor
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class LearnedPack(UnopIJFixed, Special, Node):
-  def __init__(self, child, factor=None, name=None):
+  def __init__(self, child, factor=None, resolution=None, name=None):
     if name is None:
       name = "LearnedPack"
     Node.__init__(self, name, 1)
@@ -474,9 +514,10 @@ class LearnedPack(UnopIJFixed, Special, Node):
     self.factor = factor
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
-class Unpack(UnopIJFixed, Special, Node):
-  def __init__(self, child, factor=None, name=None):
+class Unpack(UnopIJFixed, Upsample):
+  def __init__(self, child, factor=None, resolution=None, name=None):
     if name is None:
       name = "Unpack"
     Node.__init__(self, name, 1)
@@ -484,19 +525,21 @@ class Unpack(UnopIJFixed, Special, Node):
     self.factor = factor
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 """
 Fixed Upsample op, no learned parameters
 """
-class Upsample(UnopII, Special, Node):
-  def __init__(self, child, factor=None, name=None):
+class BilinearUpsample(UnopII, Upsample):
+  def __init__(self, child, factor=None, resolution=None, name=None):
     if name is None:
-      name = "Upsample"
+      name = "BilinearUpsample"
     Node.__init__(self, name, 1)
     self.child = child
     self.factor = factor
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 """
 Scale factor cannot be mutated, thus the output channels is 
@@ -504,8 +547,8 @@ a fixed function of the input channels, specifically,
 out_c = in_c / factor^2
 Grouping can be changed since this is implemented with a transposed conv
 """
-class LearnedUpsample(UnopIJ, Special, Node):
-  def __init__(self, child, out_c: int, factor, groups=1, name=None):
+class LearnedUpsample(UnopIJ, Upsample):
+  def __init__(self, child, out_c: int, factor, groups=1, resolution=None, name=None):
     if name is None:
       name = "LearnedUpsample"
     Node.__init__(self, name, 1)
@@ -514,6 +557,7 @@ class LearnedUpsample(UnopIJ, Special, Node):
     self.groups = groups 
     self.out_c = out_c
     self.in_c = None
+    self.resolution = resolution
 
 class FastUpsample(UnopII, Special, Node):
   def __init__(self, child, name=None):
@@ -523,9 +567,10 @@ class FastUpsample(UnopII, Special, Node):
     self.child = child
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Conv1x1(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int, groups=1, name=None):
+  def __init__(self, child, out_c: int, groups=1, resolution=None, name=None):
     if name is None:
       name = "Conv1x1"
     Node.__init__(self, name, 1)
@@ -533,9 +578,10 @@ class Conv1x1(UnopIJ, Linear, Node):
     self.out_c = out_c
     self.in_c = None
     self.groups = groups
+    self.resolution = resolution
 
 class Conv1D(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int, groups=1, name=None, kwidth=3):
+  def __init__(self, child, out_c: int, groups=1, kwidth=3, resolution=None, name=None):
     if name is None:
       name = "Conv1D"
     Node.__init__(self, name, 1)
@@ -544,9 +590,10 @@ class Conv1D(UnopIJ, Linear, Node):
     self.kwidth = kwidth
     self.in_c = None
     self.groups = groups
+    self.resolution = resolution
 
 class Conv2D(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int, groups=1, name=None, kwidth=3):
+  def __init__(self, child, out_c: int, groups=1, kwidth=3, resolution=None, name=None):
     if name is None:
       name = "Conv2D"
     Node.__init__(self, name, 1)
@@ -555,24 +602,27 @@ class Conv2D(UnopIJ, Linear, Node):
     self.kwidth = kwidth
     self.in_c = None
     self.groups = groups
+    self.resolution = resolution
 
 class InterleavedSum(UnopIIdiv, Special, Node):
-  def __init__(self, child, out_c: int, name=None):
+  def __init__(self, child, out_c: int, resolution=None, name=None):
     if name is None:
       name = "InterleavedSum"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = out_c
     self.in_c = None
+    self.resolution = resolution
 
 class GroupedSum(UnopIIdiv, Special, Node):
-  def __init__(self, child, out_c: int, name=None):
+  def __init__(self, child, out_c: int, resolution=None, name=None):
     if name is None:
       name = "GroupedSum"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = out_c
     self.in_c = None
+    self.resolution = resolution
 
 
 @extclass(Input)
@@ -1336,11 +1386,11 @@ nonlinear_insert_ops = OrderedSet((Relu,)) # only allow Softmax to be used with 
 special_insert_ops = OrderedSet((Mul, Add, Sub, Stack, LearnedDownsample, Pack, InterleavedSum, GroupedSum))
 
 downsample_ops = OrderedSet((LearnedDownsample, Pack))
-upsample_ops = OrderedSet((LearnedUpsample, Upsample, Unpack))
+upsample_ops = OrderedSet((LearnedUpsample, BilinearUpsample, Unpack))
 
 all_insert_ops = linear_insert_ops | nonlinear_insert_ops | special_insert_ops
 
-move_ops = OrderedSet((LearnedUpsample, Upsample, Pack, Unpack, LearnedDownsample))
+move_ops = OrderedSet((LearnedUpsample, BilinearUpsample, Pack, Unpack, LearnedDownsample))
 
 linear_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
 special_linear_ops = OrderedSet((LearnedUpsample, LearnedDownsample))
