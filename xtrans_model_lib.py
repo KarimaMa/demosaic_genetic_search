@@ -66,7 +66,7 @@ def XGreenDemosaicknet2(depth, width):
 
 
 def XGreenDemosaicknet3(depth, width):
-  mosaic = Input(36, "Mosaic3x3")
+  mosaic = Input(36, resolution=1/6, name="Mosaic3x3")
   # upsample to bayer quad level resolution
   unpacked = Unpack(mosaic, factor=2)
   higher_res = LearnedUpsample(mosaic, width, factor=2, groups=1)
@@ -79,14 +79,14 @@ def XGreenDemosaicknet3(depth, width):
     input_tensor = relu
 
   full_res = Unpack(input_tensor, factor=3)
-  flat_mosaic = Input(1, "FlatMosaic")
+  flat_mosaic = Input(1, resolution=1, name="FlatMosaic")
 
   stacked = Stack(full_res, flat_mosaic) 
   residual_conv = Conv2D(stacked, width//9, kwidth=3)
   residual_relu = Relu(residual_conv)
   missing_green = Conv1x1(residual_relu, 1)
 
-  mosaic3chan = Input(3, "Mosaic")
+  mosaic3chan = Input(3, resolution=1, name="Mosaic")
   green = XFlatGreenExtractor(mosaic3chan, missing_green)
   green.assign_parents()
   green.compute_input_output_channels()
