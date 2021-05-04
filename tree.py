@@ -117,6 +117,7 @@ class Node:
       printstr += f" g{self.groups}"
     if hasattr(self, "green_model_id"):
       printstr += f" green_model{self.green_model_id}"
+    printstr += f" res-{self.resolution:.2f}"
     printstr += f"  [ID: {nodeid}] {id(self)}"
 
     nodeid += 1
