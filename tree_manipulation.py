@@ -79,12 +79,12 @@ def get_children(node):
 returns parents of node as a list
 """
 def get_parents(node):
-	if not type(node.parent) is tuple:
-		parents = [node.parent]
-	elif not node.partent is None:
+	if node.parent is None:
+		parents = []
+	elif type(node.parent) is tuple:
 		parents = list(node.parent)
 	else:
-		parents = []
+		parents = [node.parent]
 	return parents
 
 
