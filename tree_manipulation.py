@@ -41,7 +41,7 @@ def replace_parent(N, P, X):
 				new_parents += [X]
 			else:
 				new_parents += [p]
-		N.parent = new_parents
+		N.parent = tuple(new_parents)
 	else:
 		N.parent = X
 
