@@ -115,29 +115,35 @@ def build_updown_op(OpType, factor, resolution, child):
 	return OpType(child, **kwargs)
 
 
-def insert_downsample(dest, source, factor, DownsampleTypes=None):
-	if DownsampleTypes is None:
-		possible_dowsample_types = downsample_ops
-		pixel_width = get_pixel_width(source, FULLRESWIDTH)
-		if pixel_width % factor != 0:
-			possible_dowsample_types = possible_dowsample_types - OrderedSet((Pack,))
+def insert_downsample(dest, source, factor, DownsampleType=None):
+	possible_dowsample_types = downsample_ops
+	pixel_width = get_pixel_width(source, FULLRESWIDTH)
+	if pixel_width % factor != 0:
+		possible_dowsample_types = possible_dowsample_types - OrderedSet((Pack,))
+
+	if DownsampleType:
+		assert DownsampleType in possible_dowsample_types, f"cannot {DownsampleType} {pixel_width}x{pixel_width} output by factor {factor}"
+
+	if DownsampleType is None:
 		DownsampleType = random.choice(possible_dowsample_types)
-	else:
-		DownsampleType = random.choice(DownsampleTypes)
+
 	new_resolution = source.resolution / factor
 	new_downsample = build_updown_op(DownsampleType, factor, new_resolution, source)
 	insertion_edge_updates(dest, source, new_downsample)
 
 
-def insert_upsample(dest, source, factor, UpsampleTypes=None):
-	if UpsampleTypes is None:
-		possible_upsample_types = upsample_ops
-		channel_count = source.out_c
-		if channel_count % (factor**2)!= 0:
-			possible_upsample_types = possible_upsample_types - OrderedSet((Unpack,))
+def insert_upsample(dest, source, factor, UpsampleType=None):
+	possible_upsample_types = upsample_ops
+	channel_count = source.out_c
+	if channel_count % (factor**2)!= 0:
+		possible_upsample_types = possible_upsample_types - OrderedSet((Unpack,))
+
+	if UpsampleType:
+		assert UpsampleType in possible_upsample_types, f"cannot {UpsampleType} output with {channel_count} channels by factor {factor}"
+
+	if UpsampleType is None:
 		UpsampleType = random.choice(possible_upsample_types)
-	else:
-		UpsampleType = random.choice(UpsampleTypes)
+
 	new_resolution = source.resolution * factor
 	new_upsample = build_updown_op(UpsampleType, factor, new_resolution, source)
 	insertion_edge_updates(dest, source, new_upsample)
@@ -249,18 +255,18 @@ def change_subgraph_resolution(graph, factor, MAX_TRIES):
 Given a source and destination node, either adds or removes up or downsamples 
 between them make sure the graph obeys their assigned resolutions
 """
-def fix_resolutions(dest, source, upsample_types=None, downsample_types=None):
+def fix_resolutions(dest, source):
 	if dest.resolution != source.resolution:
 		if dest.resolution < source.resolution:
 			factor = source.resolution / dest.resolution
 			ok = check_for_downsample(dest, source, factor)
 			if not ok: # insert downsample between source and dest
-				insert_downsample(dest, source, factor, downsample_types)
+				insert_downsample(dest, source, factor)
 		else:
 			factor = dest.resolution / source.resolution
 			ok = check_for_upsample(dest, source, factor)
 			if not ok:
-				insert_upsample(dest, source, factor, upsample_types)
+				insert_upsample(dest, source, factor)
 
 	if dest.resolution == source.resolution:
 		# check there is no upsample or downsample between them 
@@ -642,15 +648,12 @@ def delete_resolution_subgraph(G):
 			if source:			
 				dest = graph_node
 				if dest.resolution == new_resolution:
-					print(f'removing resolution node between {id(dest)} and {id(source)}')
 					remove_updown_sample_between(dest, source)
 				elif dest.resolution > new_resolution:
-					print(f'replacing resolution node between {id(dest)} and {id(source)} with upsample to meet new resolution {new_resolution}')
 					remove_updown_sample_between(dest, source)
 					factor = dest.resolution / new_resolution 
 					insert_upsample(dest, source, factor)
 				else: # dest.resolution < new_resolution
-					print(f'replacing resolution node between {id(dest)} and {id(source)} with downsample to meet new resolution {new_resolution}')
 					remove_updown_sample_between(dest, source)
 					factor = new_resolution / dest.resolution
 					insert_downsample(dest, source, factor)
@@ -663,15 +666,12 @@ def delete_resolution_subgraph(G):
 			for dest in dests:
 				source = graph_node
 				if source.resolution == new_resolution:
-					print(f'removing resolution node between {id(dest)} and {id(source)}')
 					remove_updown_sample_between(dest, source)
 				elif source.resolution > new_resolution:
-					print(f'replacing resolution node between {id(dest)} and {id(source)} with downsample to meet new resolution {new_resolution}')
 					remove_updown_sample_between(dest, source)
 					factor = source.resolution / new_resolution 
 					insert_downsample(dest, source, factor)
 				else: # source.resolution < new_resolution
-					print(f'replacing resolution node between {id(dest)} and {id(source)} with upsample to meet new resolution {new_resolution}')
 					remove_updown_sample_between(dest, source)
 					factor = new_resolution / source.resolution
 					insert_upsample(dest, source, factor)
@@ -679,6 +679,33 @@ def delete_resolution_subgraph(G):
 	G.compute_input_output_channels()
 	compute_resolution(G)
 	
+
+"""
+Given a graph, changes one of the up or downsamples to a different type
+"""
+def swap_resolution_op(graph):
+	nodes = graph.preorder()
+	resolution_nodes = [n for n in nodes if isinstance(n, Upsample) or isinstance(n, Downsample)]
+	chosen_node = random.choice(resolution_nodes)
+
+	factor = chosen_node.factor
+
+	for p in get_parents(chosen_node):
+		dest = p
+		source = chosen_node.child
+		remove_updown_sample_between(dest, source)
+		if isinstance(chosen_node, Upsample):
+			upsample_types = upsample_ops
+			upsample_types = upsample_types - OrderedSet((type(chosen_node),)) # don't replace with the same op
+			insert_upsample(dest, source, factor, random.choice(upsample_types))
+		else:
+			downsample_types = downsample_ops
+			downsample_types = downsample_types - OrderedSet((type(chosen_node),))
+			insert_downsample(dest, source, factor, random.choice(downsample_types))
+
+	graph.compute_input_output_channels()
+	compute_resolution(graph)
+
 
 """
 given a graph G, if there are any adjacent U->U or D->D, merges them into one
