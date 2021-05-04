@@ -548,7 +548,7 @@ out_c = in_c / factor^2
 Grouping can be changed since this is implemented with a transposed conv
 """
 class LearnedUpsample(UnopIJ, Upsample):
-  def __init__(self, child, out_c: int, factor, groups=1, resolution=None, name=None):
+  def __init__(self, child, out_c: int, factor=None, groups=1, resolution=None, name=None):
     if name is None:
       name = "LearnedUpsample"
     Node.__init__(self, name, 1)
@@ -1383,16 +1383,17 @@ def has_parameters(self):
 # ops to choose from for insertion
 linear_insert_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
 nonlinear_insert_ops = OrderedSet((Relu,)) # only allow Softmax to be used with Mul insertion 
-special_insert_ops = OrderedSet((Mul, Add, Sub, Stack, LearnedDownsample, Pack, InterleavedSum, GroupedSum))
+special_insert_ops = OrderedSet((Mul, Add, Sub, Stack, InterleavedSum, GroupedSum))
 
 downsample_ops = OrderedSet((LearnedDownsample, Pack))
 upsample_ops = OrderedSet((LearnedUpsample, BilinearUpsample, Unpack))
 
 all_insert_ops = linear_insert_ops | nonlinear_insert_ops | special_insert_ops
 
-move_ops = OrderedSet((LearnedUpsample, BilinearUpsample, Pack, Unpack, LearnedDownsample))
-
 linear_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
+
+ops_with_changeable_channels = OrderedSet((LearnedDownsample, LearnedUpsample)) | linear_ops
+
 special_linear_ops = OrderedSet((LearnedUpsample, LearnedDownsample))
 nonlinear_ops = OrderedSet((Softmax, Relu)) 
 
