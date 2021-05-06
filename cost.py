@@ -212,7 +212,7 @@ class ModelEvaluator():
 		self.args = training_args
 		self.log_format = '%(asctime)s %(levelname)s %(message)s'
 
-	def compute_cost(self, root, xtrans=False):
+	def compute_cost(self, root):
 		return self.compute_cost_helper(root, set())
 		
 	def compute_cost_helper(self, root, seen):
