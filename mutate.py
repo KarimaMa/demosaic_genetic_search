@@ -1163,7 +1163,7 @@ def induces_loop(insert_child, subtree):
     return induces_loop(parent, subtree)
   return False
 
-
+  
 """
 checks whether subtree obeys the restricted input set and can be modified 
 to agree with given target output channels.
@@ -1205,6 +1205,12 @@ def allow_subtree(self, root, input_set, insert_child, binop_class, target_out_c
   if target_out_c:
     in_c, out_c = root.compute_input_output_channels()
     if out_c != target_out_c: 
+      # if the insert child is downstream of the chosen subtree, we cannot change the subtree's 
+      # channels without also affecting the channels of the insert child, resulting in livelock -> must copy subtree
+      if insert_child.is_downstream(root):
+        root = copy_subtree(root)
+        root.parent = None
+
       fixed = fix_channel_count_downwards(root, None, target_out_c)
       # we must also fix upwards now because subtrees are by default not copied,
       # other parent of subtree is affected by channel change

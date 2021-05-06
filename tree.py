@@ -4,6 +4,7 @@ Functions for managing AST trees
 from abc import ABC, abstractmethod
 import hashlib
 import numpy as np
+from tree_manipulation import get_children, get_parents
 
 
 def make_tuple(x):
@@ -355,6 +356,15 @@ class Node:
     for i,n in enumerate(self.preorder()):
       n.in_c = in_out_channels[i][0]
       n.out_c = in_out_channels[i][1]
+
+  """
+  Returns whether this node is downstream of the other node
+  """
+  def is_downstream(self, other):
+    if id(self) == id(other):
+      return True
+    children = get_children(self)
+    return any([c.is_downstream(other) for c in children])
 
   def __eq__(self, other):
     return self.is_same_as_wrapper(other)
