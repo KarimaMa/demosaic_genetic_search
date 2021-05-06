@@ -1,0 +1,2 @@
+DATADUMP/SUPERRES-DNET-D3W16-SEED/models/seed/model_ast
+DATADUMP/SUPERRES-WEIGHTED-D3W16-SEED/models/seed/model_ast
