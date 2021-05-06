@@ -293,7 +293,7 @@ class ModelEvaluator():
 			cost += (root.factor**2) * self.compute_cost_helper(root.child, seen) 
 		elif isinstance(root, Pack):
 			cost += (root.factor**2) * self.compute_cost_helper(root.child, seen) 
-		elif isinstance(root, Upsample):
+		elif isinstance(root, BilinearUpsample):
 			cost += root.in_c * BILINEAR_COST
 			cost += self.compute_cost_helper(root.child, seen) / (SCALE_FACTOR**2)
 		elif isinstance(root, LearnedUpsample):
@@ -309,10 +309,6 @@ class ModelEvaluator():
 			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, Conv2D):
 			cost += root.groups * ((root.in_c // root.groups) * (root.out_c // root.groups) * root.kwidth**2 * MUL_COST)
-			print(f"cost of conv2D {root.groups * ((root.in_c // root.groups) * (root.out_c // root.groups) * root.kwidth**2 * MUL_COST)}")
-			cost += self.compute_cost_helper(root.child, seen)
-		elif isinstance(root, PeriodicConv):
-			cost += root.in_c * root.out_c * root.kwidth**2 * MUL_COST
 			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, InterleavedSum) or isinstance(root, GroupedSum):
 			cost += ((root.in_c / root.out_c) - 1) * root.out_c * ADD_COST

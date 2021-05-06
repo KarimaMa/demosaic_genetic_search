@@ -135,7 +135,7 @@ def insert_downsample(dest, source, factor, DownsampleType=None):
 def insert_upsample(dest, source, factor, UpsampleType=None):
 	possible_upsample_types = upsample_ops
 	channel_count = source.out_c
-	if channel_count % (factor**2)!= 0:
+	if channel_count % (factor**2) != 0:
 		possible_upsample_types = possible_upsample_types - OrderedSet((Unpack,))
 
 	if UpsampleType:
@@ -199,6 +199,7 @@ def change_subgraph_resolution(graph, factor, MAX_TRIES):
 		# don't insert downsample below any nodes that are already adjacent to a resolution op
 		# we want to avoid having resolution ops next to each other
 		if touches_resolution_op(cg2g[node1]):
+			tries += 1
 			continue
 		
 		connected_component = get_component(node1, cg2g, g2cg)
@@ -207,6 +208,7 @@ def change_subgraph_resolution(graph, factor, MAX_TRIES):
 		node2 = random.choice(connected_component.nodes)
 		
 		if touches_resolution_op(cg2g[node2]):
+			tries += 1
 			continue
 
 		if len(node1.parents) == 0 or len(node2.parents) == 0:
@@ -224,12 +226,15 @@ def change_subgraph_resolution(graph, factor, MAX_TRIES):
 
 		break
 
+	if tries == MAX_TRIES:
+		assert False, f"failed to find subgraph to change in\n{graph.dump()}"
+
 	print(f"node A: {A.dump()}")
 	print(f"node B: {B.dump()}")
 	S = find_subgraph(A, B)
-	print(f"nodes in S:")
-	for s in S:
-		print(f"{s.dump()}")
+	# print(f"nodes in S:")
+	# for s in S:
+	# 	print(f"{s.dump()}")
 
 	current_resolution = A.resolution
 	new_resolution = A.resolution  / factor
@@ -585,6 +590,7 @@ def into_component_dests(gnode, g2cg, component_nodes):
 	if isinstance(gnode, Upsample) or isinstance(gnode, Downsample):
 		dests = []
 		for p in get_parents(gnode):
+			print(f'the grand parent of the boundary node\n{p.dump()}')
 			if g2cg[id(p)] in component_nodes:
 				dests += [p]
 		if len(dests) > 0:
@@ -627,8 +633,6 @@ def delete_resolution_subgraph(G):
 	component = get_component(node_in_component, cg2g, g2cg)
 
 	# subgraph, subgraph_boundary_nodes = get_connected_component(node_in_component) 
-	print(f"size of subgraph: {len(component.nodes)}")
-
 	# find boundary nodes of the chosen subgraph and remove any adjacent upsamples or downsamples  
 	# subgraph_boundary_nodes = [n for n in boundary_nodes if n in subgraph]
 	print(f"removing subgraph with boundary nodes ")
@@ -686,6 +690,9 @@ Given a graph, changes one of the up or downsamples to a different type
 def swap_resolution_op(graph):
 	nodes = graph.preorder()
 	resolution_nodes = [n for n in nodes if isinstance(n, Upsample) or isinstance(n, Downsample)]
+	if len(resolution_nodes) == 0:
+		assert False, "Cannot shift resolution boundary in graph without resolution ops"
+
 	chosen_node = random.choice(resolution_nodes)
 
 	factor = chosen_node.factor

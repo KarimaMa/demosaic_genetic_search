@@ -1368,9 +1368,9 @@ class UnpackOp(nn.Module):
     self._operands[0].to_gpu(gpu_id)
 
 
-class UpsampleOp(nn.Module):
+class BilinearUpsampleOp(nn.Module):
   def __init__(self, operand, C_in, scale_factor, param_name):
-    super(UpsampleOp, self).__init__()
+    super(BilinearUpsampleOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.in_c = C_in
     self.scale_factor = scale_factor
@@ -1999,23 +1999,23 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = LearnedDownsampleOp(child_model, self.in_c, self.out_c, self.factor, self.groups, self.name)
+  model = LearnedDownsampleOp(child_model, self.in_c, self.out_c, int(self.factor), self.groups, self.name)
 
   shared_children[id(self)] = model 
   return model
 
-@extclass(PeriodicConv)
-def ast_to_model(self, shared_children=None):
-  if shared_children is None:
-    shared_children = {}
-  if id(self) in shared_children:
-    return shared_children[id(self)]
+# @extclass(PeriodicConv)
+# def ast_to_model(self, shared_children=None):
+#   if shared_children is None:
+#     shared_children = {}
+#   if id(self) in shared_children:
+#     return shared_children[id(self)]
 
-  child_model = self.child.ast_to_model(shared_children)
-  model = PeriodicConvV2Op(child_model, self.in_c, self.out_c, self.period, self.kwidth, self.name)
+#   child_model = self.child.ast_to_model(shared_children)
+#   model = PeriodicConvV2Op(child_model, self.in_c, self.out_c, self.period, self.kwidth, self.name)
 
-  shared_children[id(self)] = model 
-  return model
+#   shared_children[id(self)] = model 
+#   return model
 
 @extclass(Pack)
 def ast_to_model(self, shared_children=None):
@@ -2025,23 +2025,23 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = PackOp(child_model, self.factor)
+  model = PackOp(child_model, int(self.factor))
 
   shared_children[id(self)] = model 
   return model
 
-@extclass(LearnedPack)
-def ast_to_model(self, shared_children=None):
-  if shared_children is None:
-    shared_children = {}
-  if id(self) in shared_children:
-    return shared_children[id(self)]
+# @extclass(LearnedPack)
+# def ast_to_model(self, shared_children=None):
+#   if shared_children is None:
+#     shared_children = {}
+#   if id(self) in shared_children:
+#     return shared_children[id(self)]
 
-  child_model = self.child.ast_to_model(shared_children)
-  model = LearnedPackOp(child_model, self.in_c, self.out_c, self.factor, self.name)
+#   child_model = self.child.ast_to_model(shared_children)
+#   model = LearnedPackOp(child_model, self.in_c, self.out_c, self.factor, self.name)
 
-  shared_children[id(self)] = model 
-  return model
+#   shared_children[id(self)] = model 
+#   return model
 
 
 @extclass(Unpack)
@@ -2052,12 +2052,12 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = UnpackOp(child_model, self.in_c, self.factor)
+  model = UnpackOp(child_model, self.in_c, int(self.factor))
 
   shared_children[id(self)] = model 
   return model
 
-@extclass(Upsample)
+@extclass(BilinearUpsample)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
@@ -2065,7 +2065,7 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = UpsampleOp(child_model, self.in_c, self.factor, self.name)
+  model = BilinearUpsampleOp(child_model, self.in_c, int(self.factor), self.name)
 
   shared_children[id(self)] = model 
   return model
@@ -2078,7 +2078,7 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = LearnedUpsampleOp(child_model, self.in_c, self.out_c, self.factor, self.groups, self.name)
+  model = LearnedUpsampleOp(child_model, self.in_c, self.out_c, int(self.factor), self.groups, self.name)
 
   shared_children[id(self)] = model 
   return model

@@ -33,7 +33,6 @@ import mysql_db
 # from imageio import imread
 #from multiprocessing import shared_memory
 from queue import Empty
-import psutil
 
 
 def build_model_database(args):
@@ -365,6 +364,18 @@ class Searcher():
 
     return {
       "Input(Bayer)": bayer,
+    }
+
+
+  def construct_xgreen_inputs(self):
+    mosaic = demosaic_ast.Input(36, resolution=1/6, name="Mosaic3x3")
+    flat_mosaic = demosaic_ast.Input(1, resolution=1, name="FlatMosaic")
+    mosaic3chan = demosaic_ast.Input(3, resolution=1, name="Mosaic")
+
+    return {
+      "Input(Mosaic3x3)": mosaic,
+      "Input(FlatMosaic)": flat_mosaic,
+      "Input(Mosaic)": mosaic3chan,
     }
 
 
@@ -812,14 +823,17 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
 
   parser.add_argument('--experiment_name', type=str)
-  parser.add_argument('--max_channels', type=int, default=32, help='max channel count')
+  parser.add_argument('--max_channels', type=int, default=64, help='max channel count')
   parser.add_argument('--default_channels', type=int, default=12, help='initial channel count for Convs')
   parser.add_argument('--max_nodes', type=int, default=40, help='max number of nodes in a tree')
   parser.add_argument('--min_subtree_size', type=int, default=1, help='minimum size of subtree in insertion')
   parser.add_argument('--max_subtree_size', type=int, default=15, help='maximum size of subtree in insertion')
+  parser.add_argument('--max_resolution_change_tries', type=int, default=20, help='max number of times to try finding a subgraph to change resolution')
+  parser.add_argument('--min_resolution', type=float, default=float(1/6), help='minimum resolution allowed for any intermediate output of DAG')
+  parser.add_argument('--resolution_change_factors', type=str, default="2,3", help='allowed up/downsampling factors')
   parser.add_argument('--structural_sim_reject', type=float, default=0.2, help='rejection probability threshold for structurally similar trees')
-  parser.add_argument('--max_footprint', type=int, default=16, help='max DAG footprint size on input image')
-  parser.add_argument('--crop', type=int, default=16, help='how much to crop images during training and inference')
+  parser.add_argument('--max_footprint', type=int, help='max DAG footprint size on input image')
+  parser.add_argument('--crop', type=int, help='how much to crop images during training and inference')
 
   parser.add_argument('--starting_model_id', type=int)
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
@@ -897,6 +911,7 @@ if __name__ == "__main__":
 
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
+  parser.add_argument('--xtrans_green', action="store_true")  
   parser.add_argument('--rgb8chan', action="store_true")
   parser.add_argument('--binop_change', action="store_true")
   parser.add_argument('--insertion_bias', action="store_true")

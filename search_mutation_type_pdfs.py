@@ -13,7 +13,7 @@ rgb8chan_pdfs = {
 green_model_pdfs = {
   "demosaicnet_search":   [0.3, 0.3, 0, 0.2, 0.2, 0],
   "insertion_bias": {"early": [0.4, 0.6, 0, 0, 0, 0], "late": [0.3, 0.3, 0.1, 0.15, 0.15, 0]},
-  "uniform": [0.2, 0.2, 0.2, 0.2, 0.2, 0]
+  "uniform": [float(1/9) for i in range(9)]
 }
 
 mutation_types_pdfs = {

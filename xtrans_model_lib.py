@@ -1,4 +1,5 @@
 from demosaic_ast import *
+from type_check import compute_resolution
 
 
 def XGreenDemosaicknet1(depth, width):
@@ -90,7 +91,7 @@ def XGreenDemosaicknet3(depth, width):
   green = XFlatGreenExtractor(mosaic3chan, missing_green)
   green.assign_parents()
   green.compute_input_output_channels()
-
+  compute_resolution(green)
   return green
 
 
