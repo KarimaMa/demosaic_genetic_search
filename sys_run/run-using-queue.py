@@ -395,7 +395,10 @@ class Searcher():
           model_input_names = OrderedSet(model_inputs.keys())
           self.args.input_ops = OrderedSet(list(model_inputs.values()))
         else: 
-          model_inputs = self.construct_green_inputs()
+          if self.args.xtrans_green:
+            model_inputs = self.construct_xgreen_inputs()
+          else:
+            model_inputs = self.construct_green_inputs()
           model_input_names = OrderedSet(model_inputs.keys())
           self.args.input_ops = OrderedSet(list(model_inputs.values()))
 
@@ -948,6 +951,8 @@ if __name__ == "__main__":
     args.task_out_c = 1
 
   args.cost_tiers = parse_cost_tiers(args.cost_tiers)
+  args.resolution_change_factors = [int(f) for f in args.resolution_change_factors.split(",")]
+
   util.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
   args.model_path = os.path.join(args.save, args.model_path)
   util.create_dir(args.model_path)
