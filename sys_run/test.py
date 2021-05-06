@@ -566,6 +566,7 @@ class Searcher():
     for seed_model_i, seed_model_file in enumerate(seed_model_files):
       seed_ast = demosaic_ast.load_ast(seed_model_file)
       seed_ast.compute_input_output_channels()
+
       if self.args.full_model:
         self.insert_green_model(seed_ast)
 
@@ -808,7 +809,7 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
   parser.add_argument('--max_channels', type=int, default=64, help='max channel count')
   parser.add_argument('--default_channels', type=int, default=12, help='initial channel count for Convs')
-  parser.add_argument('--max_nodes', type=int, default=40, help='max number of nodes in a tree')
+  parser.add_argument('--max_nodes', type=int, default=50, help='max number of nodes in a tree')
   parser.add_argument('--min_subtree_size', type=int, default=1, help='minimum size of subtree in insertion')
   parser.add_argument('--max_subtree_size', type=int, default=15, help='maximum size of subtree in insertion')
   parser.add_argument('--structural_sim_reject', type=float, default=0.2, help='rejection probability threshold for structurally similar trees')
@@ -879,6 +880,8 @@ if __name__ == "__main__":
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
   parser.add_argument('--xtrans_green', action="store_true")
+  parser.add_argument('--superres_green', action="store_true")
+  
   parser.add_argument('--rgb8chan', action="store_true")
   parser.add_argument('--binop_change', action="store_true")
   parser.add_argument('--insertion_bias', action="store_true")

@@ -915,6 +915,8 @@ if __name__ == "__main__":
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
   parser.add_argument('--xtrans_green', action="store_true")  
+  parser.add_argument('--superres_green', action="store_true")
+
   parser.add_argument('--rgb8chan', action="store_true")
   parser.add_argument('--binop_change', action="store_true")
   parser.add_argument('--insertion_bias', action="store_true")

@@ -12,7 +12,7 @@ from superres_mosaic_gen import lowres_bayer, bicubic_downsample
 import math
 
 
-class GreenQuadDataset(data.Dataset):
+class SGreenQuadDataset(data.Dataset):
   def __init__(self, data_file=None, return_images=False, return_index=False):
     
     if data_file:
@@ -73,15 +73,15 @@ class GreenQuadDataset(data.Dataset):
     batched_img = torch.Tensor(img).unsqueeze(0)
     lowres_img = bicubic_downsample(batched_img, factor=2, pad=pad)[0]
 
-    print(f"using pad {pad} for kernel radius {kw} and scale factor {SCALE}")
-    print(f"computed downsampled size: {downsampled_size}  downsampled_size size before cropping : {lowres_img.shape}")
+    # print(f"using pad {pad} for kernel radius {kw} and scale factor {SCALE}")
+    # print(f"computed downsampled size: {downsampled_size}  downsampled_size size before cropping : {lowres_img.shape}")
     
     # crop out the valid region of the lowres image
     lowres_img = lowres_img[:,first_valid_out_loc:last_valid_out_loc+1, first_valid_out_loc:last_valid_out_loc+1]
     
-    print(f"downsampled_size size after cropping : {lowres_img.shape}")
-    print(f"first valid input loc: {first_valid_in_loc} last valid input loc {last_valid_in_loc}")
-    print(f"first valid output loc: {first_valid_out_loc} last valid output loc {last_valid_out_loc}")
+    # print(f"downsampled_size size after cropping : {lowres_img.shape}")
+    # print(f"first valid input loc: {first_valid_in_loc} last valid input loc {last_valid_in_loc}")
+    # print(f"first valid output loc: {first_valid_out_loc} last valid output loc {last_valid_out_loc}")
 
     lowres_mosaic = bayer(lowres_img)
     lowres_mosaic = torch.sum(lowres_mosaic, 0, keepdim=True)
@@ -104,7 +104,7 @@ class GreenQuadDataset(data.Dataset):
     # crop out the valid region of the fullres image 
     target = target[:,first_valid_in_loc:last_valid_in_loc+1, first_valid_in_loc:last_valid_in_loc+1]
     
-    print(f"output target shape: {target.shape}")
+    # print(f"output target shape: {target.shape}")
 
     target = torch.Tensor(target)
 
