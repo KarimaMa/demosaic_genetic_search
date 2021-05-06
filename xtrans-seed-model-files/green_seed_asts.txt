@@ -1,0 +1,2 @@
+DATADUMP/XGREEN-WEIGHTED-D3W18/models/seed/model_ast
+DATADUMP/XGREEN-DNET3-D3W27/models/seed/model_ast
