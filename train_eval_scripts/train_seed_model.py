@@ -16,9 +16,10 @@ import cost
 import util
 import model_lib
 from torch_model import ast_to_model
-from dataset import GreenQuadDataset, XGreenDataset, FullPredictionQuadDataset, FastDataLoader, FullPredictionProcessedDataset, GreenProcessedQuadDataset
+from dataset import GreenQuadDataset, FullPredictionQuadDataset, FastDataLoader, FullPredictionProcessedDataset, GreenProcessedQuadDataset
 from tree import print_parents
 import demosaic_ast
+from footprint import compute_footprint
 
 
 def run(args, models, model_id, model_dir):
@@ -53,32 +54,15 @@ def run(args, models, model_id, model_dir):
  
   if args.full_model:
     if args.train:
-      if args.xtrans:
-        raise NotImplementedError
       train_data = FullPredictionProcessedDataset(data_file=args.training_file)
     validation_data = FullPredictionProcessedDataset(data_file=args.validation_file)
     test_data = FullPredictionProcessedDataset(data_file=args.test_file)
 
   else:
     if args.train:
-      if args.xtrans:
-        if args.flat:
-          if args.precomputed:
-            train_data = XGreenDataset(data_file=args.training_file, precomputed=args.training_mosaic_file, flat=True)
-            validation_data = XGreenDataset(data_file=args.validation_file, precomputed=args.validation_mosaic_file, flat=True)
-            test_data = XGreenDataset(data_file=args.test_file, precomputed=args.test_mosaic_file, flat=True)
-          else:
-            train_data = XGreenDataset(data_file=args.training_file, flat=True)
-            validation_data = XGreenDataset(data_file=args.validation_file, flat=True)
-            test_data = XGreenDataset(data_file=args.test_file, flat=True)
-        else:
-          train_data = XGreenDataset(data_file=args.training_file, precomputed=args.training_mosaic_file)
-          validation_data = XGreenDataset(data_file=args.validation_file, precomputed=args.validation_mosaic_file)
-          test_data = XGreenDataset(data_file=args.test_file, precomputed=args.test_mosaic_file)
-      else:
-        train_data = GreenProcessedQuadDataset(data_file=args.training_file) 
-        validation_data = GreenProcessedQuadDataset(data_file=args.validation_file)
-        test_data = GreenProcessedQuadDataset(data_file=args.test_file)
+      train_data = GreenQuadDataset(data_file=args.training_file) 
+      validation_data = GreenQuadDataset(data_file=args.validation_file)
+      test_data = GreenQuadDataset(data_file=args.test_file)
     
   if args.train:
     num_train = len(train_data)
@@ -141,13 +125,10 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
 
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
-      if args.xtrans:
-        raise NotImplementedError
-      else:
-        bayer, redblue_bayer, green_grgb = input 
-        bayer = bayer.cuda()
-        redblue_bayer = redblue_bayer.cuda()
-        green_grgb = green_grgb.cuda()
+      bayer, redblue_bayer, green_grgb = input 
+      bayer = bayer.cuda()
+      redblue_bayer = redblue_bayer.cuda()
+      green_grgb = green_grgb.cuda()
 
     else:
       mosaic = input
@@ -158,10 +139,7 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
       print("target")
       print(target[0,:,6:12,6:12])
       print("mosaic")
-      if args.flat:
-        print(mosaic[0,:,6:12,6:12])
-      else:
-        print(mosaic[0,:,1,1])
+      print(mosaic[0,:,1,1])
 
     if args.crop > 0:
       target = target[..., args.crop:-args.crop, args.crop:-args.crop]
@@ -295,12 +273,9 @@ if __name__ == "__main__":
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
 
   parser.add_argument('--green_demosaicnet', action='store_true')
-  parser.add_argument('--xgreen_demosaicnet', action='store_true')
-  parser.add_argument('--xflatgreen_demosaicnet', action='store_true')    
   parser.add_argument('--ahd', action='store_true')
   parser.add_argument('--ahd2d', action='store_true')
   parser.add_argument('--multiresquadgreen', action='store_true')
-  parser.add_argument('--xmultiresquadgreen', action='store_true')
   parser.add_argument('--gradienthalide', action='store_true')
   parser.add_argument('--bilinear', action='store_true')
   parser.add_argument('--chromagradienthalide', action='store_true')
@@ -326,10 +301,6 @@ if __name__ == "__main__":
 
   parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
   parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/subset7_100k_train_files.txt", help='filename of file with list of training data image files')
-  parser.add_argument('--training_mosaic_file', type=str, default="/home/karima/cnn-data/xtrans-flat-subset7-100k-train.txt", help="filename of file with list of training data mosaic files")
-  parser.add_argument('--validation_mosaic_file', type=str, default="/home/karima/cnn-data/xtrans-flat-subset7-100k-val.txt", help="filename of file with list of val data mosaic files")
-  parser.add_argument('--test_mosaic_file', type=str, default="/home/karima/cnn-data/xtrans-flat-subset7-100k-test.txt", help="filename of file with list of test data mosaic files")
-
   parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/val_files.txt", help='filename of file with list of validation data image files')
   parser.add_argument('--test_file', type=str, default="/home/karima/cnn-data/test_files.txt")
 
@@ -337,8 +308,6 @@ if __name__ == "__main__":
   parser.add_argument('--validation_freq', type=int, default=None, help='validation frequency')
 
   parser.add_argument('--full_model', action="store_true")
-  parser.add_argument('--xtrans', action='store_true')
-  parser.add_argument('--flat', action='store_true')
   parser.add_argument('--testing', action='store_true')
 
   parser.add_argument('--train', action='store_true')
@@ -369,12 +338,6 @@ if __name__ == "__main__":
   if args.green_demosaicnet:
     logger.info("TRAINING DEMOSAICNET GREEN")
     model = model_lib.GreenDemosaicknet(args.depth, args.width)
-  elif args.xgreen_demosaicnet:
-    logger.info("TRAINING XTRANS DEMOSAICNET GREEN")
-    model = model_lib.XGreenDemosaicknet(args.depth, args.width)
-  elif args.xflatgreen_demosaicnet:
-    logger.info("TRAINING XTRANS FLAT DEMOSAICNET GREEN")
-    model = model_lib.XFlatGreenDemosaicknet(args.depth, args.width)
   elif args.ahd:
     logger.info(f"TRAINING AHD GREEN")
     model = model_lib.ahd1D_green_model()
@@ -384,9 +347,6 @@ if __name__ == "__main__":
   elif args.multiresquadgreen:
     logger.info("TRAINING MULTIRES QUAD GREEN")
     model = model_lib.MultiresQuadGreenModel(args.depth, args.width)
-  elif args.xmultiresquadgreen:
-    logger.info("TRAINING XTRANS MULTIRES QUAD GREEN")
-    model = model_lib.XtransMultiresQuadGreenModel(args.depth, args.width)
   elif args.gradienthalide:
     logger.info("TRAINING GRADIENT HALIDE GREEN")
     model = model_lib.GradientHalideModel(args.width, args.k)
@@ -458,9 +418,11 @@ if __name__ == "__main__":
   print(model.dump())
 
   ev = cost.ModelEvaluator(None)
-  model_cost = ev.compute_cost(model, xtrans=True)
+  model_cost = ev.compute_cost(model)
   print(f"model compute cost: {model_cost}")
-  
+  model_footprint = compute_footprint(model, 1)
+  print(f"model footprint: {model_footprint}")
+
   if not torch.cuda.is_available():
     sys.exit(1)
 

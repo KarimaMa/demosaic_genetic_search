@@ -274,6 +274,8 @@ if __name__ == "__main__":
   parser.add_argument('--xgreen_dnet5', action='store_true')
   parser.add_argument('--xgreen_dnet6', action='store_true')
 
+  parser.add_argument('--xgreen_weighted', action='store_true')
+  parser.add_argument('--xgreen_multires', action='store_true')
   parser.add_argument('--xflatgreen_dnet', action='store_true')    
   parser.add_argument('--xrgb_dnet1', action='store_true')    
   parser.add_argument('--xrgb_dnet2', action='store_true')    
@@ -338,6 +340,10 @@ if __name__ == "__main__":
     model = xtrans_model_lib.XGreenDemosaicknet1(args.depth, args.width)
   elif args.xflatgreen_dnet:
     model = xtrans_model_lib.XFlatGreenDemosaicknet(args.depth, args.width)
+  elif args.xgreen_weighted:
+    model = xtrans_model_lib.XGreenWeightedFilters(args.depth, args.width)
+  elif args.xgreen_multires:
+    model = xtrans_model_lib.XGreenMultires(args.depth, args.width)
   elif args.xgreen_dnet2:
     model = xtrans_model_lib.XGreenDemosaicknet2(args.depth, args.width)
   elif args.xgreen_dnet3:
@@ -397,7 +403,7 @@ if __name__ == "__main__":
   ev = cost.ModelEvaluator(None)
   model_cost = ev.compute_cost(model, xtrans=True)
   print(f"model compute cost: {model_cost}")
-  
+
   if not torch.cuda.is_available():
     sys.exit(1)
 

@@ -16,19 +16,19 @@ import cost
 import util
 import superres_model_lib
 from torch_model import ast_to_model
-from superres_dataset import GreenQuadDataset
+from superres_dataset import SGreenQuadDataset
 from dataset import FastDataLoader
 from tree import print_parents
 import demosaic_ast
+from footprint import compute_footprint
 
 
 def run(args, models, model_id, model_dir):
   print(f"training {len(models)} models")
   log_format = '%(asctime)s %(levelname)s %(message)s'
 
-  if args.train:
-    train_loggers = [util.create_logger(f'{model_id}_v{i}_train_logger', logging.INFO, \
-                                        log_format, os.path.join(model_dir, f'v{i}_train_log'))\
+  train_loggers = [util.create_logger(f'{model_id}_v{i}_train_logger', logging.INFO, \
+                                      log_format, os.path.join(model_dir, f'v{i}_train_log'))\
                     for i in range(len(models))]
 
   validation_loggers = [util.create_logger(f'{model_id}_v{i}_validation_logger', logging.INFO, \
@@ -55,23 +55,21 @@ def run(args, models, model_id, model_dir):
   if args.full_model:
       raise NotImplementedError
   else:
-    if args.train:
-         train_data = GreenQuadDataset(data_file=args.training_file) 
-    validation_data = GreenQuadDataset(data_file=args.validation_file) 
-    test_data = GreenQuadDataset(data_file=args.test_file) 
+    train_data = SGreenQuadDataset(data_file=args.training_file) 
+    validation_data = SGreenQuadDataset(data_file=args.validation_file) 
+    test_data = SGreenQuadDataset(data_file=args.test_file) 
 
     #   train_data = GreenQuadDataset(input_data_file=args.train_input, target_data_file=args.train_target) 
     # validation_data = GreenQuadDataset(input_data_file=args.val_input, target_data_file=args.val_target) 
     # test_data = GreenQuadDataset(input_data_file=args.test_input, target_data_file=args.test_target) 
     
-  if args.train:
-    num_train = len(train_data)
-    train_indices = list(range(int(num_train*args.train_portion)))
+  num_train = len(train_data)
+  train_indices = list(range(int(num_train*args.train_portion)))
 
-    train_queue = FastDataLoader(
-        train_data, batch_size=args.batch_size,
-        sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
-        pin_memory=True, num_workers=8)
+  train_queue = FastDataLoader(
+      train_data, batch_size=args.batch_size,
+      sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
+      pin_memory=True, num_workers=8)
 
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
@@ -88,31 +86,19 @@ def run(args, models, model_id, model_dir):
     sampler=torch.utils.data.sampler.SequentialSampler(test_indices),
     pin_memory=True, num_workers=8)
  
-  if args.train:
-    for epoch in range(args.epochs):
-      train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, \
-        model_pytorch_files, validation_queue, validation_loggers, epoch)
-      print(f"finished epoch {epoch}")
-      valid_losses, val_psnrs = infer(args, validation_queue, models, criterion, validation_loggers)
-      test_losses, test_psnrs = infer(args, test_queue, models, criterion, test_loggers)
-
-      for i in range(len(models)):
-        validation_loggers[i].info('validation epoch %03d mse %e psnr %e', epoch, valid_losses[i], val_psnrs[i])
-        test_loggers[i].info('test epoch %03d mse %e psnr %e', epoch, test_losses[i], test_psnrs[i])
-
-    return valid_losses, train_losses
-  else:
+  for epoch in range(args.epochs):
+    train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, \
+      model_pytorch_files, validation_queue, validation_loggers, epoch)
+    print(f"finished epoch {epoch}")
     valid_losses, val_psnrs = infer(args, validation_queue, models, criterion, validation_loggers)
     test_losses, test_psnrs = infer(args, test_queue, models, criterion, test_loggers)
 
     for i in range(len(models)):
-      print(f"valid loss {valid_losses[i]}")
-      validation_loggers[i].info('validation mse %e psnr %e', valid_losses[i], val_psnrs[i])
-      test_loggers[i].info('test mse %e psnr %e', test_losses[i], test_psnrs[i])
+      validation_loggers[i].info('validation epoch %03d mse %e psnr %e', epoch, valid_losses[i], val_psnrs[i])
+      test_loggers[i].info('test epoch %03d mse %e psnr %e', epoch, test_losses[i], test_psnrs[i])
 
-    return valid_losses, test_losses 
-
-
+  return valid_losses, train_losses
+  
 
 def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files, validation_queue, validation_loggers, epoch):
   loss_trackers = [util.AvgrageMeter() for m in models]
@@ -273,7 +259,7 @@ if __name__ == "__main__":
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
 
   parser.add_argument('--green_demosaicnet', action='store_true')
-  parser.add_argument('--multiresquadgreen', action='store_true')
+  parser.add_argument('--multiresgreen', action='store_true')
  
   parser.add_argument('--green_model_ast', type=str, help="green model ast to use for chroma model")
   parser.add_argument('--no_grad', action='store_true', help='whether or not to backprop through green model')
@@ -281,7 +267,6 @@ if __name__ == "__main__":
 
   parser.add_argument('--depth', type=int, help='num conv layers in model')
   parser.add_argument('--width', type=str, help='num channels in model layers')
-  parser.add_argument('--k', type=int, help='kernel width in model layers')
   parser.add_argument('--crop', type=int, default=0, help='amount to crop output image to remove border effects')
 
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
@@ -290,10 +275,6 @@ if __name__ == "__main__":
 
   parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
   parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/subset7_100k_train_files.txt", help='filename of file with list of training data image files')
-  parser.add_argument('--training_mosaic_file', type=str, default="/home/karima/cnn-data/xtrans-flat-subset7-100k-train.txt", help="filename of file with list of training data mosaic files")
-  parser.add_argument('--validation_mosaic_file', type=str, default="/home/karima/cnn-data/xtrans-flat-subset7-100k-val.txt", help="filename of file with list of val data mosaic files")
-  parser.add_argument('--test_mosaic_file', type=str, default="/home/karima/cnn-data/xtrans-flat-subset7-100k-test.txt", help="filename of file with list of test data mosaic files")
-
   parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/val_files.txt", help='filename of file with list of validation data image files')
   parser.add_argument('--test_file', type=str, default="/home/karima/cnn-data/test_files.txt")
 
@@ -342,6 +323,9 @@ if __name__ == "__main__":
   if args.green_demosaicnet:
     logger.info("TRAINING DEMOSAICNET GREEN")
     model = superres_model_lib.GreenDemosaicknet(args.depth, args.width)
+  if args.multiresgreen:
+    model = superres_model_lib.GreenMultires(args.depth, args.width)
+
 
   if args.full_model and not (args.chromagradienthalide or args.fullrgbdemosaicnet or args.fullrgbgradienthalide):
     print(f'--- setting the no_grad parameter in green model {args.no_grad} ---')
@@ -378,9 +362,11 @@ if __name__ == "__main__":
   print(model.dump())
 
   ev = cost.ModelEvaluator(None)
-  model_cost = ev.compute_cost(model, xtrans=True)
+  model_cost = ev.compute_cost(model)
   print(f"model compute cost: {model_cost}")
-  
+  model_footprint = model.compute_footprint(1)
+  print(f"model footprint {model_footprint}")
+
   if not torch.cuda.is_available():
     sys.exit(1)
 
