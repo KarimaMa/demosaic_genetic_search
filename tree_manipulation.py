@@ -34,7 +34,7 @@ Replace N's parent P with X
 """
 def replace_parent(N, P, X):
 	if type(N.parent) is tuple:
-		parents = list(node.parent)
+		parents = list(N.parent)
 		new_parents = []
 		for p in parents:
 			if id(p) == id(P):
