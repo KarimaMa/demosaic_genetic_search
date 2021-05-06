@@ -95,6 +95,119 @@ def XGreenDemosaicknet3(depth, width):
   return green
 
 
+def XGreenWeightedFilters(depth, width):
+  mosaic = Input(36, resolution=1/6, name="Mosaic3x3")
+  # upsample to bayer quad level resolution
+  unpacked = Unpack(mosaic, factor=2)
+  higher_res = LearnedUpsample(mosaic, width, factor=2, groups=1)
+
+  w_input = higher_res
+
+  # main processing 
+  for i in range(depth):
+    w_conv = Conv2D(w_input, width, kwidth=3)
+    w_relu = Relu(w_conv)
+    w_input = w_relu
+
+  f_input = higher_res
+
+  for i in range(depth):
+    f_conv = Conv2D(f_input, width, kwidth=3)
+    f_relu = Relu(f_conv)
+    f_input = f_relu
+
+  f_full_res = Unpack(f_input, factor=3)
+  flat_mosaic = Input(1, resolution=1, name="FlatMosaic")
+
+  f_stacked = Stack(f_full_res, flat_mosaic) 
+  f_residual_conv = Conv2D(f_stacked, width//9, kwidth=3)
+
+  w_full_res = Unpack(w_input, factor=3)
+  flat_mosaic = Input(1, resolution=1, name="FlatMosaic")
+
+  w_stacked = Stack(w_full_res, flat_mosaic) 
+  w_residual_conv = Conv2D(w_stacked, width//9, kwidth=3)
+  weights = Softmax(w_residual_conv)
+  
+  weighted_interps = Mul(f_residual_conv, weights)
+  missing_green = GroupedSum(weighted_interps, 1) 
+
+  mosaic3chan = Input(3, resolution=1, name="Mosaic")
+  green = XFlatGreenExtractor(mosaic3chan, missing_green)
+  green.assign_parents()
+  green.compute_input_output_channels()
+  compute_resolution(green)
+  return green
+
+
+def XGreenMultires(depth, width):
+  mosaic = Input(36, resolution=1/6, name="Mosaic3x3")
+  # upsample to bayer quad level resolution
+  unpacked = Unpack(mosaic, factor=2)
+  low_res = LearnedUpsample(mosaic, width, factor=3, groups=1)
+  high_res = LearnedUpsample(mosaic, width, factor=6, groups=1)
+
+  w_input = high_res
+
+  # main processing 
+  for i in range(depth):
+    w_conv = Conv2D(w_input, width, kwidth=3)
+    w_relu = Relu(w_conv)
+    w_input = w_relu
+
+  hf_input = high_res
+
+  for i in range(depth):
+    hf_conv = Conv2D(hf_input, width, kwidth=3)
+    hf_relu = Relu(hf_conv)
+    hf_input = hf_relu
+
+  lf_input = low_res
+  for i in range(depth):
+    lf_conv = Conv2D(lf_input, width, kwidth=3)
+    lf_relu = Relu(lf_conv)
+    lf_input = lf_relu
+
+
+  lf_full_res = Unpack(lf_input, factor=2)
+  flat_mosaic = Input(1, resolution=1, name="FlatMosaic")
+
+  lf_stacked = Stack(lf_full_res, flat_mosaic) 
+  lf_residual_conv = Conv2D(lf_stacked, width//9, kwidth=3)
+
+
+  # hf_full_res = Unpack(hf_input, factor=2)
+  hf_full_res = hf_input
+  flat_mosaic = Input(1, resolution=1, name="FlatMosaic")
+
+  hf_stacked = Stack(hf_full_res, flat_mosaic) 
+  hf_residual_conv = Conv2D(hf_stacked, width//9, kwidth=3)
+
+
+  #w_full_res = Unpack(w_input, factor=2)
+  w_full_res = w_input
+  flat_mosaic = Input(1, resolution=1, name="FlatMosaic")
+
+  w_stacked = Stack(w_full_res, flat_mosaic) 
+  w_residual_conv = Conv2D(w_stacked, width//9, kwidth=3)
+  weights = Softmax(w_residual_conv)
+
+  
+  l_weighted = Mul(lf_residual_conv, weights)
+  h_weighted = Mul(hf_residual_conv, weights)
+
+  l_green = GroupedSum(l_weighted, 1) 
+  h_green = GroupedSum(h_weighted, 1)
+  missing_green = Add(l_green, h_green)
+
+  mosaic3chan = Input(3, resolution=1, name="Mosaic")
+  green = XFlatGreenExtractor(mosaic3chan, missing_green)
+  green.assign_parents()
+  green.compute_input_output_channels()
+  compute_resolution(green)
+  return green
+
+
 """
 Same as dnet3 except it doesn't do any final processing on 
 the full res level, instead it uses a residual connection with 
