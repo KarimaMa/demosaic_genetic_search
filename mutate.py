@@ -22,7 +22,7 @@ from tree import *
 from restrictions import *
 from util import extclass, get_factors, get_closest_factor
 from enum import Enum
-from footprint import compute_footprint, compute_lowres_branch_footprint
+from footprint import compute_footprint
 from search_mutation_type_pdfs import mutation_types_pdfs
 from tree_manipulation import insertion_edge_updates, replace_child, replace_parent
 from resolution_coloring import change_subgraph_resolution, flip_resolution, delete_resolution_subgraph, swap_resolution_op
@@ -1296,7 +1296,7 @@ def accept_tree(self, tree):
     return False, "rejecting adjacent Upsample and Downsample"
 
   # reject DAGs with receptive fields larger than threshold
-  footprint = tree.compute_footprint()
+  footprint = tree.compute_footprint(1)
   if footprint > self.args.max_footprint:
     self.debug_logger.debug(f"rejecting DAG with footprint {footprint}")
     return False, f"rejecting DAG with footprint {footprint}"
