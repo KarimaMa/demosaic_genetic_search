@@ -52,7 +52,7 @@ python $CODE_LOCAL/sys_run/run-using-queue.py \
     --learning_rate=0.004 \
     --epochs=6 \
     --starting_model_id=4000 \
-    --generations=20 \
+    --generations=40 \
     --tablename=adobegreen \
     --tier_size=20 \
     --green_seed_model_files=seed_model_files/green_seed_asts-05-06-2021.txt \
