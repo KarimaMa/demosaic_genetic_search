@@ -39,7 +39,7 @@ rsync -av $DATA /dev/shm
 
 echo "Running job"
 python $CODE_LOCAL/sys_run/run-using-queue.py \
-    --experiment_name=green-multires-dnet-insert-binop \
+    --experiment_name=green-bayer \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
     --save=$ROOT/results/BAYER-GREEN-05-06-SEARCH-RUN0 \
