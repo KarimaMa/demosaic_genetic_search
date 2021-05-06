@@ -1,16 +1,6 @@
 from demosaic_ast import *
+from type_check import compute_resolution
 
-def updown_test_model():
-  bayer = Input(1, "Bayer")
-  down = Downsample(bayer)
-  up = Upsample(down)
-  return up
-
-def fastupdown_test_model():
-  bayer = Input(1, "Bayer")
-  down = Downsample(bayer)
-  up = FastUpsample(down)
-  return up
 
 def basic1D_green_model():
   # detector model
@@ -57,44 +47,6 @@ def basic2D_green_model():
   fconv3 = Conv1x1(frelu2, c)
 
   mul = Mul(fconv3, softmax)
-  missing_green = SumR(mul)
-  bayer = Input(1, "Bayer")
-  full_green = GreenExtractor(missing_green, bayer)
-  full_green.is_root = True
-  full_green.assign_parents()
-  full_green.compute_input_output_channels()
-
-  return full_green
-
-
-def basic2D_l5_green_model():
-  # detector model
-  c = 4
-  bayer = Input(1, "Bayer")
-  dconv1 = Conv2D(bayer, c, kwidth=3)
-  drelu1 = Relu(dconv1)
-  dconv2 = Conv2D(drelu1, c, kwidth=3)
-  drelu2 = Relu(dconv2)
-  dconv3 = Conv2D(drelu2, c, kwidth=3)
-  drelu3 = Relu(dconv3)
-  dconv4 = Conv2D(drelu3, c, kwidth=3)
-  drelu4 = Relu(dconv4)
-  dconv5 = Conv2D(drelu4, c, kwidth=3)
-  softmax = Softmax(dconv5)
-
-  # filter model
-  bayer = Input(1, "Bayer")
-  fconv1 = Conv2D(bayer, c, kwidth=3)
-  frelu1 = Relu(fconv1)
-  fconv2 = Conv2D(frelu1, c, kwidth=3)
-  frelu2 = Relu(fconv2)
-  fconv3 = Conv2D(frelu2, c, kwidth=3)
-  frelu3 = Relu(fconv3)
-  fconv4 = Conv2D(frelu3, c, kwidth=3)
-  frelu4 = Relu(fconv4)
-  fconv5 = Conv2D(frelu4, c, kwidth=3)
-
-  mul = Mul(fconv5, softmax)
   missing_green = SumR(mul)
   bayer = Input(1, "Bayer")
   full_green = GreenExtractor(missing_green, bayer)
@@ -396,8 +348,8 @@ in the first conv layer, then does subsequent series of convs
 Interp is on full res r - g / b - g stacked with the green predictions 
 """
 def MultiresQuadGreenModel(depth, width):
-  bayer = Input(4, "Bayer") # quad Bayer
-  downsampled_bayer = Downsample(bayer)
+  bayer = Input(4, name="Mosaic", resolution=float(1/2)) # quad Bayer
+  downsampled_bayer = LearnedDownsample(bayer, width, factor=2)
 
   # lowres interp
   for i in range(depth):
@@ -408,11 +360,8 @@ def MultiresQuadGreenModel(depth, width):
     if i != depth - 1:
       lowres_relu = Relu(lowres_conv)
 
-  lowres_interp = Upsample(lowres_conv)
+  lowres_interp = BilinearUpsample(lowres_conv, factor=2)
   lowres_interp.compute_input_output_channels()
-
-  downsampled_bayer.partner_set = set( [(lowres_interp, id(lowres_interp))] )
-  lowres_interp.partner_set = set( [(downsampled_bayer, id(downsampled_bayer))] )
 
   # fullres interp
   for i in range(depth):
@@ -423,7 +372,8 @@ def MultiresQuadGreenModel(depth, width):
     if i != depth - 1:
       fullres_relu = Relu(fullres_interp)
 
-  downsampled_bayer = Downsample(bayer)
+  downsampled_bayer = LearnedDownsample(bayer, width, factor=2)
+
   # lowres weights
   for i in range(depth):
     if i == 0:
@@ -433,104 +383,26 @@ def MultiresQuadGreenModel(depth, width):
     if i != depth - 1:
       weight_relu = Relu(weight_conv)
  
-  upsampled_weights = Upsample(weight_conv)
+  upsampled_weights = BilinearUpsample(weight_conv, factor=2)
   weights = Softmax(upsampled_weights)
-  weights.compute_input_output_channels()
-  
-  downsampled_bayer.partner_set = set( [(upsampled_weights, id(upsampled_weights))] )
-  upsampled_weights.partner_set = set( [(downsampled_bayer, id(downsampled_bayer))] )
-
+ 
   lowres_mul = Mul(weights, lowres_interp)
   fullres_mul = Mul(weights, fullres_interp)
 
   lowres_sum = GroupedSum(lowres_mul, 2)
   fullres_sum = GroupedSum(fullres_mul, 2)
 
-  bayer = Input(4, "Bayer")
+  bayer = Input(4, name="Mosaic", resolution=float(1/2))
   green_rb = Add(lowres_sum, fullres_sum)
   green = GreenExtractor(bayer, green_rb)
   green.assign_parents()
   green.compute_input_output_channels()
-
-  return green 
-
-
-"""
-same as MultiresQuadGreenModel but for Xtrans
-"""
-def XtransMultiresQuadGreenModel(depth, width):
-  mosaic = Input(36, "Mosaic") # quad Bayer
-  downsampled_mosaic = Downsample(mosaic)
-
-  # lowres interp
-  for i in range(depth):
-    if isinstance(width, list):
-      w = width[i]
-    else:
-      w = width
-    if i == 0:
-      lowres_conv = Conv2D(downsampled_mosaic, w, kwidth=1)
-    else:
-      lowres_conv = Conv2D(lowres_relu, w, kwidth=1)
-    if i != depth - 1:
-      lowres_relu = Relu(lowres_conv)
-
-  lowres_interp = Upsample(lowres_conv)
-  lowres_interp.compute_input_output_channels()
-
-  downsampled_mosaic.partner_set = set( [(lowres_interp, id(lowres_interp))] )
-  lowres_interp.partner_set = set( [(downsampled_mosaic, id(downsampled_mosaic))] )
-
-  # fullres interp
-  for i in range(depth):
-    if isinstance(width, list):
-      w = width[i]
-    else:
-      w = width
-    if i == 0:
-      fullres_interp = Conv2D(mosaic, w, kwidth=1)
-    else:
-      fullres_interp = Conv2D(fullres_relu, w, kwidth=1)
-    if i != depth - 1:
-      fullres_relu = Relu(fullres_interp)
-
-  downsampled_mosaic = Downsample(mosaic)
-  # lowres weights
-  for i in range(depth):
-    if isinstance(width, list):
-      w = width[i]
-    else:
-      w = width
-    if i == 0:
-      weight_conv = Conv2D(downsampled_mosaic, w, kwidth=1)
-    else:
-      weight_conv = Conv2D(weight_relu, w, kwidth=1)
-    if i != depth - 1:
-      weight_relu = Relu(weight_conv)
- 
-  upsampled_weights = Upsample(weight_conv)
-  weights = Softmax(upsampled_weights)
-  weights.compute_input_output_channels()
-  
-  downsampled_mosaic.partner_set = set( [(upsampled_weights, id(upsampled_weights))] )
-  upsampled_weights.partner_set = set( [(downsampled_mosaic, id(downsampled_mosaic))] )
-
-  lowres_mul = Mul(weights, lowres_interp)
-  fullres_mul = Mul(weights, fullres_interp)
-
-  lowres_sum = GroupedSum(lowres_mul, 16)
-  fullres_sum = GroupedSum(fullres_mul, 16)
-
-  missing_green = Add(lowres_sum, fullres_sum)
-  green = XGreenExtractor(mosaic, missing_green)
-  green.assign_parents()
-  green.compute_input_output_channels()
-
+  compute_resolution(green)
   return green 
 
 
 def GreenDemosaicknet(depth, width):
-  bayer = Input(4, "Bayer")
+  bayer = Input(4, name="Mosaic", resolution=float(1/2))
   for i in range(depth):
     if i == 0:
       conv = Conv2D(bayer, width, kwidth=3)
@@ -546,11 +418,11 @@ def GreenDemosaicknet(depth, width):
   post_relu = Relu(post_conv)
   green_rb = Conv1x1(post_relu, 2)
 
-  bayer = Input(4, "Bayer")
+  bayer = Input(4, name="Mosaic", resolution=float(1/2))
   green = GreenExtractor(bayer, green_rb)
   green.assign_parents()
   green.compute_input_output_channels()
-
+  compute_resolution(green)
   return green
 
 
