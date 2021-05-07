@@ -295,7 +295,6 @@ class RGBSuperResExtractor(BinopIcJcKc, Special, Node):
 
 
 
-
 # Takes bayer quad, 8 channel predction
 # spits out full RGB Image at full resolution
 class RGB8ChanExtractor(BinopIcJcKc, Special, Node):
@@ -311,6 +310,27 @@ class RGB8ChanExtractor(BinopIcJcKc, Special, Node):
 
   def Ic(self):
     return 4 
+  def Jc(self):
+    return 8 
+  def Kc(self): 
+    return 3 # full rgb image
+
+
+# Takes flat 3 channel mosaic 8 channel predction
+# spits out full RGB Image at full resolution
+class FlatRGB8ChanExtractor(BinopIcJcKc, Special, Node):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
+    if name is None:
+      name = "FlatRGB8ChanExtractor"
+    Node.__init__(self, name, 2)
+    self.lchild = lchild
+    self.rchild = rchild
+    self.in_c = (3, 8) # bayer, 8 channel prediction
+    self.out_c = 3
+    self.resolution = resolution
+
+  def Ic(self):
+    return 3
   def Jc(self):
     return 8 
   def Kc(self): 
@@ -339,6 +359,24 @@ class GreenExtractor(BinopIcJcKc, Special, Node):
   def Kc(self):
     return 1
 
+
+"""
+Dummy border op wrapper for superres task 
+"""
+class SGreenExtractor(UnopIcJc, Special, Node):
+  def __init__(self, child, resolution=None, name=None):
+    if name is None:
+      name = "SGreenExtractor"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.in_c = 1
+    self.out_c = 1 # output G channel
+    self.resolution = resolution
+  
+  def Ic(self):
+    return 1
+  def Jc(self):
+    return 1
 
 """
 Xtrans extractor for green channel 
@@ -710,10 +748,21 @@ def compute_input_output_channels(self):
   self.rchild.compute_input_output_channels()
   return self.in_c, self.out_c
 
+@extclass(FlatRGB8ChanExtractor)
+def compute_input_output_channels(self):
+  self.lchild.compute_input_output_channels()
+  self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
 @extclass(GreenExtractor)
 def compute_input_output_channels(self):
   self.lchild.compute_input_output_channels()
   self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(SGreenExtractor)
+def compute_input_output_channels(self):
+  self.child.compute_input_output_channels()
   return self.in_c, self.out_c
 
 @extclass(XGreenExtractor)
@@ -1112,9 +1161,7 @@ def structural_hash(tree):
     if isinstance(n, Binop):
       h += 1 << i
 
-  op_list = [Conv1x1, Conv1D, Conv2D, Softmax, Relu, Mul, Add, Sub, \
-            AddExp, LogSub, Stack, Upsample, LearnedDownsample, InterleavedSum, \
-            GroupedSum, RGBExtractor, RGB8ChanExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input]
+  op_list = list(all_ops)
 
   ops_used = OrderedSet([type(n) for n in nodes])
   op_coverage = 0
@@ -1399,7 +1446,9 @@ ops_with_changeable_channels = OrderedSet((LearnedDownsample, LearnedUpsample)) 
 special_linear_ops = OrderedSet((LearnedUpsample, LearnedDownsample))
 nonlinear_ops = OrderedSet((Softmax, Relu)) 
 
-border_ops = OrderedSet((RGBExtractor, XRGBExtractor, XFlatRGBExtractor, RGB8ChanExtractor, GreenExtractor, XGreenExtractor, XFlatGreenExtractor, GreenRBExtractor, XGreenRBExtractor, Flat2Quad, Input))
+border_ops = OrderedSet((RGBExtractor, XRGBExtractor, XFlatRGBExtractor, RGB8ChanExtractor, FlatRGB8ChanExtractor, \
+                        GreenExtractor, XGreenExtractor, XFlatGreenExtractor, GreenRBExtractor, XGreenRBExtractor, SGreenExtractor, Flat2Quad, Input))
 
-demosaicnet_ops = OrderedSet((Conv1x1, Conv2D, Relu))
+nas_ops = OrderedSet((Conv1x1, Conv2D, Relu, Softmax, Add, Stack))
 
+all_ops = all_insert_ops | downsample_ops | upsample_ops | nonlinear_ops | border_ops
