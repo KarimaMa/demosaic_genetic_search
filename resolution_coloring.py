@@ -245,7 +245,6 @@ def change_subgraph_resolution(graph, possible_factors, MAX_TRIES):
 	# 	print(f"{s.dump()}")
 
 	current_resolution = A.resolution
-	new_resolution = A.resolution  / factor
 
 	# find all incoming and outgoing edges from the subgraph
 	incoming, outgoing = get_incoming_outgoing_edges(S)
