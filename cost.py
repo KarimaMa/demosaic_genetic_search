@@ -253,11 +253,16 @@ class ModelEvaluator():
 			cost += self.compute_cost_helper(root.rchild, seen) 
 			ratio = 1/4
 			cost *= ratio
+		elif isinstance(root, FlatRGB8ChanExtractor):
+			cost += self.compute_cost_helper(root.lchild, seen)
+			cost += self.compute_cost_helper(root.rchild, seen) 
 		elif isinstance(root, GreenExtractor):
 			cost += self.compute_cost_helper(root.lchild, seen)
 			cost += self.compute_cost_helper(root.rchild, seen) 
 			ratio = 1/4
 			cost *= ratio
+		elif isinstance(root, SGreenExtractor):
+			cost += self.compute_cost_helper(root.child, seen)
 		elif isinstance(root, XGreenExtractor):
 			cost += self.compute_cost_helper(root.lchild, seen)
 			cost += self.compute_cost_helper(root.rchild, seen)
