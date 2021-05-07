@@ -568,8 +568,8 @@ def is_in_tree(tree, node):
 @extclass(Mutator)
 def insert_resolution_subgraph_mutation(self, tree):
   possible_factors = self.args.resolution_change_factors
-  chosen_factor = random.choice(possible_factors)
-  change_subgraph_resolution(tree, chosen_factor, MAX_TRIES=self.args.max_resolution_change_tries)
+  # chosen_factor = random.choice(possible_factors)
+  change_subgraph_resolution(tree, possible_factors, MAX_TRIES=self.args.max_resolution_change_tries)
   return tree
 
 @extclass(Mutator)

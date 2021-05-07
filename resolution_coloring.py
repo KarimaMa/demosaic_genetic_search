@@ -188,7 +188,7 @@ all nodes in the subgraph defined by A and B have the same resolution
 prior to insertion and our algorithm guarantees that they will all 
 have the same resolution after insertion as well.
 """
-def change_subgraph_resolution(graph, factor, MAX_TRIES):
+def change_subgraph_resolution(graph, possible_factors, MAX_TRIES):
 	print("CHANGE SUBGRAPH RESOLUTION")
 	g2cg = {}
 	CG, cg2g = color_graph(graph, g2cg, None)
@@ -206,7 +206,6 @@ def change_subgraph_resolution(graph, factor, MAX_TRIES):
 		
 		connected_component = get_component(node1, cg2g, g2cg)
 
-		# connected_component, cc_boundary_nodes = get_connected_component(node1)
 		node2 = random.choice(connected_component.nodes)
 		
 		if touches_resolution_op(cg2g[node2]):
@@ -252,13 +251,25 @@ def change_subgraph_resolution(graph, factor, MAX_TRIES):
 	incoming, outgoing = get_incoming_outgoing_edges(S)
 	# dowsamples must be inserted along all edges in incoming
 	# upsamples must be insserted along all edges in outgoing 
+
+	# eliminate factors that don't divide the incoming pixel width
+	incoming_pixel_widths = [get_pixel_width(source, FULLRESWIDTH) for (source, parent) in incoming]
+	assert(all([pw == incoming_pixel_widths[0] for pw in incoming_pixel_widths])), \
+		"all incoming resolutions must be the same and thus have the same pixel width"
+
+	incoming_pixel_width = incoming_pixel_widths[0]
+	possible_factors = [f for f in possible_factors if incoming_pixel_width % f == 0]
+	assert len(possible_factors) > 0, "no allowable downsampling factors for the chosen subgraph"
+	
+	chosen_factor = random.choice(possible_factors)
+
 	for edge in incoming:
 		child, parent = edge
-		insert_downsample(parent, child, factor)
+		insert_downsample(parent, child, chosen_factor)
 
 	for edge in outgoing:
 		child, parent = edge
-		insert_upsample(parent, child, factor)
+		insert_upsample(parent, child, chosen_factor)
 
 	graph.compute_input_output_channels()
 	compute_resolution(graph)
