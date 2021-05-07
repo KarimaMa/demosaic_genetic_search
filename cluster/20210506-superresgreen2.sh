@@ -61,4 +61,5 @@ python $CODE_LOCAL/sys_run/run-using-queue.py \
     --late_cdf_gen=9 \
     --max_footprint=30 \
     --crop=16 \
+    --resolution_change_factors=2 \
     --superres_green
