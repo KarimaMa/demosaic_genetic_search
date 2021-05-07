@@ -792,7 +792,7 @@ def ChromaGradientHalideModel(width, k, no_grad, green_model, green_model_id):
 
 
 def RGB8ChanDemosaicknet(depth, width):
-  bayer = Input(4, "Bayer")
+  bayer = Input(4, name="Mosaic", resolution=float(1/2))
   # interp trunk
   for i in range(depth):
     if i == 0:
@@ -804,17 +804,46 @@ def RGB8ChanDemosaicknet(depth, width):
 
     residual_prediction = Conv1x1(relu, width)
   
-  bayer = Input(4, "Bayer")
+  bayer = Input(4, name="Mosaic", resolution=float(1/2))
   stacked = Stack(bayer, residual_prediction) 
 
   post_conv = Conv2D(stacked, width, kwidth=3)
   post_relu = Relu(post_conv)
   rgb_pred = Conv1x1(post_relu, 8) # 8 predicted missing values 
 
-  bayer = Input(4, "Bayer")
+  bayer = Input(4, name="Mosaic", resolution=float(1/2))
   rgb = RGB8ChanExtractor(bayer, rgb_pred)
   rgb.assign_parents()
   rgb.compute_input_output_channels()
 
   return rgb        
 
+
+
+def NASNet(depth, width):
+  bayer = Input(3, name="Mosaic", resolution=float(1.0))
+  # interp trunk
+  for i in range(depth):
+    if i == 0:
+      interp = Conv2D(bayer, width, kwidth=3)
+    else:
+      interp = Conv2D(relu, width, kwidth=3)
+    if i != depth-1:
+      relu = Relu(interp)
+
+    residual_prediction = Conv1x1(relu, width)
+  
+  bayer = Input(3, name="Mosaic", resolution=float(1.0))
+  stacked = Stack(bayer, residual_prediction) 
+
+  post_conv = Conv2D(stacked, width, kwidth=3)
+  post_relu = Relu(post_conv)
+  rgb_pred = Conv1x1(post_relu, 8) # 8 predicted missing values 
+
+  bayer = Input(3, name="Mosaic", resolution=float(1.0))
+  rgb = FlatRGB8ChanExtractor(bayer, rgb_pred)
+  rgb.assign_parents()
+  rgb.compute_input_output_channels()
+  compute_resolution(rgb)
+
+  return rgb        
