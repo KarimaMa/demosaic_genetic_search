@@ -39,11 +39,11 @@ rsync -av $DATA /dev/shm
 
 echo "Running job"
 python $CODE_LOCAL/sys_run/run-using-queue.py \
-    --experiment_name=green-superres \
+    --experiment_name=xtrans-green \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
-    --save=$ROOT/results/SUPERRES-GREEN-05-07-SEARCH-RUN0 \
-    --cost_tiers="0,400 400,800 800,1600 1600,3200 3200,6400" \
+    --save=$ROOT/results/XTRANS-GREEN-05-07-SEARCH-RUN1 \
+    --cost_tiers="0,200 200,400 400,800 800,1600 1600,3200" \
     --pareto_sampling \
     --pareto_factor=3 \
     --machine=adobe \
@@ -51,16 +51,16 @@ python $CODE_LOCAL/sys_run/run-using-queue.py \
     --mutations_per_generation=12 \
     --learning_rate=0.004 \
     --epochs=6 \
-    --starting_model_id=0 \
+    --starting_model_id=4000 \
     --generations=40 \
     --tablename=adobegreen \
     --tier_size=20 \
-    --green_seed_model_files=superres-seed-model-files/green_seed_asts.txt \
-    --green_seed_model_psnrs=superres-seed-model-files/green_seed_psnrs.txt \
+    --green_seed_model_files=xtrans-seed-model-files/green_seed_asts.txt \
+    --green_seed_model_psnrs=xtrans-seed-model-files/green_seed_psnrs.txt \
     --insertion_bias \
     --late_cdf_gen=9 \
-    --max_footprint=30 \
-    --crop=16 \
+    --max_footprint=35 \
     --resolution_change_factors=2,3 \
-    --pixel_width=128 \
-    --superres_green
+    --pixel_width=120 \
+    --crop=12 \
+    --xtrans_green
