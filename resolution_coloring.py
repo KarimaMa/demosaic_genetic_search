@@ -5,8 +5,6 @@ import random
 from type_check import compute_resolution
 
 
-FULLRESWIDTH = 120
-
 class ColoredGraph:
 	def __init__(self, color):
 		self.children = []
@@ -117,11 +115,10 @@ def build_updown_op(OpType, factor, resolution, child):
 	return OpType(child, **kwargs)
 
 
-def insert_downsample(dest, source, factor, DownsampleType=None):
+def insert_downsample(dest, source, factor, fullres_width, DownsampleType=None):
 	possible_dowsample_types = downsample_ops
-	pixel_width = get_pixel_width(source, FULLRESWIDTH)
-	if pixel_width % factor != 0:
-		possible_dowsample_types = possible_dowsample_types - OrderedSet((Pack,))
+	pixel_width = get_pixel_width(source, fullres_width)
+	assert pixel_width % factor == 0, "chosen downsampling factor must divide the input pixel width"
 
 	if DownsampleType:
 		assert DownsampleType in possible_dowsample_types, f"cannot {DownsampleType} {pixel_width}x{pixel_width} output by factor {factor}"
@@ -188,7 +185,7 @@ all nodes in the subgraph defined by A and B have the same resolution
 prior to insertion and our algorithm guarantees that they will all 
 have the same resolution after insertion as well.
 """
-def change_subgraph_resolution(graph, possible_factors, MAX_TRIES):
+def change_subgraph_resolution(graph, possible_factors, fullres_width, MAX_TRIES):
 	print("CHANGE SUBGRAPH RESOLUTION")
 	g2cg = {}
 	CG, cg2g = color_graph(graph, g2cg, None)
@@ -240,9 +237,6 @@ def change_subgraph_resolution(graph, possible_factors, MAX_TRIES):
 	print(f"node A: {A.dump()}")
 	print(f"node B: {B.dump()}")
 	S = find_subgraph(A, B)
-	# print(f"nodes in S:")
-	# for s in S:
-	# 	print(f"{s.dump()}")
 
 	current_resolution = A.resolution
 
@@ -252,7 +246,7 @@ def change_subgraph_resolution(graph, possible_factors, MAX_TRIES):
 	# upsamples must be insserted along all edges in outgoing 
 
 	# eliminate factors that don't divide the incoming pixel width
-	incoming_pixel_widths = [get_pixel_width(source, FULLRESWIDTH) for (source, parent) in incoming]
+	incoming_pixel_widths = [get_pixel_width(source, fullres_width) for (source, parent) in incoming]
 	assert(all([pw == incoming_pixel_widths[0] for pw in incoming_pixel_widths])), \
 		"all incoming resolutions must be the same and thus have the same pixel width"
 
@@ -264,7 +258,7 @@ def change_subgraph_resolution(graph, possible_factors, MAX_TRIES):
 
 	for edge in incoming:
 		child, parent = edge
-		insert_downsample(parent, child, chosen_factor)
+		insert_downsample(parent, child, chosen_factor, fullres_width)
 
 	for edge in outgoing:
 		child, parent = edge
@@ -278,13 +272,13 @@ def change_subgraph_resolution(graph, possible_factors, MAX_TRIES):
 Given a source and destination node, either adds or removes up or downsamples 
 between them make sure the graph obeys their assigned resolutions
 """
-def fix_resolutions(dest, source):
+def fix_resolutions(dest, source, fullres_width):
 	if dest.resolution != source.resolution:
 		if dest.resolution < source.resolution:
 			factor = source.resolution / dest.resolution
 			ok = check_for_downsample(dest, source, factor)
 			if not ok: # insert downsample between source and dest
-				insert_downsample(dest, source, factor)
+				insert_downsample(dest, source, factor, fullres_width)
 		else:
 			factor = dest.resolution / source.resolution
 			ok = check_for_upsample(dest, source, factor)
@@ -401,7 +395,7 @@ Let CG be its colored version
 Select a random node N on the boundary of a resolution subgraph of CG
 Change N's resolution to that of one of its neighbors with a different resolution
 """
-def flip_resolution(G):
+def flip_resolution(G, fullres_width):
 	print("CHANGING BOUNDARY")
 	g2cg = {}
 	CG, cg2g = color_graph(G, g2cg, None)
@@ -435,12 +429,12 @@ def flip_resolution(G):
 	for child in children:
 		source = cg2g[child]
 		dest = cg2g[flip_node]
-		fix_resolutions(dest, source)
+		fix_resolutions(dest, source, fullres_width)
 
 	for parent in parents:
 		source = cg2g[flip_node]
 		dest = cg2g[parent]
-		fix_resolutions(dest, source)
+		fix_resolutions(dest, source, fullres_width)
 
 	G.compute_input_output_channels()
 	compute_resolution(G)
@@ -624,7 +618,7 @@ factor is the downsampling factor
 Given a graph G, pick a resolution subgraph to delete such that all nodes 
 in that subgraph have the same resolution as the nodes in the enclosing subgraph. 
 """
-def delete_resolution_subgraph(G):
+def delete_resolution_subgraph(G, fullres_width):
 	print("inside delete subgraph")
 	print(f"the graph\n{G.dump()}")
 	
@@ -677,7 +671,7 @@ def delete_resolution_subgraph(G):
 				else: # dest.resolution < new_resolution
 					remove_updown_sample_between(dest, source)
 					factor = new_resolution / dest.resolution
-					insert_downsample(dest, source, factor)
+					insert_downsample(dest, source, factor, fullres_width)
 	for boundary_node in incoming_boundary_nodes:
 		graph_node = cg2g[boundary_node]
 		parents = get_parents(graph_node)
@@ -691,7 +685,7 @@ def delete_resolution_subgraph(G):
 				elif source.resolution > new_resolution:
 					remove_updown_sample_between(dest, source)
 					factor = source.resolution / new_resolution 
-					insert_downsample(dest, source, factor)
+					insert_downsample(dest, source, factor, fullres_width)
 				else: # source.resolution < new_resolution
 					remove_updown_sample_between(dest, source)
 					factor = new_resolution / source.resolution
@@ -704,7 +698,7 @@ def delete_resolution_subgraph(G):
 """
 Given a graph, changes one of the up or downsamples to a different type
 """
-def swap_resolution_op(graph):
+def swap_resolution_op(graph, fullres_width):
 	nodes = graph.preorder()
 	resolution_nodes = [n for n in nodes if isinstance(n, Upsample) or isinstance(n, Downsample)]
 	if len(resolution_nodes) == 0:
@@ -725,7 +719,7 @@ def swap_resolution_op(graph):
 		else:
 			downsample_types = downsample_ops
 			downsample_types = downsample_types - OrderedSet((type(chosen_node),))
-			insert_downsample(dest, source, factor, random.choice(downsample_types))
+			insert_downsample(dest, source, factor, fullres_width, DownsampleType=random.choice(downsample_types))
 
 	graph.compute_input_output_channels()
 	compute_resolution(graph)
@@ -761,7 +755,7 @@ def normalize(G, parent):
 				remove_updown_sample_between(dest, source)
 				dest = parent 
 				remove_updown_sample_between(dest, source)
-				insert_downsample(dest, source, new_factor)	
+				insert_downsample(dest, source, new_factor, fullres_width)	
 				for source_child in get_children(source):
 					normalize(source_child, source)
 			else:

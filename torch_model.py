@@ -1210,7 +1210,11 @@ class LearnedDownsampleOp(nn.Module):
 
   def forward(self, x):
     downsampler = getattr(self, self.param_name)
-    return downsampler(x)
+    out = downsampler(x)
+    if out.shape[2] != x.shape[2] / self.scale_factor:
+      print(f'down input size {x.shape}')
+      print(f'output shape {out.shape}')
+    return out
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1469,7 +1473,11 @@ class BilinearUpsampleOp(nn.Module):
 
   def forward(self, x):
     upsampler = getattr(self, self.param_name)
-    return upsampler(x)
+    out = upsampler(x)
+    if out.shape[2] != x.shape[2] * self.scale_factor:
+      print(f'up input shape {x.shape}')
+      print(f'out shape {out.shape}')
+    return out
     
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)

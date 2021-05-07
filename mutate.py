@@ -569,22 +569,22 @@ def is_in_tree(tree, node):
 def insert_resolution_subgraph_mutation(self, tree):
   possible_factors = self.args.resolution_change_factors
   # chosen_factor = random.choice(possible_factors)
-  change_subgraph_resolution(tree, possible_factors, MAX_TRIES=self.args.max_resolution_change_tries)
+  change_subgraph_resolution(tree, possible_factors, self.args.pixel_width, MAX_TRIES=self.args.max_resolution_change_tries)
   return tree
 
 @extclass(Mutator)
 def delete_resolution_subgraph_mutation(self, tree):
-  delete_resolution_subgraph(tree)
+  delete_resolution_subgraph(tree, self.args.pixel_width)
   return tree
 
 @extclass(Mutator)
 def shift_resolution_subgraph_mutation(self, tree):
-  flip_resolution(tree)
+  flip_resolution(tree, self.args.pixel_width)
   return tree
 
 @extclass(Mutator)
 def swap_resolution_op_mutation(self, tree):
-  swap_resolution_op(tree)
+  swap_resolution_op(tree, self.args.pixel_width)
   return tree
 
 

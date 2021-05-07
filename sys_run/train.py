@@ -12,7 +12,7 @@ import time
 sys.path.append(sys.path[0].split("/")[0])
 sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
 
-from dataset import FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, ids_from_file, FastDataLoader
+from dataset import FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, NASDataset, ids_from_file, FastDataLoader
 from xtrans_dataset import XGreenDataset
 from superres_dataset import SGreenQuadDataset
 from async_loader import AsynchronousLoader
@@ -90,7 +90,7 @@ def create_validation_dataset(args, gpu_id, shared_data=None, batch_size=None):
   elif args.rgb8chan:
     validation_data = RGB8ChanDataset(data_file=args.validation_file)
   elif args.nas:
-    train_data = NASDataset(data_file=args.training_file)
+    validation_data = NASDataset(data_file=args.training_file)
   else:
     if args.xtrans_green:
       validation_data = XGreenDataset(data_file=args.validation_file, flat=True)
