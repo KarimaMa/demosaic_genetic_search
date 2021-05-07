@@ -82,15 +82,17 @@ def get_incoming_outgoing_edges(S):
 	incoming = OrderedSet()
 	outgoing = OrderedSet()
 
+	S_ids = OrderedSet([id(s) for s in S])
+
 	for node in S:
 		parents = get_parents(node)
 		for p in parents:
-			if not p in S:
+			if not id(p) in S_ids:
 				outgoing.add((node, p))
 
 		children = get_children(node)
 		for c in children:
-			if not c in S:
+			if not id(c) in S_ids:
 				incoming.add((c, node))
 
 	return incoming, outgoing
@@ -212,17 +214,24 @@ def change_subgraph_resolution(graph, factor, MAX_TRIES):
 			continue
 
 		if len(node1.parents) == 0 or len(node2.parents) == 0:
+			tries += 1
 			continue
 		if len(node1.children) == 0 or len(node2.children) == 0:
+			tries += 1
+			continue
+		if id(node1) == id(node2):
+			tries += 1
 			continue
 
 		if node1.is_upstream(node2):
 			A = cg2g[node1]
 			B = cg2g[node2]
-		else:
-			assert node2.is_upstream(node1)
+		elif node2.is_upstream(node1):
 			A = cg2g[node2]
 			B = cg2g[node1]
+		else:
+			tries += 1
+			continue
 
 		break
 
@@ -241,7 +250,6 @@ def change_subgraph_resolution(graph, factor, MAX_TRIES):
 
 	# find all incoming and outgoing edges from the subgraph
 	incoming, outgoing = get_incoming_outgoing_edges(S)
-
 	# dowsamples must be inserted along all edges in incoming
 	# upsamples must be insserted along all edges in outgoing 
 	for edge in incoming:
@@ -404,7 +412,7 @@ def flip_resolution(G):
 	new_resolution, adjacent_nodes = pick_adjacent_color(flip_node)
 	print(f"flipping node")
 	print(graph_node.dump())
-	print(f"in tree\n{G.dump()}")
+	# print(f"in tree\n{G.dump()}")
 	print(f"to new resolution: {new_resolution}")
 	graph_node.resolution = new_resolution
 
@@ -578,6 +586,7 @@ def get_component(cg_node, cg2g, g2cg):
 
 
 def outof_component_source(gnode, g2cg, component_nodes):
+	print(f'looking for outof component source from {id(gnode)}')
 	if isinstance(gnode, Upsample) or isinstance(gnode, Downsample):
 		source = gnode.child
 		if g2cg[id(source)] in component_nodes:
@@ -587,15 +596,12 @@ def outof_component_source(gnode, g2cg, component_nodes):
 
 
 def into_component_dests(gnode, g2cg, component_nodes):
+	dests = []
 	if isinstance(gnode, Upsample) or isinstance(gnode, Downsample):
-		dests = []
 		for p in get_parents(gnode):
-			print(f'the grand parent of the boundary node\n{p.dump()}')
 			if g2cg[id(p)] in component_nodes:
 				dests += [p]
-		if len(dests) > 0:
-			return dests
-	return None
+	return dests
 
 
 """
@@ -610,7 +616,8 @@ in that subgraph have the same resolution as the nodes in the enclosing subgraph
 """
 def delete_resolution_subgraph(G):
 	print("inside delete subgraph")
-
+	print(f"the graph\n{G.dump()}")
+	
 	g2cg = {}
 	CG, cg2g = color_graph(G, g2cg, None)
 
@@ -631,7 +638,7 @@ def delete_resolution_subgraph(G):
 	node_in_component = g2cg[id(downsample_parents[0])]
 
 	component = get_component(node_in_component, cg2g, g2cg)
-
+	print(f"component nodes: {[id(cg2g[n]) for n in component.nodes]}")
 	# subgraph, subgraph_boundary_nodes = get_connected_component(node_in_component) 
 	# find boundary nodes of the chosen subgraph and remove any adjacent upsamples or downsamples  
 	# subgraph_boundary_nodes = [n for n in boundary_nodes if n in subgraph]
@@ -640,8 +647,8 @@ def delete_resolution_subgraph(G):
 	outgoing_boundary_nodes = [n for n in component.boundary_nodes if any([c in component.nodes for c in n.children])]
 	incoming_boundary_nodes = [n for n in component.boundary_nodes if any([p in component.nodes for p in n.parents])]
 
-	print(f"incoming boundary nodes: {[id(cg2g[n]) for n in incoming_boundary_nodes]}")
-	print(f"outgoing boundary nodes: {[id(cg2g[n]) for n in outgoing_boundary_nodes]}")
+	# print(f"incoming boundary nodes: {[id(cg2g[n]) for n in incoming_boundary_nodes]}")
+	# print(f"outgoing boundary nodes: {[id(cg2g[n]) for n in outgoing_boundary_nodes]}")
 
 	for boundary_node in outgoing_boundary_nodes:
 		graph_node = cg2g[boundary_node]
