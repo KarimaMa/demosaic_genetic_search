@@ -42,7 +42,7 @@ python $CODE_LOCAL/sys_run/run-using-queue.py \
     --experiment_name=green-superres \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
-    --save=$ROOT/results/SUPERRES-GREEN-05-06-SEARCH-RUN1 \
+    --save=$ROOT/results/SUPERRES-GREEN-05-07-SEARCH-RUN1 \
     --cost_tiers="0,400 400,800 800,1600 1600,3200 3200,6400" \
     --pareto_sampling \
     --pareto_factor=3 \
@@ -55,8 +55,8 @@ python $CODE_LOCAL/sys_run/run-using-queue.py \
     --generations=40 \
     --tablename=adobegreen \
     --tier_size=20 \
-    --green_seed_model_files=superres-seed_model_files/green_seed_asts.txt \
-    --green_seed_model_psnrs=superres-seed_model_files/green_seed_psnrs.txt \
+    --green_seed_model_files=superres-seed-model-files/green_seed_asts.txt \
+    --green_seed_model_psnrs=superres-seed-model-files/green_seed_psnrs.txt \
     --insertion_bias \
     --late_cdf_gen=9 \
     --max_footprint=30 \

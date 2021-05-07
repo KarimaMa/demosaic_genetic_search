@@ -39,10 +39,10 @@ rsync -av $DATA /dev/shm
 
 echo "Running job"
 python $CODE_LOCAL/sys_run/run-using-queue.py \
-    --experiment_name=green-superres \
+    --experiment_name=nas \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
-    --save=$ROOT/results/SUPERRES-GREEN-05-07-SEARCH-RUN0 \
+    --save=$ROOT/results/NAS-05-07-SEARCH-RUN0 \
     --cost_tiers="0,400 400,800 800,1600 1600,3200 3200,6400" \
     --pareto_sampling \
     --pareto_factor=3 \
@@ -55,12 +55,12 @@ python $CODE_LOCAL/sys_run/run-using-queue.py \
     --generations=40 \
     --tablename=adobegreen \
     --tier_size=20 \
-    --green_seed_model_files=superres-seed-model-files/green_seed_asts.txt \
-    --green_seed_model_psnrs=superres-seed-model-files/green_seed_psnrs.txt \
+    --nas_seed_model_files=seed_model_files/nas_seed_asts.txt \
+    --nas_seed_model_psnrs=seed_model_files/nas_seed_psnrs.txt \
     --insertion_bias \
     --late_cdf_gen=9 \
     --max_footprint=30 \
-    --crop=16 \
     --resolution_change_factors=2,3 \
     --pixel_width=128 \
-    --superres_green
+    --crop=16 \
+    --nas
