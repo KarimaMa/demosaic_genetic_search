@@ -360,12 +360,18 @@ class Searcher():
   Builds valid input nodes for a green model
   """
   def construct_green_inputs(self):
-    bayer = demosaic_ast.Input(4, "Bayer")
+    bayer = demosaic_ast.Input(4, name="Mosaic", resolution=float(1/2))
 
     return {
-      "Input(Bayer)": bayer,
+      "Input(Mosaic)": bayer,
     }
 
+  def construct_nas_inputs(self):
+    bayer = demosaic_ast.Input(3, name="Bayer", resolution=float(1.0))
+
+    return {
+      "Input(Mosaic)": bayer,
+    }
 
   def construct_xgreen_inputs(self):
     mosaic = demosaic_ast.Input(36, resolution=1/6, name="Mosaic3x3")
@@ -392,6 +398,10 @@ class Searcher():
           self.args.input_ops = OrderedSet([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
         elif self.args.rgb8chan: # full rgb model search uses same inputs as green search
           model_inputs = self.construct_green_inputs()
+          model_input_names = OrderedSet(model_inputs.keys())
+          self.args.input_ops = OrderedSet(list(model_inputs.values()))
+        elif self.args.nas:
+          model_inputs = self.construct_nas_inputs()
           model_input_names = OrderedSet(model_inputs.keys())
           self.args.input_ops = OrderedSet(list(model_inputs.values()))
         else: 
@@ -917,6 +927,7 @@ if __name__ == "__main__":
   parser.add_argument('--xtrans_green', action="store_true")  
   parser.add_argument('--superres_green', action="store_true")
 
+  parser.add_argument('--nas', action='store_true')
   parser.add_argument('--rgb8chan', action="store_true")
   parser.add_argument('--binop_change', action="store_true")
   parser.add_argument('--insertion_bias', action="store_true")

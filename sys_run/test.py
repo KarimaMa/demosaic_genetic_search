@@ -290,10 +290,17 @@ class Searcher():
   Builds valid input nodes for a green model
   """
   def construct_green_inputs(self):
-    bayer = demosaic_ast.Input(4, "Bayer")
+    bayer = demosaic_ast.Input(4, name="Bayer", resolution=float(1/2))
 
     return {
-      "Input(Bayer)": bayer,
+      "Input(Mosaic)": bayer,
+    }
+
+  def construct_nas_inputs(self):
+    bayer = demosaic_ast.Input(3, name="Bayer", resolution=float(1.0))
+
+    return {
+      "Input(Mosaic)": bayer,
     }
 
   def construct_xgreen_inputs(self):
@@ -316,10 +323,14 @@ class Searcher():
           green_model_id = get_green_model_id(model_ast)
           if partner_ast:
             set_green_model_id(partner_ast, green_model_id)
-          model_inputs = self.construct_chroma_inputs(green_model_id)
-          model_input_names = set(model_inputs.keys())
-          self.args.input_ops = set([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
-
+          if args.nas:
+            model_inputs = self.construct_nas_inputs()
+            model_input_names = set(model_inputs.keys())
+            self.args.input_ops = set(list(model_inputs.values()))
+          else:
+            model_inputs = self.construct_chroma_inputs(green_model_id)
+            model_input_names = set(model_inputs.keys())
+            self.args.input_ops = set([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
         else: 
           if self.args.xtrans_green:
             model_inputs = self.construct_xgreen_inputs()
@@ -688,7 +699,7 @@ class Searcher():
           if reloaded_cost != parent_model_cost:
             print(f"--- ERROR: parent model saved cost {parent_model_cost} computed cost from reload {reloaded_cost} ---")
             #exit()
-          self.debug_logger.debug(f"new model\n{new_model_ast.dump()}\n")
+          # self.debug_logger.debug(f"new model\n{new_model_ast.dump()}\n")
 
           pytorch_models = self.lower_model(new_model_id, new_model_ast)
           if pytorch_models is None:
@@ -881,7 +892,8 @@ if __name__ == "__main__":
   parser.add_argument('--full_model', action="store_true")
   parser.add_argument('--xtrans_green', action="store_true")
   parser.add_argument('--superres_green', action="store_true")
-  
+
+  parser.add_argument('--nas', action='store_true')
   parser.add_argument('--rgb8chan', action="store_true")
   parser.add_argument('--binop_change', action="store_true")
   parser.add_argument('--insertion_bias', action="store_true")
