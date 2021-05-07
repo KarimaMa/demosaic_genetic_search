@@ -45,6 +45,8 @@ def create_train_dataset(args, gpu_id, shared_data=None, logger=None, batch_size
                                           shared_data=shared_data, logger=logger)
   elif args.rgb8chan:
     train_data = RGB8ChanDataset(data_file=args.training_file)
+  elif args.nas:
+    train_data = NASDataset(data_file=args.training_file)
   else:
     if args.xtrans_green:
       train_data = XGreenDataset(data_file=args.training_file, flat=True)
@@ -87,6 +89,8 @@ def create_validation_dataset(args, gpu_id, shared_data=None, batch_size=None):
                                                shared_data=shared_data)
   elif args.rgb8chan:
     validation_data = RGB8ChanDataset(data_file=args.validation_file)
+  elif args.nas:
+    train_data = NASDataset(data_file=args.training_file)
   else:
     if args.xtrans_green:
       validation_data = XGreenDataset(data_file=args.validation_file, flat=True)
@@ -281,7 +285,9 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
 
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
-      bayer, redblue_bayer, green_grgb = input 
+      bayer, redblue_bayer, green_grgb = input
+    elif args.nas:
+      bayer = input
     else:
       if args.xtrans_green:
         mosaic3x3, mosaic3chan, flat_mosaic = input
@@ -297,13 +303,15 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
         model_inputs = {"Input(Bayer)": bayer, 
                         "Input(Green@GrGb)": green_grgb, 
                         "Input(RedBlueBayer)": redblue_bayer}
+      elif args.nas:
+        model_inputs = {"Input(Mosaic)": bayer}
       else:
         if args.xtrans_green:
           model_inputs = {"Input(Mosaic)": mosaic3chan,
                           "Input(FlatMosaic)": flat_mosaic,
                           "Input(Mosaic3x3)": mosaic3x3}
         else:
-          model_inputs = {"Input(Bayer)": bayer}
+          model_inputs = {"Input(Mosaic)": bayer}
 
       pred = model.run(model_inputs)
       loss = criterion(pred, target)
@@ -337,7 +345,9 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
 
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
-      bayer, redblue_bayer, green_grgb = input 
+      bayer, redblue_bayer, green_grgb = input
+    elif args.nas:
+      bayer = input
     else:
       if args.xtrans_green:
         mosaic3x3, mosaic3chan, flat_mosaic = input
@@ -355,13 +365,15 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
         model_inputs = {"Input(Bayer)": bayer, 
                         "Input(Green@GrGb)": green_grgb, 
                         "Input(RedBlueBayer)": redblue_bayer}
+      elif args.nas:
+        model_inputs = {"Input(Mosaic)": bayer}
       else:
         if args.xtrans_green:
           model_inputs = {"Input(Mosaic)": mosaic3chan,
                           "Input(FlatMosaic)": flat_mosaic,
                           "Input(Mosaic3x3)": mosaic3x3}
         else:
-          model_inputs = {"Input(Bayer)": bayer}
+          model_inputs = {"Input(Mosaic)": bayer}
 
       pred = model.run(model_inputs)
       
@@ -400,7 +412,9 @@ def infer(args, gpu_id, valid_queue, models, criterion):
   with torch.no_grad():
     for step, (input, target) in enumerate(valid_queue):
       if args.full_model:
-        bayer, redblue_bayer, green_grgb = input 
+        bayer, redblue_bayer, green_grgb = input
+      elif args.nas:
+        bayer = input
       else:
         if args.xtrans_green:
           mosaic3x3, mosaic3chan, flat_mosaic = input
@@ -417,14 +431,15 @@ def infer(args, gpu_id, valid_queue, models, criterion):
           model_inputs = {"Input(Bayer)": bayer, 
                           "Input(Green@GrGb)": green_grgb, 
                           "Input(RedBlueBayer)": redblue_bayer}
-          pred = model.run(model_inputs)
+        elif args.nas:
+          model_inputs = {"Input(Mosaic)": bayer}
         else:
           if args.xtrans_green:
             model_inputs = {"Input(Mosaic)": mosaic3chan,
                             "Input(FlatMosaic)": flat_mosaic,
                             "Input(Mosaic3x3)": mosaic3x3}
           else:
-            model_inputs = {"Input(Bayer)": bayer}
+            model_inputs = {"Input(Mosaic)": bayer}
        
         pred = model.run(model_inputs)
 
