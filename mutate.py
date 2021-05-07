@@ -280,7 +280,7 @@ class Mutator():
         try:
           assert_no_nonlinear_adjacency(new_tree) # allow adjacent convs, just no adjacent relu / softmax
         except AssertionError:
-          self.debug_logger.debug(f"check no adjacnet nonlinear failed on model {model_id}")
+          self.debug_logger.debug(f"check no adjacent nonlinear failed on model {model_id}")
           self.failed_mutation_info.append(self.current_mutation_info)
 
           failures += 1

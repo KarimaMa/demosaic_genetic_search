@@ -94,7 +94,7 @@ def create_validation_dataset(args, gpu_id, shared_data=None, batch_size=None):
   else:
     if args.xtrans_green:
       validation_data = XGreenDataset(data_file=args.validation_file, flat=True)
-    elif args.superres:
+    elif args.superres_green:
       validation_data = SGreenQuadDataset(data_file=args.validation_file)
     else:
       validation_data = GreenQuadDataset(data_file=args.validation_file)
