@@ -79,8 +79,8 @@ only performs deletion mutation
 class Mutator():
   def load_mutation_types_cdf(self, search_mutation_type_pdfs):
     if self.args.full_model:
-      if self.args.demosaicnet_search:
-        self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["demosaicnet_search"])
+      if self.args.nas:
+        self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["nas_search"])
       elif self.args.insertion_bias:
         self.early_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["insertion_bias"]["early"])
         self.late_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["insertion_bias"]["late"])
@@ -93,9 +93,7 @@ class Mutator():
       else:
         self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["rgb8chan"]["uniform"])
     else:
-      if self.args.demosaicnet_search:
-        self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["green_model"]["demosaicnet_search"])
-      elif self.args.insertion_bias:
+      if self.args.insertion_bias:
         self.early_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["green_model"]["insertion_bias"]["early"])
         self.late_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["green_model"]["insertion_bias"]["late"])
       else:
@@ -243,6 +241,8 @@ class Mutator():
       # mutation failed
       except (AssertionError, AttributeError, TypeError) as e: 
         print(f'exception thrown: {e}')
+        with open("exceptions.txt", "a+") as f:
+          f.write(f"{e}\n\n")
         print(traceback.print_exc())
         if mutation_type is MutationType.INSERTION:
           self.debug_logger.debug(f'insertion mutation failed on parent model {parent_id} tried to insert {self.current_mutation_info.insert_ops}')
@@ -1051,8 +1051,8 @@ def insert_mutation(self, tree, input_set, insert_above_node_id=None, insert_op=
   while True:
     # pick an op to insert
     if not insert_op:
-      if self.args.demosaicnet_search:
-        insert_op = random.sample(demosaicnet_ops, 1)[0]
+      if self.args.nas:
+        insert_op = random.sample(nas_ops, 1)[0]
       else:
         insert_op = random.sample(all_insert_ops, 1)[0]
       if insert_op is Add or insert_op is Sub or insert_op is Stack or insert_op is Mul:

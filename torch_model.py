@@ -639,8 +639,8 @@ class RGB8ChanExtractorOp(nn.Module):
     return self.output
 
   """
-  Takes bayer quad and 2 channel green prediction
-  Spits out full green channel 
+  Takes bayer quad and 8 channel prediction
+  Spits out full rgb  
   """
   def forward(self, bayer_quad, rgb_pred):
     # input: bayer an rgb missing values
@@ -671,6 +671,56 @@ class RGB8ChanExtractorOp(nn.Module):
     output[:,0,1::2,1::2] =  flat_pred[:,0,1::2,1::2] # R at Gb
     output[:,1,1::2,1::2] = flat_bayer[:,0,1::2,1::2] 
     output[:,2,1::2,1::2] =  flat_pred[:,1,1::2,1::2] # B at Gb
+
+    return output
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+
+
+class FlatRGB8ChanExtractorOp(nn.Module):
+  def __init__(self, operand1, operand2):
+    super(FlatRGB8ChanExtractorOp, self).__init__()
+    self._operands = nn.ModuleList([operand1, operand2])
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+    self._operands[1]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand1 = self._operands[0].run(model_inputs)
+      operand2 = self._operands[1].run(model_inputs)
+      self.output = self.forward(operand1, operand2)
+    return self.output
+
+  """
+  Takes 3chan bayer and 8 channel prediction
+  Spits out full rgb  
+  """
+  def forward(self, bayer3chan, rgb_pred):
+    # input: bayer an rgb missing values
+    # output: full image
+    out_shape = list(bayer3chan.shape)
+    output = torch.empty(torch.Size(out_shape), device=bayer3chan.device)
+    
+    output[:,:,:,:] = bayer3chan[:,:,:,:]
+
+    output[:,0,:,:] = rgb_pred[:,0,:,:]
+    output[:,1,:,:] = rgb_pred[:,1,:,:]
+    output[:,2,:,:] = rgb_pred[:,2,:,:]
+
+    output[:,0,0::2,1::2] = bayer3chan[:,0,0::2,1::2]
+    output[:,1,0::2,0::2] = bayer3chan[:,1,0::2,0::2]
+    output[:,1,1::2,1::2] = bayer3chan[:,1,1::2,1::2]
+    output[:,2,1::2,0::2] = bayer3chan[:,2,1::2,0::2]
 
     return output
 
@@ -717,6 +767,32 @@ class GreenExtractorOp(nn.Module):
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
+
+
+class SGreenExtractorOp(nn.Module):
+  def __init__(self, operand):
+    super(SGreenExtractorOp, self).__init__()
+    self._operands = nn.ModuleList([operand])
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output
+
+  def forward(self, green_pred):
+    return green_pred
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
 
 
 class XGreenExtractorOp(nn.Module):
@@ -1112,7 +1188,6 @@ class LearnedDownsampleOp(nn.Module):
     self._operands = nn.ModuleList([operand])
     self.scale_factor = scale_factor
     self.downsample_w = scale_factor * 2 + (scale_factor % 2) # use odd kernel width for odd sampling factors 
-
     downsampler = nn.Conv2d(C_in, C_out, self.downsample_w, stride=scale_factor, groups=groups, padding=math.ceil((self.downsample_w-self.scale_factor)/2), bias=False)
     self.param_name = param_name
     setattr(self, param_name, downsampler)
@@ -1857,6 +1932,20 @@ def ast_to_model(self, shared_children=None):
   shared_children[id(self)] = model 
   return model
 
+@extclass(FlatRGB8ChanExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
+  model = FlatRGB8ChanExtractorOp(lmodel, rmodel)
+  
+  shared_children[id(self)] = model 
+  return model
+
 @extclass(GreenExtractor)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
@@ -1867,6 +1956,19 @@ def ast_to_model(self, shared_children=None):
   lmodel = self.lchild.ast_to_model(shared_children)
   rmodel = self.rchild.ast_to_model(shared_children)
   model = GreenExtractorOp(lmodel, rmodel)
+  
+  shared_children[id(self)] = model 
+  return model
+
+@extclass(SGreenExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child = self.child.ast_to_model(shared_children)
+  model = SGreenExtractorOp(child)
   
   shared_children[id(self)] = model 
   return model

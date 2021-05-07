@@ -27,14 +27,12 @@ def GreenDemosaicknet(depth, width):
   stacked = Stack(up2_bayer, up2_residual) 
 
   highres_green = Conv2D(stacked, 1, kwidth=3)
-  # post_relu = Relu(post_conv)
-  # highres_green = Conv1x1(post_relu, 1)
-
-  # predicing all the missing values
-  highres_green.assign_parents()
-  highres_green.compute_input_output_channels()
-  compute_resolution(highres_green)
-  return highres_green
+  out = SGreenExtractor(highres_green)
+  
+  out.assign_parents()
+  out.compute_input_output_channels()
+  compute_resolution(out)
+  return out
 
 
 def GreenMultires(depth, width):
@@ -75,10 +73,11 @@ def GreenMultires(depth, width):
   stacked = Stack(up2_bayer, up2_residual) 
   highres_green = Conv2D(stacked, 1, kwidth=3)
 
+  out = SGreenExtractor(highres_green)
   # predicing all the missing values
-  highres_green.assign_parents()
-  highres_green.compute_input_output_channels()
-  compute_resolution(highres_green)
-  return highres_green
+  out.assign_parents()
+  out.compute_input_output_channels()
+  compute_resolution(out)
+  return out
 
 
