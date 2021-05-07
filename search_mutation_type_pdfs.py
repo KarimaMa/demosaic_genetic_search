@@ -1,23 +1,27 @@
 
 full_model_pdfs = {
-    "demosaicnet_search": [0.22, 0.22, 0, 0.20, 0.20, 0.16],
-    "insertion_bias": {"early": [0.4, 0.5, 0, 0, 0, 0.10], "late": [0.25, 0.25, 0.1, 0.15, 0.15, 0.10]},
-    "uniform": [1.0/6.0 for i in range(6)]
+    "insertion_bias": {"early": [0.09, 0.09, 0.14, 0.09, 0.09, 0.14, 0.09, 0.09, 0.09, 0.09], "late": [0.1 for i in range(10)]},
+    "uniform": [0.1 for i in range(10)]
 }
 
 rgb8chan_pdfs = {
-  "insertion_bias": {"early": [0.4, 0.6, 0, 0, 0, 0], "late": [0.3, 0.3, 0.1, 0.15, 0.15, 0]},
-  "uniform": [0.2, 0.2, 0.2, 0.2, 0.2, 0]
+  "insertion_bias": {"early": [0.1, 0.1, 0.15, 0.1, 0.1, 0.15, 0.1, 0.1, 0.1], "late": [float(1/9) for i in range(9)]},
+  "uniform": [float(1/9) for i in range(9)]
+}
+
+nas_pdfs = {
+  "insertion_bias": {"early": [0.18, 0.28, 0.18, 0.18, 0.18], "late": [float(1/5) for i in range(5)]},
+  "uniform": [0.2, 0.2, 0.2, 0.2, 0.2]
 }
 
 green_model_pdfs = {
-  "demosaicnet_search":   [0.3, 0.3, 0, 0.2, 0.2, 0],
   "insertion_bias": {"early": [0.1, 0.1, 0.15, 0.1, 0.1, 0.15, 0.1, 0.1, 0.1], "late": [float(1/9) for i in range(9)]},
   "uniform": [float(1/9) for i in range(9)]
 }
 
 mutation_types_pdfs = {
   "full_model": full_model_pdfs,
+  "nas": nas_pdfs,
   "rgb8chan": rgb8chan_pdfs,
   "green_model": green_model_pdfs  
 }

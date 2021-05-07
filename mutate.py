@@ -80,12 +80,17 @@ class Mutator():
   def load_mutation_types_cdf(self, search_mutation_type_pdfs):
     if self.args.full_model:
       if self.args.nas:
-        self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["nas_search"])
-      elif self.args.insertion_bias:
-        self.early_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["insertion_bias"]["early"])
-        self.late_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["insertion_bias"]["late"])
+        if self.args.insertion_bias:
+          self.early_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["nas"]["insertion_bias"]["early"])
+          self.late_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["nas"]["insertion_bias"]["late"])
+        else:
+          self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["nas"]["uniform"])
       else:
-        self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["uniform"])
+        if self.args.insertion_bias:
+          self.early_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["insertion_bias"]["early"])
+          self.late_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["insertion_bias"]["late"])
+        else:
+          self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["uniform"])
     elif self.args.rgb8chan:
       if self.args.insertion_bias:
         self.early_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["rgb8chan"]["insertion_bias"]["early"])
@@ -772,7 +777,7 @@ def delete_mutation(self, tree, node=None):
   if node is None:
     return None
 
-  self.debug_logger.debug(f"the chosen delete node {node} id {tree.get_preorder_id(node)}")
+  self.debug_logger.debug(f"the chosen delete node {node} id {tree.get_preorder_id(node)} in tree\n{tree.dump()}")
   self.current_mutation_info.node_id = tree.get_preorder_id(node)
   tree = self.delete_nodes(tree, node)
   tree.compute_input_output_channels()
@@ -1293,13 +1298,15 @@ def accept_tree(self, tree):
     self.debug_logger.debug("rejecting invalid spatial resolution")
     return False, "rejecting invalid spatial resolution"
     
-  if isinstance(tree, Downsample) and isinstance(tree.child, Upsample):
-    self.debug_logger.debug("rejecting adjacent Downsample and Upsample")
-    return False, "rejecting adjacent Downsample and Upsample"
+  if isinstance(tree, Downsample):
+    if isinstance(tree.child, Upsample) or isinstance(tree.child, Downsample):
+      self.debug_logger.debug("rejecting adjacent Downsample and Upsample")
+      return False, "rejecting adjacent Downsample and Upsample"
 
-  if isinstance(tree, Upsample) and isinstance(tree.child, Downsample):
-    self.debug_logger.debug("rejecting adjacent Upsample and Downsample")
-    return False, "rejecting adjacent Upsample and Downsample"
+  if isinstance(tree, Upsample):
+    if isinstance(tree.child, Downsample) or isinstance(tree.child, Upsample):
+      self.debug_logger.debug("rejecting adjacent Upsample and Downsample")
+      return False, "rejecting adjacent Upsample and Downsample"
 
   # reject DAGs with receptive fields larger than threshold
   footprint = tree.compute_footprint(1)
