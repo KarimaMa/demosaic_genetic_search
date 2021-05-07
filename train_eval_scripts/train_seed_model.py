@@ -16,7 +16,7 @@ import cost
 import util
 import model_lib
 from torch_model import ast_to_model
-from dataset import GreenQuadDataset, FullPredictionQuadDataset, FastDataLoader, FullPredictionProcessedDataset, GreenProcessedQuadDataset
+from dataset import GreenQuadDataset, NASDataset, FullPredictionQuadDataset, FastDataLoader, FullPredictionProcessedDataset, GreenProcessedQuadDataset
 from tree import print_parents
 import demosaic_ast
 from footprint import compute_footprint
@@ -26,10 +26,10 @@ def run(args, models, model_id, model_dir):
   print(f"training {len(models)} models")
   log_format = '%(asctime)s %(levelname)s %(message)s'
 
-  if args.train:
-    train_loggers = [util.create_logger(f'{model_id}_v{i}_train_logger', logging.INFO, \
-                                        log_format, os.path.join(model_dir, f'v{i}_train_log'))\
-                    for i in range(len(models))]
+
+  train_loggers = [util.create_logger(f'{model_id}_v{i}_train_logger', logging.INFO, \
+                                      log_format, os.path.join(model_dir, f'v{i}_train_log'))\
+                  for i in range(len(models))]
 
   validation_loggers = [util.create_logger(f'{model_id}_v{i}_validation_logger', logging.INFO, \
                                           log_format, os.path.join(model_dir, f'v{i}_validation_log')) \
@@ -53,25 +53,27 @@ def run(args, models, model_id, model_dir):
       args.learning_rate) for m in models]
  
   if args.full_model:
-    if args.train:
+    if args.nas:
+      train_data = NASDataset(data_file=args.training_file) 
+      validation_data = NASDataset(data_file=args.validation_file)
+      test_data = NASDataset(data_file=args.test_file)
+    else:
       train_data = FullPredictionProcessedDataset(data_file=args.training_file)
-    validation_data = FullPredictionProcessedDataset(data_file=args.validation_file)
-    test_data = FullPredictionProcessedDataset(data_file=args.test_file)
+      validation_data = FullPredictionProcessedDataset(data_file=args.validation_file)
+      test_data = FullPredictionProcessedDataset(data_file=args.test_file)
 
   else:
-    if args.train:
-      train_data = GreenQuadDataset(data_file=args.training_file) 
-      validation_data = GreenQuadDataset(data_file=args.validation_file)
-      test_data = GreenQuadDataset(data_file=args.test_file)
+    train_data = GreenQuadDataset(data_file=args.training_file) 
+    validation_data = GreenQuadDataset(data_file=args.validation_file)
+    test_data = GreenQuadDataset(data_file=args.test_file)
     
-  if args.train:
-    num_train = len(train_data)
-    train_indices = list(range(int(num_train*args.train_portion)))
+  num_train = len(train_data)
+  train_indices = list(range(int(num_train*args.train_portion)))
 
-    train_queue = FastDataLoader(
-        train_data, batch_size=args.batch_size,
-        sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
-        pin_memory=True, num_workers=8)
+  train_queue = FastDataLoader(
+      train_data, batch_size=args.batch_size,
+      sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
+      pin_memory=True, num_workers=8)
 
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
@@ -88,32 +90,20 @@ def run(args, models, model_id, model_dir):
     sampler=torch.utils.data.sampler.SequentialSampler(test_indices),
     pin_memory=True, num_workers=8)
  
-  if args.train:
-    for epoch in range(args.epochs):
-      # training
-      train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, \
-        model_pytorch_files, validation_queue, validation_loggers, epoch)
-      print(f"finished epoch {epoch}")
-      # validation
-      valid_losses, val_psnrs = infer(args, validation_queue, models, criterion, validation_loggers)
-      test_losses, test_psnrs = infer(args, test_queue, models, criterion, test_loggers)
-
-      for i in range(len(models)):
-        validation_loggers[i].info('validation epoch %03d mse %e psnr %e', epoch, valid_losses[i], val_psnrs[i])
-        test_loggers[i].info('test epoch %03d mse %e psnr %e', epoch, test_losses[i], test_psnrs[i])
-
-    return valid_losses, train_losses
-  else:
+  for epoch in range(args.epochs):
+    # training
+    train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, \
+      model_pytorch_files, validation_queue, validation_loggers, epoch)
+    print(f"finished epoch {epoch}")
+    # validation
     valid_losses, val_psnrs = infer(args, validation_queue, models, criterion, validation_loggers)
     test_losses, test_psnrs = infer(args, test_queue, models, criterion, test_loggers)
 
     for i in range(len(models)):
-      print(f"valid loss {valid_losses[i]}")
-      validation_loggers[i].info('validation mse %e psnr %e', valid_losses[i], val_psnrs[i])
-      test_loggers[i].info('test mse %e psnr %e', test_losses[i], test_psnrs[i])
+      validation_loggers[i].info('validation epoch %03d mse %e psnr %e', epoch, valid_losses[i], val_psnrs[i])
+      test_loggers[i].info('test epoch %03d mse %e psnr %e', epoch, test_losses[i], test_psnrs[i])
 
-    return valid_losses, test_losses 
-
+  return valid_losses, train_losses
 
 
 def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files, validation_queue, validation_loggers, epoch):
@@ -125,10 +115,15 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
 
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
-      bayer, redblue_bayer, green_grgb = input 
-      bayer = bayer.cuda()
-      redblue_bayer = redblue_bayer.cuda()
-      green_grgb = green_grgb.cuda()
+      if args.nas:
+        bayer = input
+        bayer = bayer.cuda()
+        target = target.cuda()
+      else:
+        bayer, redblue_bayer, green_grgb = input 
+        bayer = bayer.cuda()
+        redblue_bayer = redblue_bayer.cuda()
+        green_grgb = green_grgb.cuda()
 
     else:
       mosaic = input
@@ -150,9 +145,13 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
       optimizers[i].zero_grad()
       model.reset()
       if args.full_model:
-        model_inputs = {"Input(Bayer)": bayer, 
+        if args.nas:
+          model_inputs = {"Input(Mosaic)": bayer}
+        else:     
+          model_inputs = {"Input(Bayer)": bayer, 
                         "Input(Green@GrGb)": green_grgb, 
                         "Input(RedBlueBayer)": redblue_bayer}
+
         pred = model.run(model_inputs)
       else:
         model_inputs = {"Input(Mosaic)": mosaic}
@@ -206,15 +205,20 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
   with torch.no_grad():
     for step, (input, target) in enumerate(valid_queue):
       if args.full_model:
-        bayer, redblue_bayer, green_grgb = input 
-        bayer = bayer.cuda()
-        redblue_bayer = redblue_bayer.cuda()
-        green_grgb = green_grgb.cuda()
+        if args.nas:
+          bayer = input
+          bayer = bayer.cuda()
+          target = target.cuda()
+        else:
+          bayer, redblue_bayer, green_grgb = input 
+          bayer = bayer.cuda()
+          redblue_bayer = redblue_bayer.cuda()
+          green_grgb = green_grgb.cuda()
       else:
         mosaic = input
         mosaic = mosaic.cuda()
         target = target.cuda()
-      
+    
       if args.crop > 0:
         target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
@@ -223,7 +227,10 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
       for i, model in enumerate(models):
         model.reset()
         if args.full_model:
-          model_inputs = {"Input(Bayer)": bayer, 
+          if args.nas:
+            model_inputs = {"Input(Mosaic)": bayer}
+          else:     
+            model_inputs = {"Input(Bayer)": bayer, 
                           "Input(Green@GrGb)": green_grgb, 
                           "Input(RedBlueBayer)": redblue_bayer}
           pred = model.run(model_inputs)
@@ -278,6 +285,7 @@ if __name__ == "__main__":
   parser.add_argument('--multiresquadgreen', action='store_true')
   parser.add_argument('--gradienthalide', action='store_true')
   parser.add_argument('--bilinear', action='store_true')
+
   parser.add_argument('--chromagradienthalide', action='store_true')
   parser.add_argument('--chromaseed1', action='store_true')
   parser.add_argument('--chromaseed2', action='store_true')
@@ -309,8 +317,8 @@ if __name__ == "__main__":
 
   parser.add_argument('--full_model', action="store_true")
   parser.add_argument('--testing', action='store_true')
+  parser.add_argument('--nas', action='store_true')
 
-  parser.add_argument('--train', action='store_true')
   parser.add_argument('--pretrained', action='store_true')
   parser.add_argument('--weights', type=str, help="pretrained weights")
   parser.add_argument('--green_pretrained', action='store_true')
@@ -353,6 +361,8 @@ if __name__ == "__main__":
   elif args.bilinear:
     logger.info("TRAINING GRADIENT HALIDE GREEN")
     model = model_lib.Bilinear(args.width, args.k)
+  elif args.nas:
+    model = model_lib.NASNet(args.depth, args.width)
   elif args.chromagradienthalide:
     logger.info("TRAINING CHROMA GRADIENT HALIDE")
     model = model_lib.RGBGradientHalideModel(args.width, args.k)
@@ -383,7 +393,7 @@ if __name__ == "__main__":
     model = model_lib.basic1D_green_model()
 
 
-  if args.full_model and not (args.chromagradienthalide or args.fullrgbdemosaicnet or args.fullrgbgradienthalide):
+  if args.full_model and not (args.chromagradienthalide or args.fullrgbdemosaicnet or args.fullrgbgradienthalide or args.nas):
     print(f'--- setting the no_grad parameter in green model {args.no_grad} ---')
 
     set_no_grad(green_model, args.no_grad)
