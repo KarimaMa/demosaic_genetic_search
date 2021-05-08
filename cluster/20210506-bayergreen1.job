@@ -9,10 +9,10 @@ transfer_executable   = false
 
 requirements = TARGET.Machine=="ilcomp6y.ilcomp"
 arguments             = $(process)
-executable            = cluster/20210116-green1.sh
+executable            = cluster/20210506-bayergreen1.sh
 
-output                = log/20210116-green1.$(process).out
-error                 = log/20210116-green1.$(process).err
-log                   = log/20210116-green1.$(process).log
+output                = log/20210506-bayergreen1.$(process).out
+error                 = log/20210506-bayergreen1.$(process).err
+log                   = log/20210506-bayergreen1.$(process).log
 
 queue 4
