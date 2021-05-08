@@ -643,7 +643,7 @@ class Searcher():
       end_generation = self.args.generations 
 
     self.search_logger.info(f"--- STARTING SEARCH AT GENERATION {start_generation} AND ENDING AT {end_generation} ---")
-      
+
     for generation in range(start_generation, end_generation):
       generational_tier_sizes = [len(tier.items()) for tier in cost_tiers.tiers]
       if self.args.restart_generation and (generation == self.args.restart_generation):
@@ -873,6 +873,9 @@ if __name__ == "__main__":
   parser.add_argument('--green_seed_model_files', type=str, help='file with list of filenames of green seed model asts')
   parser.add_argument('--green_seed_model_psnrs', type=str, help='file with list of psnrs of green seed models')
 
+  parser.add_argument('--nas_seed_model_files', type=str, help='file with list of filenames of nas seed model asts')
+  parser.add_argument('--nas_seed_model_psnrs', type=str, help='file with list of psnrs of nas seed models')
+
   parser.add_argument('--rgb8chan_seed_model_files', type=str, help='file with list of filenames of rgb8chan seed model asts')
   parser.add_argument('--rgb8chan_seed_model_psnrs', type=str, help='file with list of psnrs of rgb8chan seed models')
 
@@ -903,6 +906,7 @@ if __name__ == "__main__":
 
   # training parameters
   parser.add_argument('--num_gpus', type=int, default=4, help='number of available GPUs') # change this to use all available GPUs
+
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
   parser.add_argument('--learning_rate', type=float, default=0.01, help='initial learning rate')
   parser.add_argument('--lrsearch', action='store_true', help='whether or not to use lr search')
@@ -958,6 +962,10 @@ if __name__ == "__main__":
   elif args.rgb8chan:
     args.seed_model_files = args.rgb8chan_seed_model_files
     args.seed_model_psnrs = args.rgb8chan_seed_model_psnrs
+    args.task_out_c = 3
+  elif args.nas:
+    args.seed_model_files = args.nas_seed_model_files
+    args.seed_model_psnrs = args.nas_seed_model_psnrs
     args.task_out_c = 3
   else:
     args.seed_model_files = args.green_seed_model_files
