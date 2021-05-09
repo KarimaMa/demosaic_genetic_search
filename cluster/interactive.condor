@@ -1,8 +1,7 @@
 universe                = docker
-docker_image            = docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v13
+docker_image            = docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v10
 
-Requirements = TARGET.Machine=="ilcomp5f.ilcomp"
-# Requirements = TARGET.Machine=="ilcomp36.ilcomp"
+Requirements = TARGET.Machine=="ilcomp6y.ilcomp"
 
 # We need this to get 64GB of /dev/shm
 environment = "HIGHMEM=1 MULTIGPU=0123"
