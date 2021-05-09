@@ -574,7 +574,7 @@ class Searcher():
                                         validation_psnrs, self.args, pending_start_times, pending_tasks, self.pending_locks, \
                                         finished_tasks, self.log_format, self.work_loggers[wid])
               new_worker.start()
-              self.workers[wid] = new_worker
+              workers[wid] = new_worker
           
           self.pending_locks[wid].release()
       
