@@ -129,6 +129,8 @@ def insert_downsample(dest, source, factor, fullres_width, DownsampleType=None):
 	new_resolution = source.resolution / factor
 	new_downsample = build_updown_op(DownsampleType, factor, new_resolution, source)
 	insertion_edge_updates(dest, source, new_downsample)
+	fixed = fix_channel_count_upwards(new_downsample, new_downsample.out_c)
+	assert fixed, "Could not make channel counts agree after inserting downsample"
 
 
 def insert_upsample(dest, source, factor, UpsampleType=None):
@@ -146,6 +148,8 @@ def insert_upsample(dest, source, factor, UpsampleType=None):
 	new_resolution = source.resolution * factor
 	new_upsample = build_updown_op(UpsampleType, factor, new_resolution, source)
 	insertion_edge_updates(dest, source, new_upsample)
+	fixed = fix_channel_count_upwards(new_upsample, new_upsample.out_c)
+	assert fixed, "Could not make channel counts agree after inserting upsample"
 
 
 """

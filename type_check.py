@@ -228,20 +228,26 @@ def check_channel_count(node):
     assert(child_c == node.Ic())
     return node.Jc()
   elif isinstance(node, UnopII):
-    child_c = check_channel_count(node.child)
-    return child_c
+    child_out_c = check_channel_count(node.child)
+    assert(node.in_c == child_out_c)
+    return node.out_c
   elif isinstance(node, UnopIJ):
     assert((node.in_c % node.groups == 0) and (node.out_c % node.groups == 0))
-    check_channel_count(node.child)
+    child_out_c = check_channel_count(node.child)
+    assert(node.in_c == child_out_c)
     return node.out_c
   elif isinstance(node, UnopIIdiv):
     assert((node.in_c % node.out_c == 0) and (node.in_c >= node.out_c))
+    child_out_c = check_channel_count(node.child)
+    assert (node.in_c == child_out_c)
     return node.out_c
   elif isinstance(node, UnopIJFixed):
     if isinstance(node, Unpack):
       assert( (node.in_c / node.factor**2) == node.out_c )
     elif isinstance(node, Pack):
       assert( (node.in_c * node.factor**2) == node.out_c )
+    child_out_c = check_channel_count(node.child)
+    assert(node.in_c == child_out_c)
     return node.out_c
   elif isinstance(node, Const):
     return node.out_c
