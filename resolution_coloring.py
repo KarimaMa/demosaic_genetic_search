@@ -2,7 +2,7 @@ from demosaic_ast import downsample_ops, upsample_ops, LearnedDownsample, Pack, 
 from tree_manipulation import get_children, get_parents, insertion_edge_updates, replace_parent, replace_child
 from orderedset import OrderedSet
 import random
-from type_check import compute_resolution
+from type_check import compute_resolution, fix_channel_count_upwards
 
 
 class ColoredGraph:
