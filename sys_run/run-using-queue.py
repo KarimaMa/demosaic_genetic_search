@@ -510,7 +510,7 @@ class Searcher():
 
 
   # def monitor_training_tasks(self, workers, work_queue, training_tasks, pending_tasks, pending_start_times, validation_psnrs):
-  def monitor_training_tasks(self, workers, training_tasks, pending_tasks, pending_start_times, validation_psnrs):
+  def monitor_training_tasks(self, workers, training_tasks, pending_tasks, pending_start_times, finished_tasks, validation_psnrs):
     num_tasks = len([l for l in open(self.tasks_file, "r")])
     
     timeout = self.args.train_timeout
@@ -815,7 +815,7 @@ class Searcher():
       # for w in range(self.num_workers):
       #   work_queue.put(None) # place sentinels telling workers to exit
 
-      failed_tasks = self.monitor_training_tasks(workers, training_tasks, pending_tasks, pending_start_times, validation_psnrs)
+      failed_tasks = self.monitor_training_tasks(workers, training_tasks, pending_tasks, pending_start_times, finished_tasks, validation_psnrs)
 
       print("finished tasks")
       # update model database 
