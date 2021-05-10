@@ -42,7 +42,7 @@ python $CODE_LOCAL/sys_run/run-using-queue.py \
     --experiment_name=xtrans-green \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
-    --save=$ROOT/results/XTRANS-GREEN-05-07-SEARCH-RUN0 \
+    --save=$ROOT/results/XTRANS-GREEN-05-10-SEARCH-RUN1 \
     --cost_tiers="0,200 200,400 400,800 800,1600 1600,3200" \
     --pareto_sampling \
     --pareto_factor=3 \
@@ -51,7 +51,7 @@ python $CODE_LOCAL/sys_run/run-using-queue.py \
     --mutations_per_generation=12 \
     --learning_rate=0.004 \
     --epochs=6 \
-    --starting_model_id=0 \
+    --starting_model_id=4000 \
     --generations=40 \
     --tablename=adobegreen \
     --tier_size=20 \
