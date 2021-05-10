@@ -840,7 +840,8 @@ class Searcher():
         self.search_logger.info(f"adding model {task_info.model_id} with psnrs {model_psnrs} to db")
 
         compute_cost = task_info.database_entry["compute_cost"]
-        new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
+        if not math.isinf(best_psnr):
+          new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
         
         self.update_model_database(task_info, model_psnrs)
         self.update_perf_database(task_info.model_id, compute_cost, task_time)
