@@ -25,6 +25,7 @@ from enum import Enum
 from footprint import compute_footprint
 from search_mutation_type_pdfs import mutation_types_pdfs
 from tree_manipulation import insertion_edge_updates, replace_child, replace_parent
+import normalize
 from resolution_coloring import change_subgraph_resolution, flip_resolution, delete_resolution_subgraph, swap_resolution_op
 import traceback
 
@@ -215,11 +216,11 @@ class Mutator():
             new_tree = self.group_mutation(tree_copy)
           elif mutation_type is MutationType.INSERT_RESOLUTION_SUBGRAPH:
             self.debug_logger.debug(f"attempting insert resolution subgraph")
-            with open("attempt.txt", "a+") as f:
-              f.write("1\n")
             new_tree = self.insert_resolution_subgraph_mutation(tree_copy)
           elif mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
             self.debug_logger.debug(f"attempting delete resolution subgraph")
+            with open("attempts.txt", "a+") as f:
+              f.write("1\n")
             new_tree = self.delete_resolution_subgraph_mutation(tree_copy)
           elif mutation_type is MutationType.SHIFT_RESOLUTION_SUGRAPH:
             self.debug_logger.debug(f"attempting shift resolution subgraph")
@@ -232,13 +233,16 @@ class Mutator():
             new_tree = self.green_model_change_mutation(tree_copy)
 
           self.debug_logger.debug(f"--- finished mutation ---")
+          normalize.fix_nonlinear_adjacency(new_tree)
 
           tree_accepted, accept_err = self.accept_tree(new_tree)
 
           if tree_accepted: 
             break      
           else:
-            print("tree rejected")
+            if mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
+              with open("rejected.txt", "a+") as f:
+                f.write("1\n")
           # tree was pruned
           self.failed_mutation_info.append(self.current_mutation_info)
           prune_rejections += 1
@@ -261,8 +265,10 @@ class Mutator():
           self.debug_logger.debug(f'green model change mutation failed on model {parent_id}')
         elif mutation_type is MutationType.INSERT_RESOLUTION_SUBGRAPH:
           self.debug_logger.debug(f'insert resolution subgraph mutation failed on model {parent_id}')
+        elif mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
+          self.debug_logger.debug(f'delete resolution subgraph mutation failed on model {parent_id}')
           with open("fails.txt", "a+") as f:
-            f.write("1\n")
+            f.write("1\n")  
         else:
           self.debug_logger.debug(f'group mutation failed on model {parent_id}')
 
@@ -271,10 +277,15 @@ class Mutator():
         continue
       else: # successfully mutated tree
         try:
+          print(f"the tree {new_tree.dump()}")
           check_channel_count(new_tree) # these should not fire...
-        except AssertionError:
-          self.debug_logger.debug(f"channel count check failed on model {model_id}")
+        except AssertionError as e:
+          self.debug_logger.debug(f"channel count check failed on model {model_id} the assertion error {e}")
           self.failed_mutation_info.append(self.current_mutation_info)
+          if mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
+            with open("channel_check_fails.txt", "a+") as f:
+              f.write("1\n")  
+
           failures += 1
           continue
         try:
@@ -282,7 +293,9 @@ class Mutator():
         except AssertionError:
           self.debug_logger.debug(f"check no adjacent nonlinear failed on model {model_id}")
           self.failed_mutation_info.append(self.current_mutation_info)
-
+          if mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
+            with open("linear_adjacency_fails.txt", "a+") as f:
+              f.write("1\n")  
           failures += 1
           continue
 
@@ -293,6 +306,9 @@ class Mutator():
           if h in self.seen_structures:
             if random.random() < self.args.structural_sim_reject:
               structural_rejections += 1
+              if mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
+                with open("structural_rejections.txt", "a+") as f:
+                  f.write("1\n")
               continue
             else: # accepting tree that is structurally similar to one already seen
               self.seen_models[new_tree] = {"model_ids":[int(model_id)], "hash": hash(new_tree), "ast_str": new_tree.dump()}
@@ -305,12 +321,9 @@ class Mutator():
             return new_tree, h, stats
 
         else: # we've seen and evaluated this exact tree before
-          if mutation_type is MutationType.INSERTION:
-            self.debug_logger.debug(f'insertion mutation failed on parent model {parent_id}')
-            if "Add" in self.current_mutation_info.insert_ops or "Sub" in self.current_mutation_info.insert_ops \
-              or "Mul" in self.current_mutation_info.insert_ops or "Stack" in self.current_mutation_info.insert_ops:
-                self.binop_seen += 1
-
+          if mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
+            with open("seen_rejections.txt", "a+") as f:
+              f.write("1\n")
           self.seen_models[new_tree]["model_ids"].append(int(model_id))
           seen_rejections += 1
           continue
@@ -478,10 +491,11 @@ def channel_mutation(self, tree, chosen_conv_id=None):
     factors = in_c_factors.intersection(out_c_factors)
     closest_factor = get_closest_factor(factors, chosen_node.groups)
     chosen_node.groups = closest_factor # if current groups is already a factor, this does nothing
-
+    tree.compute_input_output_channels()
     return tree
   else:
-    self.debug_logger.debug(f"Unable to perturb output channel of {chosen_node} from {chosen_node.out_c} to {new_out_c}")
+    self.debug_logger.debug(f"Unable to perturb output channel of \n{chosen_node.dump()}\n from {chosen_node.out_c} to {new_out_c}")
+    print(f"in tree\n{tree.dump()}")
     assert False, f"Unable to perturb channel counts of node {chosen_node}"
 
 
@@ -841,19 +855,20 @@ INSERT PARENT IS NOT MODIFIED TO POINT TO THE NEW NODE
 """
 @extclass(Mutator)
 def insert_unary_op(self, OpClass, insert_parent, insert_child):
+  resolution = insert_child.resolution
   if issubclass(OpClass, UnopIIdiv):
     in_c_factors = get_factors(insert_child.out_c)
     # remove the input channels from the list of output channel options
     in_c_factors.remove(insert_child.out_c)
-    assert len(in_c_factors) > 0, "Cannot insert {OpClass} without output channels to choose from"
+    assert len(in_c_factors) > 0, f"Cannot insert {OpClass} without output channels to choose from"
     out_c = random.sample(in_c_factors, 1)[0]
-    new_node = OpClass(insert_child, out_c)
+    new_node = OpClass(insert_child, out_c, resolution=resolution)
   elif issubclass(OpClass, UnopIJ):
     out_c = insert_child.out_c
-    new_node = OpClass(insert_child, out_c)    
+    new_node = OpClass(insert_child, out_c, resolution=resolution)    
   else:
     assert issubclass(OpClass, UnopII), f"Invalid Unop type {OpClass}"
-    new_node = OpClass(insert_child)
+    new_node = OpClass(insert_child, resolution=resolution)
  
   insertion_edge_updates(insert_parent, insert_child, new_node)
 

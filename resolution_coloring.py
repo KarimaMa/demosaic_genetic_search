@@ -115,7 +115,7 @@ def build_updown_op(OpType, factor, resolution, child):
   return OpType(child, **kwargs)
 
 
-def insert_downsample(dest, source, factor, fullres_width, DownsampleType=None):
+def insert_downsample(dest, source, factor, fullres_width, DownsampleType=None, fix_channels=True):
   possible_dowsample_types = downsample_ops
   pixel_width = get_pixel_width(source, fullres_width)
   assert pixel_width % factor == 0, "chosen downsampling factor must divide the input pixel width"
@@ -126,15 +126,19 @@ def insert_downsample(dest, source, factor, fullres_width, DownsampleType=None):
   if DownsampleType is None:
     DownsampleType = random.choice(possible_dowsample_types)
 
+  print(f"inserting {DownsampleType} between {id(dest)} {id(source)}")
+
   new_resolution = source.resolution / factor
   new_downsample = build_updown_op(DownsampleType, factor, new_resolution, source)
   insertion_edge_updates(dest, source, new_downsample)
   new_downsample.compute_input_output_channels()
-  fixed = fix_channel_count_upwards(new_downsample, new_downsample.out_c)
-  assert fixed, "Could not make channel counts agree after inserting downsample"
+
+  if fix_channels:
+    fixed = fix_channel_count_upwards(new_downsample, new_downsample.out_c)
+    assert fixed, "Could not make channel counts agree after inserting downsample"
 
 
-def insert_upsample(dest, source, factor, UpsampleType=None):
+def insert_upsample(dest, source, factor, UpsampleType=None, fix_channels=True):
   possible_upsample_types = upsample_ops
   channel_count = source.out_c
   if channel_count % (factor**2) != 0:
@@ -146,12 +150,16 @@ def insert_upsample(dest, source, factor, UpsampleType=None):
   if UpsampleType is None:
     UpsampleType = random.choice(possible_upsample_types)
 
+  print(f"inserting {UpsampleType} between {id(dest)} {id(source)}")
+
   new_resolution = source.resolution * factor
   new_upsample = build_updown_op(UpsampleType, factor, new_resolution, source)
   insertion_edge_updates(dest, source, new_upsample)
   new_upsample.compute_input_output_channels()
-  fixed = fix_channel_count_upwards(new_upsample, new_upsample.out_c)
-  assert fixed, "Could not make channel counts agree after inserting upsample"
+
+  if fix_channels:
+    fixed = fix_channel_count_upwards(new_upsample, new_upsample.out_c)
+    assert fixed, "Could not make channel counts agree after inserting upsample"
 
 
 """
@@ -265,10 +273,12 @@ def change_subgraph_resolution(graph, possible_factors, fullres_width, MAX_TRIES
   for edge in incoming:
     child, parent = edge
     insert_downsample(parent, child, chosen_factor, fullres_width)
+    graph.compute_input_output_channels()
 
   for edge in outgoing:
     child, parent = edge
     insert_upsample(parent, child, chosen_factor)
+    graph.compute_input_output_channels()
 
   graph.compute_input_output_channels()
   compute_resolution(graph)
@@ -284,12 +294,12 @@ def fix_resolutions(dest, source, fullres_width):
       factor = source.resolution / dest.resolution
       ok = check_for_downsample(dest, source, factor)
       if not ok: # insert downsample between source and dest
-        insert_downsample(dest, source, factor, fullres_width)
+        insert_downsample(dest, source, factor, fullres_width, fix_channels=False)
     else:
       factor = dest.resolution / source.resolution
       ok = check_for_upsample(dest, source, factor)
       if not ok:
-        insert_upsample(dest, source, factor)
+        insert_upsample(dest, source, factor, fix_channels=False)
 
   if dest.resolution == source.resolution:
     # check there is no upsample or downsample between them 
@@ -422,7 +432,7 @@ def flip_resolution(G, fullres_width):
   new_resolution, adjacent_nodes = pick_adjacent_color(flip_node)
   print(f"flipping node")
   print(graph_node.dump())
-  # print(f"in tree\n{G.dump()}")
+  print(f"in tree {G.dump()}")
   print(f"to new resolution: {new_resolution}")
   graph_node.resolution = new_resolution
 
@@ -441,6 +451,10 @@ def flip_resolution(G, fullres_width):
     source = cg2g[flip_node]
     dest = cg2g[parent]
     fix_resolutions(dest, source, fullres_width)
+
+  for child in children:
+    child_gnode = cg2g[child]
+    fix_channel_count_upwards(child_gnode, child_gnode.out_c)
 
   G.compute_input_output_channels()
   compute_resolution(G)

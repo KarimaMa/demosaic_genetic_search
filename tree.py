@@ -265,7 +265,7 @@ class Node:
   returns whether or not two ASTs are the same
   """
   def is_same_as(self, other, root, other_root):
-    if self.num_children != other.num_children or type(self) != type(other):
+    if self.num_children != other.num_children or type(self) != type(other) or self.resolution != other.resolution:
       return False
 
     if type(self.parent) is tuple:
@@ -294,6 +294,9 @@ class Node:
         return False
       if hasattr(self, "groups"):
         if self.groups != other.groups:
+          return False
+      if hasattr(self, "factor"):
+        if self.factor != other.factor:
           return False
       return self.child.is_same_as(other.child, root, other_root)
     elif self.num_children == 2:
