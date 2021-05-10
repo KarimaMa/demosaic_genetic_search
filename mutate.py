@@ -210,6 +210,8 @@ class Mutator():
             new_tree = self.decouple_mutation(tree_copy)
           elif mutation_type is MutationType.CHANNEL_CHANGE:
             self.debug_logger.debug(f"attempting channel change")
+            with open("attempts.txt", "a+") as f:
+              f.write("1\n")
             new_tree = self.channel_mutation(tree_copy)
           elif mutation_type is MutationType.GROUP_CHANGE:
             self.debug_logger.debug(f"attempting group mutation")
@@ -219,8 +221,6 @@ class Mutator():
             new_tree = self.insert_resolution_subgraph_mutation(tree_copy)
           elif mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
             self.debug_logger.debug(f"attempting delete resolution subgraph")
-            with open("attempts.txt", "a+") as f:
-              f.write("1\n")
             new_tree = self.delete_resolution_subgraph_mutation(tree_copy)
           elif mutation_type is MutationType.SHIFT_RESOLUTION_SUGRAPH:
             self.debug_logger.debug(f"attempting shift resolution subgraph")
@@ -240,7 +240,7 @@ class Mutator():
           if tree_accepted: 
             break      
           else:
-            if mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
+            if mutation_type is MutationType.CHANNEL_CHANGE:
               with open("rejected.txt", "a+") as f:
                 f.write("1\n")
           # tree was pruned
@@ -261,14 +261,14 @@ class Mutator():
           self.debug_logger.debug(f'decouple mutation failed on parent model {parent_id}')
         elif mutation_type is MutationType.CHANNEL_CHANGE:
           self.debug_logger.debug(f'channel change mutation failed on model {parent_id}')
+          with open("fails.txt", "a+") as f:
+            f.write("1\n")  
         elif mutation_type is MutationType.GREEN_MODEL_CHANGE:
           self.debug_logger.debug(f'green model change mutation failed on model {parent_id}')
         elif mutation_type is MutationType.INSERT_RESOLUTION_SUBGRAPH:
           self.debug_logger.debug(f'insert resolution subgraph mutation failed on model {parent_id}')
         elif mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
           self.debug_logger.debug(f'delete resolution subgraph mutation failed on model {parent_id}')
-          with open("fails.txt", "a+") as f:
-            f.write("1\n")  
         else:
           self.debug_logger.debug(f'group mutation failed on model {parent_id}')
 
@@ -282,7 +282,7 @@ class Mutator():
         except AssertionError as e:
           self.debug_logger.debug(f"channel count check failed on model {model_id} the assertion error {e}")
           self.failed_mutation_info.append(self.current_mutation_info)
-          if mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
+          if mutation_type is MutationType.CHANNEL_CHANGE:
             with open("channel_check_fails.txt", "a+") as f:
               f.write("1\n")  
 
@@ -293,7 +293,7 @@ class Mutator():
         except AssertionError:
           self.debug_logger.debug(f"check no adjacent nonlinear failed on model {model_id}")
           self.failed_mutation_info.append(self.current_mutation_info)
-          if mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
+          if mutation_type is MutationType.CHANNEL_CHANGE:
             with open("linear_adjacency_fails.txt", "a+") as f:
               f.write("1\n")  
           failures += 1
@@ -306,7 +306,7 @@ class Mutator():
           if h in self.seen_structures:
             if random.random() < self.args.structural_sim_reject:
               structural_rejections += 1
-              if mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
+              if mutation_type is MutationType.CHANNEL_CHANGE:
                 with open("structural_rejections.txt", "a+") as f:
                   f.write("1\n")
               continue
@@ -321,7 +321,7 @@ class Mutator():
             return new_tree, h, stats
 
         else: # we've seen and evaluated this exact tree before
-          if mutation_type is MutationType.DELETE_RESOLUTION_SUBGRAPH:
+          if mutation_type is MutationType.CHANNEL_CHANGE:
             with open("seen_rejections.txt", "a+") as f:
               f.write("1\n")
           self.seen_models[new_tree]["model_ids"].append(int(model_id))
