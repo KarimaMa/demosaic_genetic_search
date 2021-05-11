@@ -29,9 +29,6 @@ import torch.multiprocessing as mp
 import ctypes
 import datetime
 import mysql_db
-# from dataset import bayer
-# from imageio import imread
-#from multiprocessing import shared_memory
 from queue import Empty
 
 
@@ -303,6 +300,12 @@ class Searcher():
                                   os.path.join(args.save, 'search_log'))
     self.debug_logger = util.create_logger('debug_logger', logging.DEBUG, self.log_format, \
                                   os.path.join(args.save, 'debug_log'))
+    self.debug_logger.propagate = False
+
+    self.progress_logger = util.create_logger('progress_log', logging.INFO, self.log_format, \
+                                  os.path.join(args.save, 'progress_log'))
+    self.progress_logger.propagate = False
+
     self.mysql_logger = util.create_logger('mysql_logger', logging.INFO, self.log_format, \
                                   os.path.join(args.save, 'mysql_log'))
     self.monitor_logger = util.create_logger('monitor_logger', logging.INFO, self.log_format, \
@@ -673,6 +676,8 @@ class Searcher():
 
   # searches over program mutations within tiers of computational cost
   def search(self, compute_cost_tiers, tier_size):
+    search_start_time = datetime.datetime.now()
+
     cost_tiers = CostTiers(self.args.tier_database_dir, compute_cost_tiers, self.search_logger)
 
     if self.args.restart_generation is not None:
@@ -714,8 +719,6 @@ class Searcher():
       finished_tasks = mp.Array(ctypes.c_double, [-1]*self.models_per_gen)
       pending_start_times = mp.Array(ctypes.c_double, [-1]*self.num_workers)
       pending_tasks = mp.Array(ctypes.c_double, [-1]*self.num_workers)
-
-      # work_queue = mp.Queue(self.models_per_gen + self.num_workers)
 
       for tid, tier in enumerate(cost_tiers.tiers):
         if self.args.restart_generation and (generation == self.args.restart_generation) and (tid < self.args.restart_tier):
@@ -777,7 +780,6 @@ class Searcher():
           
           task_info = MutationTaskInfo(task_id, new_model_entry, new_model_dir, pytorch_models, new_model_id)
           subproc_task_str = f"{task_id}--{new_model_dir}--{new_model_id}--{self.args.green_model_asts}--{self.args.green_model_weights}--{self.args.model_initializations}"
-          # subproc_task_info = {"task_id":task_id, "model_dir":new_model_dir, "models":pytorch_models, "model_id":new_model_id}
 
           util.create_dir(task_info.model_dir)
           self.save_model_ast(new_model_ast, task_info.model_id, task_info.model_dir)
@@ -797,7 +799,6 @@ class Searcher():
             new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
           else:
             print(f"PUTTING TASK {task_id}")
-            # work_queue.put(subproc_task_info)
             training_tasks[task_id] = task_info
             subproc_tasks.append(subproc_task_str)
             task_id += 1
@@ -812,11 +813,14 @@ class Searcher():
                               pending_start_times, pending_tasks, self.pending_locks, \
                               finished_tasks, self.log_format, self.work_loggers[wid]) for wid in range(self.num_workers)]
 
-      # for w in range(self.num_workers):
-      #   work_queue.put(None) # place sentinels telling workers to exit
-
       failed_tasks = self.monitor_training_tasks(workers, training_tasks, pending_tasks, pending_start_times, finished_tasks, validation_psnrs)
 
+      num_failed = len(failed_tasks)
+      num_finished = sum([1 for (tid, ttime) in finished_tasks if ttime >= 0])
+      minutes_passed = (datetime.datetime.now() - search_start_time).total_seconds() / 60
+
+      self.progress_logger.info(f"Minutes elapsed: {minutes_passed} Generation: {generation} - successfully trained: {num_finished} - failed train: {num_failed}")
+      
       print("finished tasks")
       # update model database 
       for task_id, task_time in enumerate(finished_tasks):
@@ -845,6 +849,7 @@ class Searcher():
         
         self.update_model_database(task_info, model_psnrs)
         self.update_perf_database(task_info.model_id, compute_cost, task_time)
+        
         """
         mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
                               self.args.save, self.args.experiment_name, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
@@ -965,7 +970,7 @@ if __name__ == "__main__":
   parser.add_argument('--load_timeout', type=int, default=10)
   parser.add_argument('--mutate_timeout', type=int, default=60)
   parser.add_argument('--lowering_timeout', type=int, default=10)
-  parser.add_argument('--train_timeout', type=int, default=600)
+  parser.add_argument('--train_timeout', type=int, default=900)
   parser.add_argument('--save_timeout', type=int, default=10)
 
   # training parameters
