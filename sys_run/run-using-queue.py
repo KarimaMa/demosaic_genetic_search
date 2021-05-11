@@ -534,9 +534,11 @@ class Searcher():
         self.work_manager_logger.info(f"alive workers: {alive}")
         print(f"num_tasks {num_tasks}")
 
+        self.task_list_lock.acquire()
         with open(self.task_ticker_file, "r") as f:
           ticker = int(f.read().strip())
-
+        self.task_list_lock.release()
+        
       if ticker == num_tasks: #work_queue.empty():
         self.work_manager_logger.info("No more models left to train, waiting for all tasks to complete")
 
