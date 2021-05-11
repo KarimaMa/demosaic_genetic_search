@@ -13,10 +13,14 @@ socket.bind("tcp://*:2001")
 while True:
     #  Wait for next request from client
     message = socket.recv()
-    print("Received request: %s" % message)
 
+    msg_str = message.decode("utf-8")
+    print("Received request: %s" % message)
+    worker_id = msg_str.split(" ")[-1]
     #  Do some 'work'
     time.sleep(1)
 
     #  Send reply back to client
-    socket.send(b"World")
+    reply_str = f"World to worker {worker_id}"
+    reply = reply_str.encode("utf-8")
+    socket.send(reply)
