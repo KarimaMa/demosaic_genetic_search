@@ -30,6 +30,7 @@ import ctypes
 import datetime
 import mysql_db
 from queue import Empty
+import psutil
 
 
 def build_model_database(args):
@@ -549,7 +550,8 @@ class Searcher():
           self.work_manager_logger.info(f"worker {wid} is dead with exit code {worker.exitcode}")
 
           pending_task = pending_tasks[wid]
-          failed_tasks.append(pending_task)
+          if pending_task > 0:
+            failed_tasks.append(pending_task)
 
         else: # check if worker has run out of time on current task
           self.pending_locks[wid].acquire()
@@ -574,6 +576,7 @@ class Searcher():
               terminated = True
 
             if terminated:
+              print(f"task {task_id} terminated")
               failed_tasks.append(task_id)
               new_worker = create_worker(wid, self.task_list_lock, self.tasks_file, self.task_ticker_file, \
                                         validation_psnrs, self.args, pending_start_times, pending_tasks, self.pending_locks, \
@@ -818,7 +821,7 @@ class Searcher():
       failed_tasks = self.monitor_training_tasks(workers, training_tasks, pending_tasks, pending_start_times, finished_tasks, validation_psnrs)
 
       num_failed = len(failed_tasks)
-      num_finished = sum([1 for (tid, ttime) in finished_tasks if ttime >= 0])
+      num_finished = sum([1 for ttime in finished_tasks if ttime >= 0])
       minutes_passed = (datetime.datetime.now() - search_start_time).total_seconds() / 60
 
       self.progress_logger.info(f"Minutes elapsed: {minutes_passed} Generation: {generation} - successfully trained: {num_finished} - failed train: {num_failed}")
