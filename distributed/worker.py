@@ -11,7 +11,7 @@ if __name__ == "__main__":
     #  Socket to talk to server
     print("Connecting to hello world server %s…" % args.host)
     socket = context.socket(zmq.REQ)
-    socket.connect("tcp://%s:5555" % args.host)
+    socket.connect("tcp://%s:2001" % args.host)
 
     #  Do 10 requests, waiting each time for a response
     for request in range(10):
