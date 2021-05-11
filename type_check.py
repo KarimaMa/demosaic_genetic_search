@@ -419,8 +419,6 @@ def fix_channel_count_downwards(root, parent, out_c, fixed_nodes=None):
         if not id(p) == id(parent):
           fixed = fixed and fix_channel_count_upwards_helper(root, p, out_c, fixed_nodes)
 
-    if not fixed:
-      print(f"in fix downwards {id(root)} ")
     return fixed
 
 

@@ -126,7 +126,7 @@ def insert_downsample(dest, source, factor, fullres_width, DownsampleType=None, 
   if DownsampleType is None:
     DownsampleType = random.choice(possible_dowsample_types)
 
-  print(f"inserting {DownsampleType} between {id(dest)} {id(source)}")
+  #print(f"inserting {DownsampleType} between {id(dest)} {id(source)}")
 
   new_resolution = source.resolution / factor
   new_downsample = build_updown_op(DownsampleType, factor, new_resolution, source)
@@ -150,7 +150,7 @@ def insert_upsample(dest, source, factor, UpsampleType=None, fix_channels=True):
   if UpsampleType is None:
     UpsampleType = random.choice(possible_upsample_types)
 
-  print(f"inserting {UpsampleType} between {id(dest)} {id(source)}")
+  #print(f"inserting {UpsampleType} between {id(dest)} {id(source)}")
 
   new_resolution = source.resolution * factor
   new_upsample = build_updown_op(UpsampleType, factor, new_resolution, source)
@@ -200,7 +200,7 @@ prior to insertion and our algorithm guarantees that they will all
 have the same resolution after insertion as well.
 """
 def change_subgraph_resolution(graph, possible_factors, fullres_width, MAX_TRIES):
-  print("CHANGE SUBGRAPH RESOLUTION")
+  #print("CHANGE SUBGRAPH RESOLUTION")
   g2cg = {}
   CG, cg2g = color_graph(graph, g2cg, None)
   # pick a random subgraph by selecting nodes A and B from the same connected component
@@ -248,8 +248,8 @@ def change_subgraph_resolution(graph, possible_factors, fullres_width, MAX_TRIES
   if tries == MAX_TRIES:
     assert False, f"failed to find subgraph to change in\n{graph.dump()}"
 
-  print(f"node A: {A.dump()}")
-  print(f"node B: {B.dump()}")
+  #print(f"node A: {A.dump()}")
+  #print(f"node B: {B.dump()}")
   S = find_subgraph(A, B)
 
   current_resolution = A.resolution
@@ -412,7 +412,7 @@ Select a random node N on the boundary of a resolution subgraph of CG
 Change N's resolution to that of one of its neighbors with a different resolution
 """
 def flip_resolution(G, fullres_width):
-  print("CHANGING BOUNDARY")
+  #print("CHANGING BOUNDARY")
   g2cg = {}
   CG, cg2g = color_graph(G, g2cg, None)
 
@@ -430,10 +430,10 @@ def flip_resolution(G, fullres_width):
   graph_node = cg2g[flip_node]
   # pick an adjacent different resolution and flip to that resolution
   new_resolution, adjacent_nodes = pick_adjacent_color(flip_node)
-  print(f"flipping node")
-  print(graph_node.dump())
-  print(f"in tree {G.dump()}")
-  print(f"to new resolution: {new_resolution}")
+  #print(f"flipping node")
+  #print(graph_node.dump())
+  #print(f"in tree {G.dump()}")
+  #print(f"to new resolution: {new_resolution}")
   graph_node.resolution = new_resolution
 
   # 1) if a node has a neighbor in CG with the same color but an up/downsample in between them in G, delete the up / downsample 
@@ -610,7 +610,7 @@ def get_component(cg_node, cg2g, g2cg):
 
 
 def outof_component_source(gnode, g2cg, component_nodes):
-  print(f'looking for outof component source from {id(gnode)}')
+  #print(f'looking for outof component source from {id(gnode)}')
   if isinstance(gnode, Upsample) or isinstance(gnode, Downsample):
     source = gnode.child
     if g2cg[id(source)] in component_nodes:
@@ -639,8 +639,8 @@ Given a graph G, pick a resolution subgraph to delete such that all nodes
 in that subgraph have the same resolution as the nodes in the enclosing subgraph. 
 """
 def delete_resolution_subgraph(G, fullres_width):
-  print("inside delete subgraph")
-  print(f"the graph\n{G.dump()}")
+  #print("inside delete subgraph")
+  #print(f"the graph\n{G.dump()}")
   
   g2cg = {}
   CG, cg2g = color_graph(G, g2cg, None)
@@ -657,17 +657,17 @@ def delete_resolution_subgraph(G, fullres_width):
   new_resolution = chosen_downsample.child.resolution
 
   downsample_parents = get_parents(chosen_downsample)
-  print(f"deleting subgraph bounded by {id(chosen_downsample)}")
+  #print(f"deleting subgraph bounded by {id(chosen_downsample)}")
 
   node_in_component = g2cg[id(downsample_parents[0])]
 
   component = get_component(node_in_component, cg2g, g2cg)
-  print(f"component nodes: {[id(cg2g[n]) for n in component.nodes]}")
+  #print(f"component nodes: {[id(cg2g[n]) for n in component.nodes]}")
   # subgraph, subgraph_boundary_nodes = get_connected_component(node_in_component) 
   # find boundary nodes of the chosen subgraph and remove any adjacent upsamples or downsamples  
   # subgraph_boundary_nodes = [n for n in boundary_nodes if n in subgraph]
-  print(f"removing subgraph with boundary nodes ")
-  print([id(cg2g[n]) for n in component.boundary_nodes])
+  #print(f"removing subgraph with boundary nodes ")
+  #print([id(cg2g[n]) for n in component.boundary_nodes])
   outgoing_boundary_nodes = [n for n in component.boundary_nodes if any([c in component.nodes for c in n.children])]
   incoming_boundary_nodes = [n for n in component.boundary_nodes if any([p in component.nodes for p in n.parents])]
 
