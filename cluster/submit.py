@@ -17,7 +17,7 @@ VALID_MACHINES = [
     "ilcomp46",
     "ilcomp6x",
     "ilcomp6y",
-    # "ilcomp6u",
+    "ilcomp6u",
 ]
 
 def main(args):
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("scripts", nargs="+", help="path to the scripts to run.")
     parser.add_argument("--job_size", default=4, type=int, help="number of instances to launch")
-    parser.add_argument("--docker_image", default="docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v14")
+    parser.add_argument("--docker_image", default="docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v10")
     # parser.add_argument("--gpus", type=int, nargs="*", help="list of GPUs to use", choices=[0, 1, 2, 3])
     # parser.add_argument("--notify", action="store_true", dest="notify", help="if True, sends email notifications")
     # parser.add_argument("--debug", action="store_true", dest="debug", help="if True, prints the submitted command")
