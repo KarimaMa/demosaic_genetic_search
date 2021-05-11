@@ -252,7 +252,7 @@ class Mutator():
         with open("exceptions.txt", "a+") as f:
           f.write(f"{e}\n\n")
         self.debug_logger.debug(f'exception thrown during mutation: {e}')
-        self.debug_logger.debug(traceback.print_exc())
+        self.debug_logger.debug(traceback.format_exc())
 
         if mutation_type is MutationType.INSERTION:
           self.debug_logger.debug(f'insertion mutation failed on parent model {parent_id} tried to insert {self.current_mutation_info.insert_ops}')
