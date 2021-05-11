@@ -30,7 +30,6 @@ import ctypes
 import datetime
 import mysql_db
 from queue import Empty
-import psutil
 
 
 def build_model_database(args):
