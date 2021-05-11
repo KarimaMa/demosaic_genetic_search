@@ -67,5 +67,5 @@ python $CODE_LOCAL/sys_run/run-using-queue.py \
     --crop=16 \
     --max_nodes=50 \
     --max_subtree_size=25 \
-    --train_timeout=1200
+    --train_timeout=1200 \
     --nas
