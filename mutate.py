@@ -249,10 +249,11 @@ class Mutator():
 
       # mutation failed
       except (AssertionError, AttributeError, TypeError) as e: 
-        print(f'exception thrown: {e}')
         with open("exceptions.txt", "a+") as f:
           f.write(f"{e}\n\n")
-        print(traceback.print_exc())
+        self.debug_logger.debug(f'exception thrown during mutation: {e}')
+        self.debug_logger.debug(traceback.print_exc())
+
         if mutation_type is MutationType.INSERTION:
           self.debug_logger.debug(f'insertion mutation failed on parent model {parent_id} tried to insert {self.current_mutation_info.insert_ops}')
         elif mutation_type is MutationType.DELETION:
@@ -277,7 +278,7 @@ class Mutator():
         continue
       else: # successfully mutated tree
         try:
-          print(f"the tree {new_tree.dump()}")
+          self.debug_logger.debug(f"the new tree {new_tree.dump()}")
           check_channel_count(new_tree) # these should not fire...
         except AssertionError as e:
           self.debug_logger.debug(f"channel count check failed on model {model_id} the assertion error {e}")
@@ -495,7 +496,7 @@ def channel_mutation(self, tree, chosen_conv_id=None):
     return tree
   else:
     self.debug_logger.debug(f"Unable to perturb output channel of \n{chosen_node.dump()}\n from {chosen_node.out_c} to {new_out_c}")
-    print(f"in tree\n{tree.dump()}")
+    self.debug_logger.debug(f"in tree\n{tree.dump()}")
     assert False, f"Unable to perturb channel counts of node {chosen_node}"
 
 
