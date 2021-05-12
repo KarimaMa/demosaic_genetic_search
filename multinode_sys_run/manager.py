@@ -359,8 +359,43 @@ class Searcher():
 
     context = zmq.Context()
     socket = context.socket(zmq.REP)
-    socket.bind("tcp://*:5555")
+    socket.bind(f"tcp://*:{self.args.port}")
     return socket
+
+
+  def shutdown_workers(self, socket, num_workers):
+    shutdown_time = 60
+    start_time = time.time()
+
+    shutdown_workers = []
+
+    while len(shutdown_workers) < num_workers and time.time() - start_time < shutdown_time:
+      try:
+        message = socket.recv(flags=zmq.NOBLOCK)
+        msg_str = message.decode("utf-8")
+        
+        work_request_info = msg_str.split(" ")
+        worker_id = work_request_info[0]
+        is_work_request = (int(work_request_info[1]) == 1)
+
+        assert(is_work_request), "workers should not be sending any more training results at shutdown!!!"
+      
+        message_str = "SHUTDOWN"
+        print(f"sending shutdown message to {worker_id}")
+        reply = message_str.encode("utf-8")
+        socket.send(reply)
+
+        shutdown_workers.append(worker_id)
+
+      except zmq.Again as e:
+        pass
+
+    if len(shutdown_workers) != num_workers:
+      print(f"{num_workers-len(shutdown_workers)} out of {num_workers} were not shutdown")
+    else:
+      print("all workers successfully shutdown")
+
+
 
   """
   sends the jobs to workers and receive their training results
@@ -403,15 +438,23 @@ class Searcher():
         if is_work_request:
           print(f"Received work request from worker {worker_id}")
 
+          # no more work to send - tell worker there is no work
+          if next_task_id == num_tasks: 
+            message_str = "WAIT"
+            print(f"no more work to send to worker {worker_id}, sending {message_str}")
+            reply = message_str.encode("utf-8")
+            socket.send(reply)
+
           # send work to worker
-          task_info_str = worker_tasks[next_task_id]
-          print(f"sending task {task_info_str} to worker {worker_id}")
+          else:
+            task_info_str = worker_tasks[next_task_id]
+            print(f"sending task {task_info_str} to worker {worker_id}")
 
-          reply = task_info_str.encode("utf-8")
-          socket.send(reply)
+            reply = task_info_str.encode("utf-8")
+            socket.send(reply)
 
-          pending_task_info[next_task_id] = {"worker": worker_id, "start_time": time.time()}
-          next_task_id += 1
+            pending_task_info[next_task_id] = {"worker": worker_id, "start_time": time.time()}
+            next_task_id += 1
 
         else: # worker is delivering training results
           print(f"Received training results from worker {worker_id}")
@@ -696,6 +739,9 @@ class Searcher():
     print(f"downsample\ntries: {self.mutator.binop_tries} loc select fails {self.mutator.binop_loc_selection_failures} \
         insert fail {self.mutator.binop_insertion_failures} reject {self.mutator.binop_rejects} success {self.mutator.binop_success} seen {self.mutator.binop_seen}")
 
+    self.shutdown_workers(self.socket, self.args.num_workers)
+    self.socket.close()
+
     return cost_tiers
 
   """
@@ -720,6 +766,9 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
 
   parser.add_argument('--experiment_name', type=str)
+  parser.add_argument('--port', type=str)
+  parser.add_argument('--num_workers', type=int)
+
   parser.add_argument('--max_channels', type=int, default=64, help='max channel count')
   parser.add_argument('--default_channels', type=int, default=12, help='initial channel count for Convs')
   parser.add_argument('--max_nodes', type=int, default=50, help='max number of nodes in a tree')

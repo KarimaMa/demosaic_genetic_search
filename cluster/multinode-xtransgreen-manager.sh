@@ -39,6 +39,8 @@ DATA_LOCAL=/dev/shm/data
 rsync -av $DATA /dev/shm
 
 STARTID=0
+NUM_WORKERS=2
+PORT=5555
 
 echo "Running job"
 python $CODE_LOCAL/multinode_sys_run/manager.py \
@@ -66,5 +68,7 @@ python $CODE_LOCAL/multinode_sys_run/manager.py \
     --resolution_change_factors=2,3 \
     --pixel_width=120 \
     --crop=12 \
-    --xtrans_green
+    --xtrans_green \
+    --num_workers=$NUM_WORKERS \
+    --port=$PORT
 

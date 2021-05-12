@@ -41,7 +41,7 @@ def run_worker(args, logger):
   #  Socket to talk to server
   print(f"worker {worker_id} connecting to server {args.host}")
   socket = context.socket(zmq.REQ)
-  socket.connect("tcp://%s:5555" % args.host)
+  socket.connect(f"tcp://{args.host}:{args.port}")
 
   while True:      
     try:
@@ -54,10 +54,15 @@ def run_worker(args, logger):
       message = socket.recv()
       task_info_str = message.decode("utf-8")
 
+      if task_info_str == "WAIT":
+        print(f"worker {worker_id} is waiting on work from manager...")
+        time.sleep(1)
+        continue
+
       if task_info_str == "SHUTDOWN":
-        print("I've seen local minima you people wouldn't believe. Adam firing off the saddle points of loss functions. \
-            I watched convergence glitter in the dark near the Activation Gates. All these update steps will be lost in time, \
-            like tears in rain. Time to die.")
+        print("I've seen local minima you people wouldn't believe. Adam firing off the saddle points of loss functions.\n" + \
+            "I watched convergence glitter in the dark near the Activation Gates.\n" + \
+            "All these update steps will be lost in time, like tears in rain. Time to die.")
         return
 
       print(f"Received work {task_info_str}")
@@ -83,7 +88,7 @@ def run_worker(args, logger):
       train_logger = util.create_logger(f'model_{model_id}_train_logger', logging.INFO, log_format, \
                                   os.path.join(model_dir, f'model_{model_id}_training_log'))
 
-      # model_val_psnrs = train_model(args, gpu_id, model_id, models, model_dir, train_logger)
+      #model_val_psnrs = train_model(args, gpu_id, model_id, models, model_dir, train_logger)
       model_val_psnrs = [30.0]
       logger.info(f"worker on gpu {gpu_id} finished task {task_id} model {model_id} with validation psnrs {model_val_psnrs}")
 
@@ -110,6 +115,8 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
 
   parser.add_argument('--experiment_name', type=str)
+  parser.add_argument('--port', type=str)
+
   parser.add_argument('--host', type=str)
   parser.add_argument('--seed', type=int, default=1, help='random seed')
 
