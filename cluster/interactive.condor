@@ -1,6 +1,7 @@
 universe                = docker
 docker_image            = docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v14
 
+# Requirements = TARGET.Machine=="ilcomp78.ilcomp"
 Requirements = TARGET.Machine=="ilcomp6u.ilcomp"
 
 # We need this to get 64GB of /dev/shm

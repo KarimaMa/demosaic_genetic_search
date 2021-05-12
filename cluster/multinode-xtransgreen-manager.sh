@@ -40,7 +40,7 @@ rsync -av $DATA /dev/shm
 
 STARTID=0
 NUM_WORKERS=2
-PORT=5555
+PORT=2001
 
 echo "Running job"
 python $CODE_LOCAL/multinode_sys_run/manager.py \

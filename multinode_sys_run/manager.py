@@ -360,6 +360,7 @@ class Searcher():
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     socket.bind(f"tcp://*:{self.args.port}")
+
     return socket
 
 

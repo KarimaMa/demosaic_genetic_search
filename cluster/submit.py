@@ -7,7 +7,6 @@ import htcondor
 
 VALID_MACHINES = [
     "ilcomp21",
-    "ilcomp22",
     "ilcomp27",
     "ilcomp28",
     "ilcomp29",
@@ -18,6 +17,7 @@ VALID_MACHINES = [
     "ilcomp6x",
     "ilcomp6y",
     "ilcomp6u",
+    "ilcomp78",
 ]
 
 def main(args):

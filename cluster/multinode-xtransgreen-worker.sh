@@ -40,7 +40,7 @@ rsync -av $DATA /dev/shm
 
 WORKER=0
 GPU=0
-PORT=5555
+PORT=2001
 
 echo "Running job"
 python $CODE_LOCAL/multinode_sys_run/worker.py \
@@ -56,5 +56,5 @@ python $CODE_LOCAL/multinode_sys_run/worker.py \
     --xtrans_green \
     --gpu_id=$GPU \
     --worker_id=$WORKER \
-    --host=localhost \
-    --port=$PORT
+    --port=$PORT \
+    --host=ilcomp78

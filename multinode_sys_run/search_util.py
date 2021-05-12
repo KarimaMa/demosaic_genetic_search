@@ -1,6 +1,7 @@
 import demosaic_ast
 from demosaic_ast import get_green_model_id, set_green_model_id
 
+
 def insert_green_model(new_model_ast, green_model_asts, green_model_weights, green_model=None, green_model_weight_file=None):
   if green_model is None:
     green_model_id = get_green_model_id(new_model_ast)
