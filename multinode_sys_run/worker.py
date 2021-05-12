@@ -10,7 +10,7 @@ sys.path.append(rootdir)
 sys.path.append(sys_run_dir)
 
 import util
-from search_util import insert_green_model
+from search_util import insert_green_model, SERVER_PORT
 import socket
 import zmq
 import argparse
@@ -41,7 +41,7 @@ def run_worker(args, logger):
   #  Socket to talk to server
   print(f"worker {worker_id} connecting to server {args.host}")
   socket = context.socket(zmq.REQ)
-  socket.connect("tcp://%s:5555" % args.host)
+  socket.connect("tcp://%s:%d" % (args.host, SERVER_PORT))
 
   while True:      
     try:

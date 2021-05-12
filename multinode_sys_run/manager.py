@@ -32,7 +32,7 @@ import torch.multiprocessing as mp
 import datetime
 import mysql_db
 import zmq
-from search_util import insert_green_model
+from search_util import insert_green_model, SERVER_PORT
 
 
 def build_model_database(args):
@@ -359,7 +359,7 @@ class Searcher():
 
     context = zmq.Context()
     socket = context.socket(zmq.REP)
-    socket.bind("tcp://*:5555")
+    socket.bind("tcp://*:%d" % SERVER_PORT)
     return socket
 
   """

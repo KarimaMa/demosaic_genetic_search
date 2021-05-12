@@ -55,4 +55,4 @@ python $CODE_LOCAL/multinode_sys_run/worker.py \
     --xtrans_green \
     --gpu_id=$GPU \
     --worker_id=$WORKER \
-    --host=localhost
+    --host=ilcomp78
