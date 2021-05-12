@@ -37,7 +37,7 @@ DATA=$ROOT/data
 DATA_LOCAL=/dev/shm/data
 rsync -av $DATA /dev/shm
 
-DATE=11
+DATE=12
 
 echo "Running job"
 python $CODE_LOCAL/sys_run/run-using-queue.py \
