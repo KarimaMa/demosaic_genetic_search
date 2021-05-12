@@ -1,0 +1,17 @@
+universe                = docker
+docker_image            = docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v14
+
+Requirements = TARGET.Machine=="ilcomp6u.ilcomp"
+
+# We need this to get 64GB of /dev/shm
+environment = "HIGHMEM=1"
+
+should_transfer_files = no
+transfer_executable   = false
+
+executable = cluster/multinode-xtransgreen-manager.sh
+output = log/manager.$(process).out
+error = log/manager.$(process).err
+log = log/manager.$(process).log
+
+queue 1

@@ -1,5 +1,4 @@
 #!/bin/zsh
-#!/bin/zsh
 
 echo "Testing GPU configuration..."
 if ! nvidia-smi; then
@@ -7,17 +6,6 @@ if ! nvidia-smi; then
     exit
 fi
 
-# This is needed to preempt all the GPUs on a machine...
-if [ "$1" -ne "0" ]
-then
-    echo "Not the main job, looping"
-    while true
-    do
-        printf "."
-        sleep 10
-    done
-fi
-# Only run actual job on job_id == 0
 echo "Starting worker $1"
 
 ROOT=/mnt/ilcompf9d1/user/mgharbi/code/karima
@@ -71,4 +59,3 @@ python $CODE_LOCAL/multinode_sys_run/manager.py \
     --xtrans_green \
     --num_workers=$NUM_WORKERS \
     --port=$PORT
-

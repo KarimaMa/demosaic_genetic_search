@@ -45,7 +45,7 @@ def main(args):
         else:
             fname = os.path.basename(script)
             name = os.path.splitext(fname)[0]
-            flags["executable"] = script,
+            flags["executable"] = script
 
         flags["output"] = os.path.join("log", "{}.$(process).out".format(name))
         flags["error"] = os.path.join("log", "{}.$(process).err".format(name))

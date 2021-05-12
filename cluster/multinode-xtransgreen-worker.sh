@@ -1,5 +1,4 @@
 #!/bin/zsh
-#!/bin/zsh
 
 echo "Testing GPU configuration..."
 if ! nvidia-smi; then
@@ -7,17 +6,7 @@ if ! nvidia-smi; then
     exit
 fi
 
-# This is needed to preempt all the GPUs on a machine...
-if [ "$1" -ne "0" ]
-then
-    echo "Not the main job, looping"
-    while true
-    do
-        printf "."
-        sleep 10
-    done
-fi
-# Only run actual job on job_id == 0
+WORKER=$1  # Condor passes the woker ID as argument
 echo "Starting worker $1"
 
 ROOT=/mnt/ilcompf9d1/user/mgharbi/code/karima
@@ -38,7 +27,6 @@ DATA=$ROOT/data
 DATA_LOCAL=/dev/shm/data
 rsync -av $DATA /dev/shm
 
-WORKER=0
 GPU=0
 PORT=2001
 
@@ -57,4 +45,4 @@ python $CODE_LOCAL/multinode_sys_run/worker.py \
     --gpu_id=$GPU \
     --worker_id=$WORKER \
     --port=$PORT \
-    --host=ilcomp78
+    --host=ilcomp6u
