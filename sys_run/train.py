@@ -354,7 +354,8 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
       else: 
         bayer = input
 
-    target = target[..., args.crop:-args.crop, args.crop:-args.crop]
+    if args.crop > 0:
+      target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
     n = target.size(0)
 
@@ -377,8 +378,8 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
 
       pred = model.run(model_inputs)
       
-      # crop
-      pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
+      if args.crop > 0:
+        pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
 
       loss = criterion(pred, target)
 
@@ -421,7 +422,8 @@ def infer(args, gpu_id, valid_queue, models, criterion):
         else: 
           bayer = input
 
-      target = target[..., args.crop:-args.crop, args.crop:-args.crop]
+      if args.crop > 0:
+        target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
       n = target.size(0)
 
@@ -443,8 +445,8 @@ def infer(args, gpu_id, valid_queue, models, criterion):
        
         pred = model.run(model_inputs)
 
-        # crop
-        pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
+        if args.crop > 0:
+          pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
         
         clamped = torch.clamp(pred, min=0, max=1)
 
