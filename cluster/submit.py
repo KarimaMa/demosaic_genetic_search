@@ -7,6 +7,7 @@ import htcondor
 
 VALID_MACHINES = [
     "ilcomp21",
+    "ilcomp22",
     "ilcomp27",
     "ilcomp28",
     "ilcomp29",
@@ -16,6 +17,7 @@ VALID_MACHINES = [
     "ilcomp46",
     "ilcomp6x",
     "ilcomp6y",
+    "ilcomp6u",
 ]
 
 def main(args):
@@ -24,38 +26,39 @@ def main(args):
 
     os.makedirs("log", exist_ok=True)
 
+    reqs = " || ".join(['(TARGET.Machine == "{}.ilcomp")'.format(m) for m in VALID_MACHINES])
+
     for script in args.scripts:
-        fname = os.path.basename(script)
-        name = os.path.splitext(fname)[0]
-
-        coll = htcondor.Collector()  # create the object representing the collector
-        schedd_ad = coll.locate(htcondor.DaemonTypes.Schedd) # locate the default schedd
-
-        reqs = " || ".join(['(TARGET.Machine == "{}.ilcomp")'.format(m) for m in VALID_MACHINES])
-
         flags = {
             "universe": "docker",
             "docker_image": args.docker_image,
             "should_transfer_files": "no",
             "transfer_executable": "false",
-            "executable": script,
             "arguments": "$(process)",
             "environment": '"HIGHMEM=1 MULTIGPU=0123"',  # We need this to get 64GB of /dev/shm
-            "output": os.path.join("log", "{}.$(process).out".format(name)),
-            "error": os.path.join("log", "{}.$(process).err".format(name)),
-            "log": os.path.join("log", "{}.$(process).log".format(name)),
             "requirements": reqs
-            # "requirements": 'TARGET.Machine=="ilcomp6y.ilcomp"',
         }
 
+        if script == "":
+            print("Launching interactive job")
+            name = "interactive"
+        else:
+            fname = os.path.basename(script)
+            name = os.path.splitext(fname)[0]
+            flags["executable"] = script,
+
+        flags["output"] = os.path.join("log", "{}.$(process).out".format(name))
+        flags["error"] = os.path.join("log", "{}.$(process).err".format(name))
+        flags["log"] = os.path.join("log", "{}.$(process).log".format(name))
+
+        coll = htcondor.Collector()  # create the object representing the collector
+        schedd_ad = coll.locate(htcondor.DaemonTypes.Schedd) # locate the default schedd
         job = htcondor.Submit(flags)
-
-        print(job)
-
         schedd = htcondor.Schedd(schedd_ad)
         with schedd.transaction() as txn:
             job.queue(txn, count=args.job_size)
 
+        print(job)
         print("Submitted {} jobs".format(args.job_size))
 
 

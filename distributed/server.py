@@ -8,7 +8,7 @@ print("Running master node on %s" % hostname)
 
 context = zmq.Context()
 socket = context.socket(zmq.REP)
-socket.bind("tcp://*:5555")
+socket.bind("tcp://*:2001")
 
 while True:
     #  Wait for next request from client
