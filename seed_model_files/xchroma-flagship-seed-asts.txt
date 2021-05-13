@@ -1,0 +1,2 @@
+DATADUMP/XRGB-DNET1-3W27/models/seed/model_ast
+DATADUMP/XRGB-WEIGHTED-D3W18/models/seed/model_ast
