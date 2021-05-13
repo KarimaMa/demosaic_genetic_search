@@ -1,7 +1,5 @@
 import math 
 import logging
-import sys
-import asyncio
 import time
 import os
 import argparse
@@ -29,7 +27,6 @@ import torch.multiprocessing as mp
 import ctypes
 import datetime
 import mysql_db
-from queue import Empty
 
 
 def build_model_database(args):
@@ -175,84 +172,70 @@ def run_train(task_list_lock, tasks_file, task_ticker_file, worker_id, \
   num_tasks = len([l for l in open(tasks_file, "r")])
 
   while True:
-    try:
-      task_list_lock.acquire()
-      with open(task_ticker_file, "r") as f:
-        next_task_id = int(f.read().strip())
-      if next_task_id == num_tasks:
-        print(f"no more tasks to run, worker {worker_id} exiting")
-        task_list_lock.release()
-        return
-      else:
-        task_info_str = [l for l in open(tasks_file, "r")][next_task_id]
-        task_info = task_info_str.split("--")
-        task_id = int(task_info[0])
-        model_dir = task_info[1]
-        model_id = int(task_info[2])
-        green_model_asts = task_info[3]
-        green_model_weights = task_info[4]
-        model_inits = int(task_info[5])
-
-        with open(task_ticker_file, "w") as f:
-          f.write(f"{next_task_id+1}")
-
+    task_list_lock.acquire()
+    with open(task_ticker_file, "r") as f:
+      next_task_id = int(f.read().strip())
+    if next_task_id == num_tasks:
+      print(f"no more tasks to run, worker {worker_id} exiting")
       task_list_lock.release()
+      return
+    else:
+      task_info_str = [l for l in open(tasks_file, "r")][next_task_id]
+      task_info = task_info_str.split("--")
+      task_id = int(task_info[0])
+      model_dir = task_info[1]
+      model_id = int(task_info[2])
+      green_model_asts = task_info[3]
+      green_model_weights = task_info[4]
+      model_inits = int(task_info[5])
 
-      model_ast = demosaic_ast.load_ast(os.path.join(model_dir, "model_ast"))
+      with open(task_ticker_file, "w") as f:
+        f.write(f"{next_task_id+1}")
 
-      # get model info
-      if args.full_model:
-        green_model_ast_files = [l.strip() for l in open(args.green_model_asts)]
-        green_model_weight_files = [l.strip() for l in open(args.green_model_weights)]
-        insert_green_model(model_ast, green_model_ast_files, green_model_weight_files)
+    task_list_lock.release()
 
-      models = [model_ast.ast_to_model() for i in range(model_inits)]
+    model_ast = demosaic_ast.load_ast(os.path.join(model_dir, "model_ast"))
+
+    # get model info
+    if args.full_model:
+      green_model_ast_files = [l.strip() for l in open(args.green_model_asts)]
+      green_model_weight_files = [l.strip() for l in open(args.green_model_weights)]
+      insert_green_model(model_ast, green_model_ast_files, green_model_weight_files)
+
+    models = [model_ast.ast_to_model() for i in range(model_inits)]
+
+    pending_l.acquire()
+    pending_start_times[worker_id] = time.time()
+    pending_tasks[worker_id] = task_id
+    pending_l.release()
+
+    logger.info(f'---worker on gpu {gpu_id} running task {task_id} model {model_id} out of {num_tasks} tasks ---')
+    print(f'--- worker on gpu {gpu_id} running model {model_id} with {len([p for p in models[0].parameters()])} params ---')
+  
+    for m in models:
+      m._initialize_parameters()
    
-      # train_task_info = work_q.get(block=False)
-      # if train_task_info is None:
-      #   work_q.close()
-      #   return
+    util.create_dir(model_dir)
+    train_logger = util.create_logger(f'model_{model_id}_train_logger', logging.INFO, log_format, \
+                                os.path.join(model_dir, f'model_{model_id}_training_log'))
 
-      # model_id = train_task_info["model_id"]
-      # task_id = train_task_info["task_id"]
-      # model_dir = train_task_info["model_dir"]
-      # models = train_task_info["models"]
-
-      pending_l.acquire()
-      pending_start_times[worker_id] = time.time()
-      pending_tasks[worker_id] = task_id
-      pending_l.release()
-
-      logger.info(f'---worker on gpu {gpu_id} running task {task_id} model {model_id} out of {num_tasks} tasks ---')
-      print(f'--- worker on gpu {gpu_id} running model {model_id} with {len([p for p in models[0].parameters()])} params ---')
+    model_val_psnrs = train_model(args, gpu_id, model_id, models, model_dir, train_logger)
     
-      for m in models:
-        m._initialize_parameters()
-     
-      util.create_dir(model_dir)
-      train_logger = util.create_logger(f'model_{model_id}_train_logger', logging.INFO, log_format, \
-                                  os.path.join(model_dir, f'model_{model_id}_training_log'))
+    logger.info(f"worker on gpu {gpu_id} with task {task_id} writing to validation psnrs")
 
-      model_val_psnrs = train_model(args, gpu_id, model_id, models, model_dir, train_logger)
-      
-      logger.info(f"worker on gpu {gpu_id} with task {task_id} writing to validation psnrs")
+    for i in range(args.keep_initializations):
+      index = args.keep_initializations * task_id + i 
+      validation_psnrs[index] = model_val_psnrs[i]
+      print(f"worker on gpu {gpu_id} task {task_id} psnr {model_val_psnrs[i]}")
 
-      for i in range(args.keep_initializations):
-        index = args.keep_initializations * task_id + i 
-        validation_psnrs[index] = model_val_psnrs[i]
-        print(f"worker on gpu {gpu_id} task {task_id} psnr {model_val_psnrs[i]}")
+    pending_l.acquire()
+    start_time = pending_start_times[worker_id]
+    pending_start_times[worker_id] = -1
+    pending_tasks[worker_id] = -1
+    pending_l.release()
 
-      pending_l.acquire()
-      start_time = pending_start_times[worker_id]
-      pending_start_times[worker_id] = -1
-      pending_tasks[worker_id] = -1
-      pending_l.release()
-
-      print(f"task {task_id} took {time.time() - start_time}")
-      finished_tasks[task_id] = time.time() - start_time # store time task took
-
-    except Empty:
-      time.sleep(10)
+    print(f"task {task_id} took {time.time() - start_time}")
+    finished_tasks[task_id] = time.time() - start_time # store time task took
 
 
 def create_worker(worker_id, task_list_lock, tasks_file, task_ticker_file, validation_psnrs, args, \
@@ -428,6 +411,30 @@ class Searcher():
       "Input(RBdiffG_GreenQuad)": rb_min_g_stack_green_input
     }
     
+
+  def construct_xchroma_inputs(self, green_model_id):
+    rb_xtrans = demosaic_ast.Input(16, name="RBXtrans", resolution=1/6)
+    green_pred = demosaic_ast.Input(1, name="GreenExtractor", resolution=1, no_grad=True, green_model_id=green_model_id)
+    packed_green = demosaic_ast.Pack(green_pred, factor=3) # pack it to the 3x3 grid 
+    packed_green.compute_input_output_channels()
+    packed_green_input = demosaic_ast.Input(9, name="PackedGreen", resolution=1/3, node=packed_green, no_grad=True)
+
+    green_rb = demosaic_ast.XGreenRBExtractor(green_pred, resolution=1/6)
+    green_rb.compute_input_output_channels()
+    green_rb_input = demosaic_ast.Input(16, name="Green@RB", resolution=1/6, node=green_rb, no_grad=True)
+
+    flat_mosaic = demosaic_ast.Input(1, name="FlatMosaic", resolution=1)
+    mosaic3chan = demosaic_ast.Input(3, name="Mosaic", resolution=1)
+
+    return {
+      "Input(RBXtrans)": rb_xtrans,
+      "Input(GreenExtractor)": green_pred,
+      "Input(PackedGreen)": packed_green_input,
+      "Input(Green@RB)": green_rb_input,
+      "Input(FlatMosaic)": flat_mosaic,
+      "Input(Mosaic)": mosaic3chan
+    }
+
  
   """
   Builds valid input nodes for a green model
@@ -466,7 +473,10 @@ class Searcher():
           green_model_id = get_green_model_id(model_ast)
           if partner_ast:
             set_green_model_id(partner_ast, green_model_id)
-          model_inputs = self.construct_chroma_inputs(green_model_id)
+          if args.xtrans_chroma:
+            model_inputs = self.construct_xchroma_inputs(green_model_id)
+          else:
+            model_inputs = self.construct_chroma_inputs(green_model_id)
           model_input_names = OrderedSet(model_inputs.keys())
           self.args.input_ops = OrderedSet([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
         elif self.args.rgb8chan: # full rgb model search uses same inputs as green search
@@ -1002,6 +1012,7 @@ if __name__ == "__main__":
 
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
+  parser.add_argument('--xtrans_chroma', action="store_true")
   parser.add_argument('--xtrans_green', action="store_true")  
   parser.add_argument('--superres_green', action="store_true")
 
