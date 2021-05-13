@@ -121,7 +121,8 @@ class Node:
     if hasattr(self, "factor"):
       printstr += f" factor{self.factor}"
 
-    printstr += f" res-{self.resolution:.2f}"
+    if self.resolution is not None:
+        printstr += f" res-{self.resolution:.2f}"
     printstr += f"  [ID: {nodeid}] {id(self)}"
 
     nodeid += 1
