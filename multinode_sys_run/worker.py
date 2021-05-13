@@ -124,7 +124,8 @@ def run_worker(args):
       message = socket.recv()
       ack = message.decode("utf-8")
       if ack == "SHUTDOWN":
-        print(f"Manager sending shutdown signal, ignoring training results for task {task_id} model {model_id}")    
+        print(f"Manager sending shutdown signal, ignoring training results for task {task_id} model {model_id}")
+        return
       elif int(ack) == 1:
         print(f"Manager received train results for task {task_id} model {model_id}")
       else:

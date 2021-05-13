@@ -438,7 +438,9 @@ class Searcher():
     pending_task_info = {}
    
     done_tasks = {}
-    timed_out_tasks = []
+
+    done_task_ids = OrderedSet()
+    timed_out_task_ids = OrderedSet()
 
     registered_workers = OrderedSet()
 
@@ -450,19 +452,19 @@ class Searcher():
 
     while True:
       if tick % 6 == 0:
-        print(f"total tasks: {num_tasks}  pending: {len(pending_task_info)}  timed out: {len(timed_out_tasks)}  done: {len(done_tasks)}")
+        print(f"total tasks: {num_tasks}  pending: {len(pending_task_info)}  timed out: {len(timed_out_task_ids)}  done: {len(done_task_ids)}")
 
-      if (len(done_tasks.items()) + len(timed_out_tasks)) >= num_tasks:
+      if len(done_task_ids.union(timed_out_task_ids)) == num_tasks:
         self.work_manager_logger.info("-- all tasks are done or timed out --")
-        return done_tasks, timed_out_tasks, registered_workers
+        return done_tasks, timed_out_task_ids, registered_workers
 
       # check for timed out tasks 
       for task_id in pending_task_info:
         start_time = pending_task_info[task_id]["start_time"]
         if time.time() - start_time > timeout:
-          if not task_id in timed_out_tasks:
-            timed_out_tasks.append(task_id)
-
+          if not task_id in timed_out_task_ids:
+            timed_out_task_ids.add(task_id)
+      
       try:
         # listen for work request from a worker
         message = socket.recv(flags=zmq.NOBLOCK)
@@ -510,6 +512,7 @@ class Searcher():
 
           if not model_id in task_model_ids:
             print(f"worker sending late results for model {model_id} from previous generation's models, dropping...")
+      
           else:          
             print(f"worker {worker_id} on task: {task_id} model_id: {model_id} returning psnrs {task_validation_psnrs}")
             for init in range(args.keep_initializations):
@@ -517,6 +520,7 @@ class Searcher():
               validation_psnrs[offset] = task_validation_psnrs[init]
             
             done_tasks[task_id] = time.time() - pending_task_info[task_id]["start_time"]
+            done_task_ids.add(task_id)
             del pending_task_info[task_id]
 
           # send acknowledgement of work received to worker
