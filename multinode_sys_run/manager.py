@@ -268,6 +268,30 @@ class Searcher():
     }
     
  
+  def construct_xchroma_inputs(self, green_model_id):
+    rb_xtrans = demosaic_ast.Input(16, name="RBXtrans", resolution=1/6)
+    green_pred = demosaic_ast.Input(1, name="GreenExtractor", resolution=1, no_grad=True, green_model_id=green_model_id)
+    packed_green = demosaic_ast.Pack(green_pred, factor=3) # pack it to the 3x3 grid 
+    packed_green.compute_input_output_channels()
+    packed_green_input = demosaic_ast.Input(9, name="PackedGreen", resolution=1/3, node=packed_green, no_grad=True)
+
+    green_rb = demosaic_ast.XGreenRBExtractor(green_pred, resolution=1/6)
+    green_rb.compute_input_output_channels()
+    green_rb_input = demosaic_ast.Input(16, name="Green@RB", resolution=1/6, node=green_rb, no_grad=True)
+
+    flat_mosaic = demosaic_ast.Input(1, name="FlatMosaic", resolution=1)
+    mosaic3chan = demosaic_ast.Input(3, name="Mosaic", resolution=1)
+
+    return {
+      "Input(RBXtrans)": rb_xtrans,
+      "Input(GreenExtractor)": green_pred,
+      "Input(PackedGreen)": packed_green_input,
+      "Input(Green@RB)": green_rb_input,
+      "Input(FlatMosaic)": flat_mosaic,
+      "Input(Mosaic)": mosaic3chan
+    }
+
+
   """
   Builds valid input nodes for a green model
   """
@@ -305,7 +329,10 @@ class Searcher():
           green_model_id = get_green_model_id(model_ast)
           if partner_ast:
             set_green_model_id(partner_ast, green_model_id)
-          model_inputs = self.construct_chroma_inputs(green_model_id)
+          if args.xtrans_chroma:
+            model_inputs = self.construct_xchroma_inputs(green_model_id)
+          else:
+            model_inputs = self.construct_chroma_inputs(green_model_id)
           model_input_names = OrderedSet(model_inputs.keys())
           self.args.input_ops = OrderedSet([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
         elif self.args.rgb8chan: # full rgb model search uses same inputs as green search
@@ -877,6 +904,7 @@ if __name__ == "__main__":
 
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
+  parser.add_argument('--xtrans_chroma', action="store_true")
   parser.add_argument('--xtrans_green', action="store_true")  
   parser.add_argument('--superres_green', action="store_true")
 
