@@ -33,11 +33,11 @@ DATE=13
 
 echo "Running job"
 python $CODE_LOCAL/multinode_sys_run/manager.py \
-    --experiment_name=xtrans-green \
+    --experiment_name=green-superres \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
-    --save=$ROOT/results/MULTINODE-XGREEN-05-$DATE-RUN$RUN \
-    --cost_tiers="0,200 200,400 400,800 800,1600 1600,3200" \
+    --save=$ROOT/results/MULTINODE-SUPERRES-GREEN-05-$DATE-RUN$RUN \
+    --cost_tiers="0,400 400,800 800,1600 1600,3200 3200,6400" \
     --pareto_sampling \
     --pareto_factor=3 \
     --machine=adobe \
@@ -49,16 +49,16 @@ python $CODE_LOCAL/multinode_sys_run/manager.py \
     --generations=40 \
     --tablename=adobegreen \
     --tier_size=20 \
-    --green_seed_model_files=xtrans-seed-model-files/green_seed_asts.txt \
-    --green_seed_model_psnrs=xtrans-seed-model-files/green_seed_psnrs.txt \
+    --green_seed_model_files=superres-seed-model-files/green_seed_asts.txt \
+    --green_seed_model_psnrs=superres-seed-model-files/green_seed_psnrs.txt \
     --insertion_bias \
     --late_cdf_gen=9 \
-    --max_footprint=35 \
+    --max_footprint=30 \
     --resolution_change_factors=2,3 \
-    --pixel_width=120 \
-    --crop=12 \
+    --pixel_width=128 \
+    --crop=16 \
     --max_nodes=50 \
     --max_subtree_size=25 \
-    --train_timeout=900 \
-    --xtrans_green \
+    --train_timeout=1200 \
+    --superres_green \
     --port=$PORT

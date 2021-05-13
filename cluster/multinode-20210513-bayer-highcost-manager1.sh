@@ -33,11 +33,11 @@ DATE=13
 
 echo "Running job"
 python $CODE_LOCAL/multinode_sys_run/manager.py \
-    --experiment_name=xtrans-green \
+    --experiment_name=nas \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
-    --save=$ROOT/results/MULTINODE-XGREEN-05-$DATE-RUN$RUN \
-    --cost_tiers="0,200 200,400 400,800 800,1600 1600,3200" \
+    --save=$ROOT/results/MULTINODE-BAYER-GREEN-HIGH-COST-05-$DATE-RUN$RUN \
+    --cost_tiers="0,1000 1000,2000 2000,4000 4000,8000 8000,16000" \
     --pareto_sampling \
     --pareto_factor=3 \
     --machine=adobe \
@@ -46,19 +46,18 @@ python $CODE_LOCAL/multinode_sys_run/manager.py \
     --learning_rate=0.004 \
     --epochs=6 \
     --starting_model_id=$STARTID \
-    --generations=40 \
+    --generations=20 \
     --tablename=adobegreen \
     --tier_size=20 \
-    --green_seed_model_files=xtrans-seed-model-files/green_seed_asts.txt \
-    --green_seed_model_psnrs=xtrans-seed-model-files/green_seed_psnrs.txt \
+    --green_seed_model_files=seed_model_files/green_seed_asts-05-06-2021.txt \
+    --green_seed_model_psnrs=seed_model_files/green_seed_psnrs-05-06-2021.txt \
     --insertion_bias \
     --late_cdf_gen=9 \
-    --max_footprint=35 \
+    --max_footprint=64 \
     --resolution_change_factors=2,3 \
-    --pixel_width=120 \
-    --crop=12 \
-    --max_nodes=50 \
-    --max_subtree_size=25 \
-    --train_timeout=900 \
-    --xtrans_green \
+    --pixel_width=128 \
+    --crop=0 \
+    --max_nodes=100 \
+    --max_subtree_size=50 \
+    --train_timeout=3000 \
     --port=$PORT
