@@ -12,9 +12,7 @@ VALID_MACHINES_V10 = [
     "ilcomp6a",
     "ilcomp6e",
     "ilcomp6f",
-    "ilcomp6l",
     "ilcomp6m",
-    "ilcomp6n",
     "ilcomp6r",
     "ilcomp6w",
     "ilcomp6x",
@@ -32,6 +30,7 @@ VALID_MACHINES_V10 = [
 # not v10
     # "ilcomp60",
     # "ilcomp4d",
+    # "ilcomp6l",
 
 # not tested
     # "ilcomp21",
@@ -63,6 +62,10 @@ VALID_MACHINES_V10 = [
 #     Job not found at execution machine
 #         Can not reconnect to slot4@ilcomp5y.ilcomp, rescheduling job
     # "ilcomp5y",
+
+
+    # Failed to open log
+    # "ilcomp6n",
 
 VALID_MACHINES_V14 = [
     "ilcomp6b",
