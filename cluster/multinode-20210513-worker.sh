@@ -28,11 +28,13 @@ DATA_LOCAL=/dev/shm/data
 rsync -av $DATA /dev/shm
 
 GPU=0
-PORT=2001
 
-echo "Running job"
+REMOTE_HOST=$2
+PORT=$3
+
+echo "Running worker, remote host is:" $REMOTE_HOST "port:" $PORT
 python $CODE_LOCAL/multinode_sys_run/worker.py \
     --gpu_id=$GPU \
     --worker_id=$WORKER \
     --port=$PORT \
-    --host=ilcomp6u
+    --host=$REMOTE_HOST

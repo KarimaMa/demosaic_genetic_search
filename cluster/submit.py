@@ -5,38 +5,139 @@ import os
 import stat
 import htcondor
 
-VALID_MACHINES = [
-    "ilcomp21",
-    "ilcomp27",
-    "ilcomp28",
-    "ilcomp29",
-    "ilcomp31",
-    "ilcomp36",
-    "ilcomp41",
-    "ilcomp46",
-    "ilcomp6x",
-    "ilcomp6y",
-    "ilcomp6u",
-    "ilcomp78",
+VALID_MACHINES_V10 = [
+    # "ilcomp4a"
+    # "ilcomp4c"
+    # "ilcomp4d"
+    # "ilcomp4e"
+
+
+    # "ilcomp5k"
+    # "ilcomp5l"
+    # "ilcomp5n"
+    # "ilcomp5p"
+    # "ilcomp5q"
+    # "ilcomp5r"
+    # "ilcomp5v"
+    # "ilcomp5w"
+    # "ilcomp5x"
+    # "ilcomp5y"
+    # "ilcomp5z"
+
+
+    # "ilcomp64",
+    # "ilcomp6x",
+]
+# buggy
+
+# not tested
+# "ilcomp6a",
+# "ilcomp6b",
+# "ilcomp6c",
+# "ilcomp6d",
+# "ilcomp6e",
+# "ilcomp6f",
+# "ilcomp6g",
+# "ilcomp6h",
+# "ilcomp6k",
+# "ilcomp6l",
+# "ilcomp6m",
+# "ilcomp6n",
+# "ilcomp6r",
+# "ilcomp6t",
+# "ilcomp6u",
+# "ilcomp6v",
+# "ilcomp6w",
+# "ilcomp6x",
+# "ilcomp22",
+# "ilcomp23",
+# "ilcomp24",
+# "ilcomp25",
+# "ilcomp26",
+# "ilcomp39",
+# "ilcomp42",
+# "ilcomp43",
+# "ilcomp44",
+# "ilcomp45",
+# "ilcomp49",
+# "ilcomp57",
+# "ilcomp60",
+# "ilcomp64",
+
+# busy
+    # "ilcomp21",
+    # "ilcomp27",
+    # "ilcomp28",
+    # "ilcomp29",
+    # "ilcomp31",
+    # "ilcomp36",
+    # "ilcomp41",
+    # "ilcomp46",
+    # "ilcomp65",
+    # "ilcomp6y",
+
+
+# not 10
+    # "ilcomp5a"
+    # "ilcomp5b"
+    # "ilcomp5c"
+    # "ilcomp5d"
+    # "ilcomp5g"
+    # "ilcomp5i"
+
+
+VALID_MACHINES_V14 = [
+    "ilcomp5f"
+
+    # "ilcomp61",
+    # "ilcomp63",
+    # "ilcomp6u",
+    # "ilcomp72",
+    # "ilcomp75",
+    # "ilcomp76",
+    # "ilcomp78",
 ]
 
-def main(args):
-    # make script exectutable
-    # os.chmod(args.script, stat.S_IEXEC)
+DOCKER_IMAGE = "docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v%d"
 
+def main(args):
     os.makedirs("log", exist_ok=True)
 
-    reqs = " || ".join(['(TARGET.Machine == "{}.ilcomp")'.format(m) for m in VALID_MACHINES])
+    if args.machine:
+        reqs = '(TARGET.Machine == "{}.ilcomp")'.format(args.machine)
+    else:
+        if args.docker_image == 10:
+            valid_machines = VALID_MACHINES_V10
+        elif args.docker_image == 14:
+            valid_machines = VALID_MACHINES_V14
+        else:
+            raise NotImplementedError()
+        reqs = " || ".join(['(TARGET.Machine == "{}.ilcomp")'.format(m) for m in valid_machines])
+        # reqs = ""
+
+    env = "HIGHMEM=1"
+
+    if args.gpus == 1:
+        pass
+    elif args.gpus == 4:
+        env += " MULTIGPU=0123"
+    else:
+        raise NotImplementedError("GPUS")
+
+    script_args = "$(process) " + " ".join(args.extra_args)
+
+    docker_image = DOCKER_IMAGE % args.docker_image
 
     for script in args.scripts:
         flags = {
             "universe": "docker",
-            "docker_image": args.docker_image,
+            "docker_image": docker_image,
             "should_transfer_files": "no",
             "transfer_executable": "false",
-            "arguments": "$(process)",
-            "environment": '"HIGHMEM=1 MULTIGPU=0123"',  # We need this to get 64GB of /dev/shm
+            "arguments": script_args,
+            "environment": env,
             "requirements": reqs
+
         }
 
         if script == "":
@@ -46,6 +147,11 @@ def main(args):
             fname = os.path.basename(script)
             name = os.path.splitext(fname)[0]
             flags["executable"] = script
+
+        if args.name is not None:
+            name = args.name
+
+        flags["JobBatchName"] = name
 
         flags["output"] = os.path.join("log", "{}.$(process).out".format(name))
         flags["error"] = os.path.join("log", "{}.$(process).err".format(name))
@@ -65,18 +171,11 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("scripts", nargs="+", help="path to the scripts to run.")
-    parser.add_argument("--job_size", default=4, type=int, help="number of instances to launch")
-    parser.add_argument("--docker_image", default="docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v10")
-    # parser.add_argument("--gpus", type=int, nargs="*", help="list of GPUs to use", choices=[0, 1, 2, 3])
-    # parser.add_argument("--notify", action="store_true", dest="notify", help="if True, sends email notifications")
-    # parser.add_argument("--debug", action="store_true", dest="debug", help="if True, prints the submitted command")
-    # parser.add_argument("--executable", type=str, default="jobs/demo.py", help="path to your job's executable.")
-    # parser.add_argument("--args", type=str, nargs="*", default=[], help="arguments to your executable (by default we pass the job_id and job_size as the first two arguments)")
-    # parser.add_argument("--jobname", type=str, help="name of your job, for the log files")
-    # parser.add_argument("--docker_image", type=str, default="mgharbi/base:v23", help="name of the docker image to use")
-    # parser.add_argument("--machines", nargs="*", type=str, help="name of machines to submit to")
-    # parser.add_argument("--exclude", nargs="*", type=str, help="name of machines to exclude")
-    # parser.add_argument("--highmem", dest="highmem", action="store_true", help="increase shared memory space on docker (/dev/shm")
-    # parser.set_defaults(notify=False, debug=False, highmem=False)
+    parser.add_argument("--job_size", default=1, type=int, help="number of instances to launch")
+    parser.add_argument("--gpus", default=1, type=int, help="number of gpus to launch")
+    parser.add_argument("--docker_image", type=int, default=14, choices=[10, 14])  # 10 has older nvidia drivers
+    parser.add_argument("--machine")
+    parser.add_argument("--name")
+    parser.add_argument("--extra_args", nargs="*", default=[])
     args = parser.parse_args()
     main(args)

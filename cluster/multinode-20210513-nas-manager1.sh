@@ -1,4 +1,4 @@
-    #!/bin/zsh
+#!/bin/zsh
 
 echo "Testing GPU configuration..."
 if ! nvidia-smi; then
