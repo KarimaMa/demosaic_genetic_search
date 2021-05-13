@@ -450,6 +450,10 @@ class GreenRBExtractor(UnopIcJc, Special, Node):
   def Jc(self):
     return 2
 
+"""
+Takes flat green prediction returns 6x6 packed 
+green values at xtrans R and B locations
+"""
 class XGreenRBExtractor(UnopIcJc, Special, Node):
   def __init__(self, child, resolution=None, name=None):
     if name is None:

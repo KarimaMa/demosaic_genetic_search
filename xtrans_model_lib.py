@@ -281,7 +281,7 @@ def XRGBDemosaicknet1(depth, width, no_grad, green_model, green_model_id):
   packed_green.compute_input_output_channels()
   packed_green_input = Input(9, name="PackedGreen", resolution=1/3, node=packed_green, no_grad=no_grad)
 
-  green_rb = XGreenRBExtractor(green_pred, resolution=1/6)
+  green_rb = XGreenRBExtractor(green_pred)
   green_rb.compute_input_output_channels()
   green_rb_input = Input(16, name="Green@RB", resolution=1/6, node=green_rb, no_grad=no_grad)
 
@@ -331,7 +331,7 @@ def XRGBWeightedFilters(depth, width, no_grad, green_model, green_model_id):
   packed_green.compute_input_output_channels()
   packed_green_input = Input(9, resolution=1/3, name="PackedGreen", node=packed_green, no_grad=no_grad)
 
-  green_rb = XGreenRBExtractor(green_pred, resolution=1/6)
+  green_rb = XGreenRBExtractor(green_pred)
   green_rb.compute_input_output_channels()
   green_rb_input = Input(16, resolution=1/6, name="Green@RB", node=green_rb, no_grad=no_grad)
 

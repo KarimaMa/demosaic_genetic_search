@@ -127,6 +127,8 @@ returns none if resolution is invalid
 """
 def compute_resolution(tree):
   if isinstance(tree, Input):
+    if hasattr(tree, "node"):
+      compute_resolution(tree.node)
     return tree.resolution
   elif isinstance(tree, LearnedDownsample) or isinstance(tree, Pack):
     child_resolution = compute_resolution(tree.child)

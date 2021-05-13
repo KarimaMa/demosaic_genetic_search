@@ -18,6 +18,7 @@ sys.path.append(rootdir)
 sys.path.append(sys_run_dir)
 
 from tree import has_loop
+from type_check import compute_resolution
 import cost
 import pareto_util
 from cost import ModelEvaluator, CostTiers
@@ -560,6 +561,8 @@ class Searcher():
       seed_ast.compute_input_output_channels()
       if self.args.full_model:
         insert_green_model(seed_ast, self.args.green_model_ast_files, self.args.green_model_weight_files)
+
+      compute_resolution(seed_ast)
 
       seed_model_dir = self.model_manager.model_dir(seed_model_id)
       util.create_dir(seed_model_dir)
