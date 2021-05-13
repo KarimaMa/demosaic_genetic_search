@@ -8,7 +8,6 @@ import htcondor
 VALID_MACHINES_V10 = [
     "ilcomp4a",
     "ilcomp4c",
-    "ilcomp4d",
     "ilcomp4e",
     "ilcomp6a",
     "ilcomp6e",
@@ -25,11 +24,14 @@ VALID_MACHINES_V10 = [
     "ilcomp25",
     "ilcomp39",
     "ilcomp44",
-    "ilcomp45",
     "ilcomp49",
-    "ilcomp60",
     "ilcomp64",
 ]
+    # "ilcomp45",
+
+# not v10
+    # "ilcomp60",
+    # "ilcomp4d",
 
 # not tested
     # "ilcomp21",
@@ -45,16 +47,29 @@ VALID_MACHINES_V10 = [
     # "ilcomp65",
     # "ilcomp6y",
 
+# not v14
+    # "ilcomp26",
+    # "ilcomp5k",
+    # "ilcomp5l",
+    # "ilcomp5z",
+
+#buggy: gather device 3
+# Error from slot4@ilcomp57.ilcomp: Error running docker job: linux runtime spec devices: error gathering device information while adding custom device '/dev/nvidia3': lstat /dev/nvidia3: no such file or directory
+    # "ilcomp57",
+    # "ilcomp6h",
+
+
+# 024 (12116473.013.000) 05/13 01:11:20 Job reconnection failed
+#     Job not found at execution machine
+#         Can not reconnect to slot4@ilcomp5y.ilcomp, rescheduling job
+    # "ilcomp5y",
 
 VALID_MACHINES_V14 = [
-    "ilcomp26",
-    "ilcomp57",
     "ilcomp6b",
     "ilcomp6c",
     "ilcomp6d",
     "ilcomp6g",
     "ilcomp6k",
-    "ilcomp6h",
     "ilcomp6v",
     "ilcomp6t",
     "ilcomp5a",
@@ -64,8 +79,6 @@ VALID_MACHINES_V14 = [
     "ilcomp5g",
     "ilcomp5i",
     "ilcomp5f",
-    "ilcomp5k",
-    "ilcomp5l",
     "ilcomp5n",
     "ilcomp5p",
     "ilcomp5q",
@@ -73,8 +86,6 @@ VALID_MACHINES_V14 = [
     "ilcomp5v",
     "ilcomp5w",
     "ilcomp5x",
-    "ilcomp5y",
-    "ilcomp5z",
     "ilcomp61",
     "ilcomp63",
     "ilcomp6u",
