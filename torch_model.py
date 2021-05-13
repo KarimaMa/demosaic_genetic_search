@@ -1773,7 +1773,7 @@ def ast_to_model(self, shared_children=None):
       node_model = self.node.ast_to_model(shared_children)
       shared_children[id(self.node)] = node_model
 
-    kwargs = {"resolution":self.resolution, "model":node_model, "model_name":self.name, "no_grad":self.no_grad}
+    kwargs = {"model":node_model, "model_name":self.name, "no_grad":self.no_grad}
 
     if hasattr(self, "weight_file"):
       kwargs["weights"] = self.weight_file
