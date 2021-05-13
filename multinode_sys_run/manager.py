@@ -408,7 +408,8 @@ class Searcher():
         worker_id = work_request_info[0]
         is_work_request = (int(work_request_info[1]) == 1)
 
-        assert(is_work_request), "workers should not be sending any more training results at shutdown!!!"
+        if not is_work_request:
+          print(f"timed out worker {worker_id} sending training results at shutdown!!!")
       
         message_str = "SHUTDOWN"
         print(f"sending shutdown message to {worker_id}")
@@ -429,7 +430,7 @@ class Searcher():
   """
   sends the jobs to workers and receive their training results
   """
-  def monitor_training_tasks(self, socket, worker_tasks, validation_psnrs):
+  def monitor_training_tasks(self, socket, worker_tasks, task_model_ids, validation_psnrs):
     num_tasks = len(worker_tasks)
     
     next_task_id = 0
@@ -444,21 +445,23 @@ class Searcher():
     train_argdict = vars(self.args)
     del train_argdict["input_ops"]
 
+    timeout = args.train_timeout + 10
     tick = 0
 
     while True:
       if tick % 6 == 0:
-        print(f"total tasks: {num_tasks} pending: {len(pending_task_info)} timed out: {len(timed_out_tasks)} done: {len(done_tasks)}")
+        print(f"total tasks: {num_tasks}  pending: {len(pending_task_info)}  timed out: {len(timed_out_tasks)}  done: {len(done_tasks)}")
 
-      if (len(done_tasks.items()) + len(timed_out_tasks)) == num_tasks:
+      if (len(done_tasks.items()) + len(timed_out_tasks)) >= num_tasks:
         self.work_manager_logger.info("-- all tasks are done or timed out --")
         return done_tasks, timed_out_tasks, registered_workers
 
       # check for timed out tasks 
       for task_id in pending_task_info:
         start_time = pending_task_info[task_id]["start_time"]
-        if time.time() - start_time > self.args.train_timeout:
-          timed_out_tasks.append(task_id)
+        if time.time() - start_time > timeout:
+          if not task_id in timed_out_tasks:
+            timed_out_tasks.append(task_id)
 
       try:
         # listen for work request from a worker
@@ -502,22 +505,26 @@ class Searcher():
         else: # worker is delivering training results
           print(f"Received training results from worker {worker_id}")
           task_id = int(work_request_info[2])
-          model_id = work_request_info[3]
+          model_id = int(work_request_info[3])
           task_validation_psnrs = [float(p) for p in work_request_info[4].split(",")]
 
-          print(f"worker {worker_id} on task: {task_id} model_id: {model_id} returning psnrs {task_validation_psnrs}")
-          for init in range(args.keep_initializations):
-            offset = int(task_id) * args.keep_initializations + init
-            validation_psnrs[offset] = task_validation_psnrs[init]
+          if not model_id in task_model_ids:
+            print(f"worker sending late results for model {model_id} from previous generation's models, dropping...")
+          else:          
+            print(f"worker {worker_id} on task: {task_id} model_id: {model_id} returning psnrs {task_validation_psnrs}")
+            for init in range(args.keep_initializations):
+              offset = int(task_id) * args.keep_initializations + init
+              validation_psnrs[offset] = task_validation_psnrs[init]
+            
+            done_tasks[task_id] = time.time() - pending_task_info[task_id]["start_time"]
+            del pending_task_info[task_id]
 
           # send acknowledgement of work received to worker
           ack = "1"
           print(f"sending task ack of work completed to worker {worker_id}")
           reply = ack.encode("utf-8")
           socket.send(reply)
-
-          done_tasks[task_id] = time.time() - pending_task_info[task_id]["start_time"]
-          
+    
       except zmq.Again as e:
         pass
 
@@ -652,6 +659,7 @@ class Searcher():
       task_id = 0
       training_tasks = {}
 
+      task_model_ids = []
       subproc_tasks = []
       validation_psnrs = [-1 for i in range(len(args.cost_tiers) * self.args.mutations_per_generation)]
 
@@ -715,6 +723,7 @@ class Searcher():
           
           task_info = MutationTaskInfo(task_id, new_model_entry, new_model_dir, pytorch_models, new_model_id)
           subproc_task_str = f"{task_id}--{new_model_dir}--{new_model_id}"
+          task_model_ids.append(new_model_id)
 
           util.create_dir(task_info.model_dir)
           self.save_model_ast(new_model_ast, task_info.model_id, task_info.model_dir)
@@ -724,7 +733,7 @@ class Searcher():
           subproc_tasks.append(subproc_task_str)
           task_id += 1
 
-      done_tasks, timed_out_tasks, registered_workers = self.monitor_training_tasks(self.socket, subproc_tasks, validation_psnrs)
+      done_tasks, timed_out_tasks, registered_workers = self.monitor_training_tasks(self.socket, subproc_tasks, task_model_ids, validation_psnrs)
 
       num_failed = len(timed_out_tasks)
       num_finished = len(done_tasks)
