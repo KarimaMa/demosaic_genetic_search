@@ -351,7 +351,7 @@ def green_model_change_mutation(self, tree):
   green_model_id = get_green_model_id(tree)
   green_nodes = collect_green_nodes(tree)
 
-  green_model_options = [i for i in range(len(self.args.green_model_asts))]
+  green_model_options = [i for i in range(len(self.args.green_model_ast_files))]
   green_model_options.remove(green_model_id)
   new_green_model_id = random.choice(green_model_options)
   for n in green_nodes:
