@@ -529,7 +529,7 @@ class Searcher():
         pass
 
       tick += 1
-      time.sleep(1)
+      time.sleep(5)
 
 
   def save_model_ast(self, model_ast, model_id, model_dir):

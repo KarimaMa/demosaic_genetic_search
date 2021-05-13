@@ -79,7 +79,7 @@ def run_worker(args):
 
       if task_info_str == "WAIT":
         print(f"worker {worker_id} is waiting on work from manager...")
-        time.sleep(1)
+        time.sleep(5)
         continue
 
       if task_info_str == "SHUTDOWN":
@@ -133,7 +133,7 @@ def run_worker(args):
     except zmq.Again as e:
       pass
 
-    time.sleep(1)
+    time.sleep(5)
 
 
 if __name__ == "__main__":
