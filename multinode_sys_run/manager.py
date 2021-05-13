@@ -33,6 +33,7 @@ import datetime
 import mysql_db
 import zmq
 from search_util import insert_green_model
+import json
 
 
 def build_model_database(args):
@@ -397,7 +398,6 @@ class Searcher():
       print("all workers successfully shutdown")
 
 
-
   """
   sends the jobs to workers and receive their training results
   """
@@ -411,6 +411,11 @@ class Searcher():
     done_tasks = {}
     timed_out_tasks = []
 
+    registered_workers = OrderedSet()
+
+    train_argdict = vars(self.args)
+    del train_argdict["input_ops"]
+
     tick = 0
 
     while True:
@@ -419,7 +424,7 @@ class Searcher():
 
       if (len(done_tasks.items()) + len(timed_out_tasks)) == num_tasks:
         self.work_manager_logger.info("-- all tasks are done or timed out --")
-        return done_tasks, timed_out_tasks
+        return done_tasks, timed_out_tasks, registered_workers
 
       # check for timed out tasks 
       for task_id in pending_task_info:
@@ -434,9 +439,18 @@ class Searcher():
         
         work_request_info = msg_str.split(" ")
         worker_id = work_request_info[0]
+
+        is_args_request = (int(work_request_info[1]) == 0)
         is_work_request = (int(work_request_info[1]) == 1)
 
-        if is_work_request:
+        if not worker_id in registered_workers:
+          registered_workers.add(worker_id)
+
+        if is_args_request:
+          print(f"Worker {worker_id} has come online, sending training args...")
+          socket.send_json(train_argdict)
+
+        elif is_work_request:
           print(f"Received work request from worker {worker_id}")
 
           # no more work to send - tell worker there is no work
@@ -680,7 +694,7 @@ class Searcher():
           subproc_tasks.append(subproc_task_str)
           task_id += 1
 
-      done_tasks, timed_out_tasks = self.monitor_training_tasks(self.socket, subproc_tasks, validation_psnrs)
+      done_tasks, timed_out_tasks, registered_workers = self.monitor_training_tasks(self.socket, subproc_tasks, validation_psnrs)
 
       num_failed = len(timed_out_tasks)
       num_finished = len(done_tasks)
@@ -740,7 +754,7 @@ class Searcher():
     print(f"downsample\ntries: {self.mutator.binop_tries} loc select fails {self.mutator.binop_loc_selection_failures} \
         insert fail {self.mutator.binop_insertion_failures} reject {self.mutator.binop_rejects} success {self.mutator.binop_success} seen {self.mutator.binop_seen}")
 
-    self.shutdown_workers(self.socket, self.args.num_workers)
+    self.shutdown_workers(self.socket, len(registered_workers))
     self.socket.close()
 
     return cost_tiers
