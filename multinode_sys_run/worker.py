@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 import random
+from train import train_model
 
 rootdir = '/'.join(sys.path[0].split("/")[0:-1])
 sys_run_dir = os.path.join(rootdir, "sys_run")
@@ -15,7 +16,6 @@ import socket
 import zmq
 import argparse
 import torch
-from train import train_model
 import demosaic_ast
 import numpy as np
 import time
@@ -112,7 +112,7 @@ def run_worker(args):
                                   os.path.join(model_dir, f'model_{model_id}_training_log'))
 
       model_val_psnrs = train_model(train_args, gpu_id, model_id, models, model_dir, train_logger)
-      # model_val_psnrs = [30.0]
+
       logger.info(f"worker on gpu {gpu_id} finished task {task_id} model {model_id} with validation psnrs {model_val_psnrs}")
 
       # send training results
@@ -123,7 +123,9 @@ def run_worker(args):
       # wait for manager to send acknowledgement of our labors
       message = socket.recv()
       ack = message.decode("utf-8")
-      if int(ack) == 1:
+      if ack == "SHUTDOWN":
+        print(f"Manager sending shutdown signal, ignoring training results for task {task_id} model {model_id}")    
+      elif int(ack) == 1:
         print(f"Manager received train results for task {task_id} model {model_id}")
       else:
         print(f"Uh oh... ")
