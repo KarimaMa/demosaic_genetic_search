@@ -6,65 +6,32 @@ import stat
 import htcondor
 
 VALID_MACHINES_V10 = [
-    # "ilcomp4a"
-    # "ilcomp4c"
-    # "ilcomp4d"
-    # "ilcomp4e"
-
-
-    # "ilcomp5k"
-    # "ilcomp5l"
-    # "ilcomp5n"
-    # "ilcomp5p"
-    # "ilcomp5q"
-    # "ilcomp5r"
-    # "ilcomp5v"
-    # "ilcomp5w"
-    # "ilcomp5x"
-    # "ilcomp5y"
-    # "ilcomp5z"
-
-
-    # "ilcomp64",
-    # "ilcomp6x",
+    "ilcomp4a",
+    "ilcomp4c",
+    "ilcomp4d",
+    "ilcomp4e",
+    "ilcomp6a",
+    "ilcomp6e",
+    "ilcomp6f",
+    "ilcomp6l",
+    "ilcomp6m",
+    "ilcomp6n",
+    "ilcomp6r",
+    "ilcomp6w",
+    "ilcomp6x",
+    "ilcomp22",
+    "ilcomp23",
+    "ilcomp24",
+    "ilcomp25",
+    "ilcomp39",
+    "ilcomp44",
+    "ilcomp45",
+    "ilcomp49",
+    "ilcomp60",
+    "ilcomp64",
 ]
-# buggy
 
 # not tested
-# "ilcomp6a",
-# "ilcomp6b",
-# "ilcomp6c",
-# "ilcomp6d",
-# "ilcomp6e",
-# "ilcomp6f",
-# "ilcomp6g",
-# "ilcomp6h",
-# "ilcomp6k",
-# "ilcomp6l",
-# "ilcomp6m",
-# "ilcomp6n",
-# "ilcomp6r",
-# "ilcomp6t",
-# "ilcomp6u",
-# "ilcomp6v",
-# "ilcomp6w",
-# "ilcomp6x",
-# "ilcomp22",
-# "ilcomp23",
-# "ilcomp24",
-# "ilcomp25",
-# "ilcomp26",
-# "ilcomp39",
-# "ilcomp42",
-# "ilcomp43",
-# "ilcomp44",
-# "ilcomp45",
-# "ilcomp49",
-# "ilcomp57",
-# "ilcomp60",
-# "ilcomp64",
-
-# busy
     # "ilcomp21",
     # "ilcomp27",
     # "ilcomp28",
@@ -72,30 +39,49 @@ VALID_MACHINES_V10 = [
     # "ilcomp31",
     # "ilcomp36",
     # "ilcomp41",
+    # "ilcomp42",
+    # "ilcomp43",
     # "ilcomp46",
     # "ilcomp65",
     # "ilcomp6y",
 
 
-# not 10
-    # "ilcomp5a"
-    # "ilcomp5b"
-    # "ilcomp5c"
-    # "ilcomp5d"
-    # "ilcomp5g"
-    # "ilcomp5i"
-
-
 VALID_MACHINES_V14 = [
-    "ilcomp5f"
-
-    # "ilcomp61",
-    # "ilcomp63",
-    # "ilcomp6u",
-    # "ilcomp72",
-    # "ilcomp75",
-    # "ilcomp76",
-    # "ilcomp78",
+    "ilcomp26",
+    "ilcomp57",
+    "ilcomp6b",
+    "ilcomp6c",
+    "ilcomp6d",
+    "ilcomp6g",
+    "ilcomp6k",
+    "ilcomp6h",
+    "ilcomp6v",
+    "ilcomp6t",
+    "ilcomp5a",
+    "ilcomp5b",
+    "ilcomp5c",
+    "ilcomp5d",
+    "ilcomp5g",
+    "ilcomp5i",
+    "ilcomp5f",
+    "ilcomp5k",
+    "ilcomp5l",
+    "ilcomp5n",
+    "ilcomp5p",
+    "ilcomp5q",
+    "ilcomp5r",
+    "ilcomp5v",
+    "ilcomp5w",
+    "ilcomp5x",
+    "ilcomp5y",
+    "ilcomp5z",
+    "ilcomp61",
+    "ilcomp63",
+    "ilcomp6u",
+    "ilcomp72",
+    "ilcomp75",
+    "ilcomp76",
+    "ilcomp78",
 ]
 
 DOCKER_IMAGE = "docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v%d"

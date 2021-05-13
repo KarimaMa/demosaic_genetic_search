@@ -1,5 +1,6 @@
 #!/bin/zsh
 
+echo $(hostname)
 echo "Testing GPU configuration..."
 if ! nvidia-smi; then
     echo "nvidia-smi failed, aborting"
