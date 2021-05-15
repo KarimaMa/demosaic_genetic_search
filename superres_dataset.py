@@ -120,7 +120,7 @@ class SGreenQuadDataset(data.Dataset):
         return (input, target)
 
 
-class SGreenQuadDataset(data.Dataset):
+class SRGBQuadDataset(data.Dataset):
   def __init__(self, data_file=None, return_images=False, return_index=False):
     
     if data_file:
@@ -199,6 +199,9 @@ class SGreenQuadDataset(data.Dataset):
     quad_size[1] //= 2
     quad_size[2] //= 2
 
+    quad_h = quad_size[1]
+    quad_w = quad_size[2]
+
     bayer_quad = np.zeros(quad_size)
     bayer_quad[0,:,:] = lowres_mosaic[0,0::2,0::2]
     bayer_quad[1,:,:] = lowres_mosaic[0,0::2,1::2]
@@ -211,19 +214,15 @@ class SGreenQuadDataset(data.Dataset):
     redblue_bayer[0,:,:] = bayer_quad[1,:,:]
     redblue_bayer[1,:,:] = bayer_quad[2,:,:]
 
-    green_grgb[0,:,:] = bayer_quad[0,:,:]
-    green_grgb[1,:,:] = bayer_quad[3,:,:]
-
     target = img
     # crop out the valid region of the fullres image 
     target = target[:,first_valid_in_loc:last_valid_in_loc+1, first_valid_in_loc:last_valid_in_loc+1]
 
     bayer_quad = torch.Tensor(bayer_quad)
     redblue_bayer = torch.Tensor(redblue_bayer)
-    green_grgb = torch.Tensor(green_grgb)
     target = torch.Tensor(target)
 
-    input = (bayer_quad, redblue_bayer, green_grgb)
+    input = (bayer_quad, redblue_bayer)
 
     if self.return_images:
         cropped_fullres = img[:,first_valid_in_loc:last_valid_in_loc+1, first_valid_in_loc:last_valid_in_loc+1]
