@@ -338,12 +338,13 @@ class SRGBExtractorOp(nn.Module):
     return self.output 
 
   def forward(self, green, chromapred):
-    out_shape = green.shape
-    img = torch.empty(torch.Size(out_shape), device=green.device)
+    out_shape = list(chromapred.shape)
+    out_shape[1] = 3
+    img = torch.empty(torch.Size(out_shape), device=chromapred.device)
 
     # fill in reds
     img[:,0,:,:] = chromapred[:,0,:,:]
-    img[:,1,:,:] = green[:,:,:,:]
+    img[:,1,:,:] = green[:,0,:,:]
     img[:,2,:,:] = chromapred[:,1,:,:]
 
     return img 
@@ -1919,12 +1920,12 @@ def ast_to_model(self, shared_children=None):
   if id(self) in shared_children:
     return shared_children[id(self)]
 
-  child1_model = self.child1.ast_to_model(shared_children)
-  child2_model = self.child2.ast_to_model(shared_children)
+  child1_model = self.lchild.ast_to_model(shared_children)
+  child2_model = self.rchild.ast_to_model(shared_children)
   model = SRGBExtractorOp(child1_model, child2_model)
 
   shared_children[id(self)] = model 
-  return mode
+  return model
 
 @extclass(RGB8ChanExtractor)
 def ast_to_model(self, shared_children=None):
