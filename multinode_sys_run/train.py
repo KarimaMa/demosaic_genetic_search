@@ -244,6 +244,9 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
   timed_out = False
   start_time = time.time()
 
+  if model_id % 2 == 0:
+    time.sleep(10)
+
   for epoch in range(cur_epoch, args.epochs):
     if args.keep_initializations < args.model_initializations:
       if epoch == 1:
@@ -327,7 +330,7 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
                         "Input(FlatMosaic)": flat_mosaic,
                         "Input(RBXtrans)": rb}        
         else:
-          model_inputs = {"Input(Bayer)": bayer, 
+          model_inputs = {"Input(Mosaic)": bayer, 
                           "Input(Green@GrGb)": green_grgb, 
                           "Input(RedBlueBayer)": redblue_bayer}
 
@@ -401,7 +404,7 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
                         "Input(FlatMosaic)": flat_mosaic,
                         "Input(RBXtrans)": rb}
         else:
-          model_inputs = {"Input(Bayer)": bayer, 
+          model_inputs = {"Input(Mosaic)": bayer, 
                         "Input(Green@GrGb)": green_grgb, 
                         "Input(RedBlueBayer)": redblue_bayer}
       elif args.nas:
@@ -482,7 +485,7 @@ def infer(args, gpu_id, valid_queue, models, criterion):
                           "Input(FlatMosaic)": flat_mosaic,
                           "Input(RBXtrans)": rb}
           else:           
-            model_inputs = {"Input(Bayer)": bayer, 
+            model_inputs = {"Input(Mosaic)": bayer, 
                           "Input(Green@GrGb)": green_grgb, 
                           "Input(RedBlueBayer)": redblue_bayer}
         elif args.nas:

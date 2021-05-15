@@ -240,7 +240,7 @@ class Searcher():
   Builds valid input nodes for a chroma model given the model's designated green model choice
   """
   def construct_chroma_inputs(self, green_model_id):
-    bayer = demosaic_ast.Input(4, "Bayer")
+    bayer = demosaic_ast.Input(4, "Mosaic")
     green_GrGb = demosaic_ast.Input(2, "Green@GrGb")
     rb = demosaic_ast.Input(2, "RedBlueBayer")
     
@@ -260,7 +260,7 @@ class Searcher():
     rb_min_g_stack_green_input = demosaic_ast.Input(6, "RBdiffG_GreenQuad", no_grad=True, node=rb_min_g_stack_green)
 
     return {
-      "Input(Bayer)": bayer,
+      "Input(Mosaic)": bayer,
       "Input(Green@GrGb)": green_GrGb,
       "Input(GreenExtractor)": flat_green, # can select this as an input to insert, must pick GreenQuad instead
       "Input(GreenQuad)": green_quad_input,
@@ -455,6 +455,7 @@ class Searcher():
         print(f"total tasks: {num_tasks}  pending: {len(pending_task_info)}  timed out: {len(timed_out_task_ids)}  done: {len(done_task_ids)}")
 
       if len(done_task_ids.union(timed_out_task_ids)) == num_tasks:
+        print(f"done tasks {done_task_ids} timed out {timed_out_task_ids}")
         self.work_manager_logger.info("-- all tasks are done or timed out --")
         return done_tasks, timed_out_task_ids, registered_workers
 
