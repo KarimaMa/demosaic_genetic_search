@@ -101,7 +101,7 @@ def ChromaDemosaicknet(depth, width, no_grad, green_model, green_model_id):
   rb_min_g = Sub(rb_upsampled, green_rb_input)
   rb_min_g_stack_green = Stack(rb_min_g, green_quad_input)
   rb_min_g_stack_green.compute_input_output_channels()
-  chroma_input = Input(6, name="RBdiffG_GreenQuad", resolution=1/2, no_grad=True, node=rb_min_g_stack_green)
+  chroma_input = Input(6, name="RBdiffG_GreenQuad", resolution=1, no_grad=True, node=rb_min_g_stack_green)
 
   for i in range(depth):
     if i == 0:
@@ -153,7 +153,7 @@ def ChromaMultires(depth, width, no_grad, green_model, green_model_id):
   rb_min_g = Sub(rb_upsampled, green_rb_input)
   rb_min_g_stack_green = Stack(rb_min_g, green_quad_input)
   rb_min_g_stack_green.compute_input_output_channels()
-  chroma_input = Input(6, name="RBdiffG_GreenQuad", resolution=1/2, no_grad=True, node=rb_min_g_stack_green)
+  chroma_input = Input(6, name="RBdiffG_GreenQuad", resolution=1, no_grad=True, node=rb_min_g_stack_green)
 
   for i in range(depth):
     if i == 0:
