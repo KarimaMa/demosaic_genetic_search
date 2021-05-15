@@ -315,9 +315,9 @@ class StackOp(nn.Module):
     self._operands[1].to_gpu(gpu_id)
 
 
-class RGBSuperResExtractorOp(nn.Module):
+class SRGBExtractorOp(nn.Module):
   def __init__(self, green, chromapred):
-    super(RGBSuperResExtractorOp, self).__init__()
+    super(SRGBExtractorOp, self).__init__()
     self._operands = nn.ModuleList([green, chromapred])
     self.output = None
 
@@ -1912,7 +1912,7 @@ def ast_to_model(self, shared_children=None):
   return model
 
 
-@extclass(RGBSuperResExtractor)
+@extclass(SRGBExtractor)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
@@ -1921,7 +1921,7 @@ def ast_to_model(self, shared_children=None):
 
   child1_model = self.child1.ast_to_model(shared_children)
   child2_model = self.child2.ast_to_model(shared_children)
-  model = RGBSuperResExtractorOp(child1_model, child2_model)
+  model = SRGBExtractorOp(child1_model, child2_model)
 
   shared_children[id(self)] = model 
   return mode
