@@ -1,0 +1,18 @@
+2021-05-11 15:29:10,344 INFO Creating FastDataLoader...
+2021-05-11 15:29:18,048 INFO Finished creating FastDataLoader
+2021-05-11 15:29:18,048 INFO Creating AsyncLoader...
+2021-05-11 15:29:18,050 INFO Finished creating AsyncLoader
+2021-05-11 15:29:25,829 INFO USING LEARNING RATE 0.004
+2021-05-11 15:30:12,780 INFO time to finish epoch 0 : 46.944159507751465
+2021-05-11 15:30:14,110 INFO time to validate after epoch 0 : 0.0010199546813964844
+2021-05-11 15:30:14,155 INFO after first epoch, validation psnrs [31.73967559814453, 33.05817559814453, 32.85295425415039] keeping best model 1
+2021-05-11 15:30:56,127 INFO time to finish epoch 1 : 41.97148013114929
+2021-05-11 15:30:57,606 INFO time to validate after epoch 1 : 0.00552058219909668
+2021-05-11 15:31:39,840 INFO time to finish epoch 2 : 42.23377251625061
+2021-05-11 15:31:41,190 INFO time to validate after epoch 2 : 0.004668712615966797
+2021-05-11 15:32:24,079 INFO time to finish epoch 3 : 42.88949799537659
+2021-05-11 15:32:25,482 INFO time to validate after epoch 3 : 0.00043487548828125
+2021-05-11 15:33:07,838 INFO time to finish epoch 4 : 42.35611629486084
+2021-05-11 15:33:09,339 INFO time to validate after epoch 4 : 0.001031637191772461
+2021-05-11 15:33:51,730 INFO time to finish epoch 5 : 42.39069318771362
+2021-05-11 15:33:53,008 INFO time to validate after epoch 5 : 0.013865232467651367
