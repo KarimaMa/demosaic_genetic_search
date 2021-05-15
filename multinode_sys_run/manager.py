@@ -268,6 +268,36 @@ class Searcher():
       "Input(RBdiffG_GreenQuad)": rb_min_g_stack_green_input
     }
     
+
+  def construct_schroma_inputs(self, green_model_id):
+    bayer = demosaic_ast.Input(4, name="Mosaic", resolution=float(1/2))
+    rb = demosaic_ast.Input(2, name="RedBlueBayer", resolution=1/2)
+    
+    flat_green = demosaic_ast.Input(1, name="GreenExtractor", resolution=2, no_grad=True, green_model_id=green_model_id)
+
+    green_quad = demosaic_ast.Flat2Quad(flat_green)
+    green_quad.compute_input_output_channels()
+    green_quad_input = demosaic_ast.Input(4, name="GreenQuad", resolution=1, node=green_quad, no_grad=True)
+
+    green_rb = demosaic_ast.GreenRBExtractor(flat_green)
+    green_rb.compute_input_output_channels()
+    green_rb_input = demosaic_ast.Input(2, name="Green@RB", resolution=1, node=green_rb, no_grad=True)
+    
+    rb_upsampled = demosaic_ast.LearnedUpsample(rb, 2, factor=2)
+
+    rb_min_g = demosaic_ast.Sub(rb_upsampled, green_rb_input)
+    rb_min_g_stack_green = demosaic_ast.Stack(rb_min_g, green_quad_input)
+    rb_min_g_stack_green.compute_input_output_channels()
+    rb_min_g_stack_green_input = demosaic_ast.Input(6, name="RBdiffG_GreenQuad", resolution=1/2, no_grad=True, node=rb_min_g_stack_green)
+
+    return {
+      "Input(Mosaic)": bayer,
+      "Input(GreenExtractor)": flat_green, # can select this as an input to insert, must pick GreenQuad instead
+      "Input(GreenQuad)": green_quad_input,
+      "Input(Green@RB)": green_rb_input,
+      "Input(RBdiffG_GreenQuad)": rb_min_g_stack_green_input
+    }
+
  
   def construct_xchroma_inputs(self, green_model_id):
     rb_xtrans = demosaic_ast.Input(16, name="RBXtrans", resolution=1/6)
@@ -332,6 +362,8 @@ class Searcher():
             set_green_model_id(partner_ast, green_model_id)
           if args.xtrans_chroma:
             model_inputs = self.construct_xchroma_inputs(green_model_id)
+          elif args.superres_rgb:
+            model_inputs = self.construct_schroma_inputs(green_model_id)
           else:
             model_inputs = self.construct_chroma_inputs(green_model_id)
           model_input_names = OrderedSet(model_inputs.keys())
@@ -924,6 +956,7 @@ if __name__ == "__main__":
   parser.add_argument('--xtrans_chroma', action="store_true")
   parser.add_argument('--xtrans_green', action="store_true")  
   parser.add_argument('--superres_green', action="store_true")
+  parser.add_argument('--superres_rgb', action="store_true")
 
   parser.add_argument('--nas', action='store_true')
   parser.add_argument('--rgb8chan', action="store_true")
