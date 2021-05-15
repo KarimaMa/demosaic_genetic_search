@@ -51,10 +51,10 @@ python $CODE_LOCAL/multinode_sys_run/manager.py \
     --tier_size=20 \
     --insertion_bias \
     --late_cdf_gen=9 \
-    --max_footprint=35 \
+    --max_footprint=30 \
     --resolution_change_factors=2,3 \
-    --pixel_width=120 \
-    --crop=12 \
+    --pixel_width=128 \
+    --crop=16 \
     --max_nodes=50 \
     --max_subtree_size=25 \
     --train_timeout=1200 \

@@ -46,18 +46,18 @@ python $CODE_LOCAL/multinode_sys_run/manager.py \
     --learning_rate=0.004 \
     --epochs=6 \
     --starting_model_id=$STARTID \
-    --generations=40 \
+    --generations=20 \
     --tablename=adobegreen \
     --tier_size=20 \
     --insertion_bias \
     --late_cdf_gen=9 \
-    --max_footprint=35 \
+    --max_footprint=64 \
     --resolution_change_factors=2,3 \
-    --pixel_width=120 \
-    --crop=12 \
-    --max_nodes=50 \
-    --max_subtree_size=25 \
-    --train_timeout=1200 \
+    --pixel_width=128 \
+    --crop=0 \
+    --max_nodes=100 \
+    --max_subtree_size=50 \
+    --train_timeout=3000 \
     --full_model \
     --port=$PORT \
     --green_model_asts=$CODE_LOCAL/PARETO_GREEN_MODELS/PARETO_HIGH_COST_BAYER_GREEN_05-14/ast_files.txt \
