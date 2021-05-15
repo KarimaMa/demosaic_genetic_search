@@ -275,10 +275,10 @@ class XFlatRGBExtractor(TernaryHcIcJcKc, Special, Node):
     return 3 # full rgb image
 
 
-class RGBSuperResExtractor(BinopIcJcKc, Special, Node):
+class SRGBExtractor(BinopIcJcKc, Special, Node):
   def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
-      name = "RGBSuperResExtractor"
+      name = "SRGBExtractor"
     Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
@@ -335,6 +335,7 @@ class FlatRGB8ChanExtractor(BinopIcJcKc, Special, Node):
     return 8 
   def Kc(self): 
     return 3 # full rgb image
+
 
 
 """
@@ -740,7 +741,7 @@ def compute_input_output_channels(self):
   self.child3.compute_input_output_channels()
   return self.in_c, self.out_c
 
-@extclass(RGBSuperResExtractor)
+@extclass(SRGBExtractor)
 def compute_input_output_channels(self):
   self.lchild.compute_input_output_channels()
   self.rchild.compute_input_output_channels()
@@ -1451,7 +1452,7 @@ special_linear_ops = OrderedSet((LearnedUpsample, LearnedDownsample))
 nonlinear_ops = OrderedSet((Softmax, Relu)) 
 
 border_ops = OrderedSet((RGBExtractor, XRGBExtractor, XFlatRGBExtractor, RGB8ChanExtractor, FlatRGB8ChanExtractor, \
-                        GreenExtractor, XGreenExtractor, XFlatGreenExtractor, GreenRBExtractor, XGreenRBExtractor, SGreenExtractor, Flat2Quad, Input))
+                        GreenExtractor, XGreenExtractor, XFlatGreenExtractor, GreenRBExtractor, XGreenRBExtractor, SGreenExtractor, SRGBExtractor, Flat2Quad, Input))
 
 nas_ops = OrderedSet((Conv1x1, Conv2D, Relu, Softmax, Add, Stack))
 
