@@ -214,8 +214,27 @@ class ModelEvaluator():
     self.args = training_args
     self.log_format = '%(asctime)s %(levelname)s %(message)s'
 
+  def find_green_model(self, root):
+    nodes = root.preorder()
+    for n in nodes:
+      if isinstance(n, Input) and hasattr(n, "node"):
+        if any([isinstance(n.node, green_type) for green_type in [GreenExtractor, SGreenExtractor, XGreenExtractor, XFlatGreenExtractor]]):
+          return n.node
+        else:
+          green_model = self.find_green_model(n.node)
+          if green_model:
+            return green_model
+
+    return None
+
   def compute_cost(self, root):
-    return self.compute_cost_helper(root, set())
+    green_cost = 0
+    # compute cost of green model if this is a chroma model
+    green_model = self.find_green_model(root)
+    if green_model:
+      green_cost = self.compute_cost(green_model)
+
+    return self.compute_cost_helper(root, set()) + green_cost
     
   def compute_cost_helper(self, root, seen):
     cost = 0
@@ -226,6 +245,9 @@ class ModelEvaluator():
 
     if isinstance(root, Input):
       if hasattr(root, "node"):
+        if any([isinstance(root.node, green_type) for green_type in [GreenExtractor, SGreenExtractor, XGreenExtractor, XFlatGreenExtractor]]):
+          seen.add(id(root.node))
+          return 0 # compute cost of green model separately
         if not id(root.node) in seen:
           cost += self.compute_cost_helper(root.node, seen)
           seen.add(id(root.node))
