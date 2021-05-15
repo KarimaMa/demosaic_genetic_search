@@ -59,7 +59,6 @@ python $CODE_LOCAL/multinode_sys_run/manager.py \
     --max_subtree_size=25 \
     --train_timeout=1200 \
     --full_model \
-    --xtrans_chroma \
     --port=$PORT \
     --green_model_asts=$CODE_LOCAL/PARETO_GREEN_MODELS/PARETO_BAYER_GREEN_05-14/ast_files.txt \
     --green_model_weights=$CODE_LOCAL/PARETO_GREEN_MODELS/PARETO_BAYER_GREEN_05-14/weight_files.txt \
