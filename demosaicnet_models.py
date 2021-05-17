@@ -62,16 +62,13 @@ class FullDemosaicknet(nn.Module):
 
   def _initialize_parameters(self):
     for l in self.main_processor:
-      print(l)
       if hasattr(l, "weight"):
         nn.init.xavier_normal_(l.weight)
     nn.init.xavier_normal_(self.residual_predictor.weight)
     nn.init.xavier_normal_(self.upsampler.weight)
 
     for l in self.fullres_processor:
-      print(l)
       if hasattr(l, "weight"):
-        print(l.__class__)
         nn.init.xavier_normal_(l.weight)
         
   def to_gpu(self, gpu_id):
@@ -175,16 +172,13 @@ class GreenDemosaicknet(nn.Module):
 
   def _initialize_parameters(self):
     for l in self.main_processor:
-      print(l)
       if hasattr(l, "weight"):
         nn.init.xavier_normal_(l.weight)
     nn.init.xavier_normal_(self.residual_predictor.weight)
     nn.init.xavier_normal_(self.upsampler.weight)
 
     for l in self.fullres_processor:
-      print(l)
       if hasattr(l, "weight"):
-        print(l.__class__)
         nn.init.xavier_normal_(l.weight)
 
   def to_gpu(self, gpu_id):
