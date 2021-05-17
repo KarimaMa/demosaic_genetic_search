@@ -39,7 +39,10 @@ def parse_cost_tiers(s):
 	ranges = [[int(x) for x in r.split(',')] for r in ranges]
 	return ranges
 
-def collect_model_info(modeldir, max_id):
+def is_in_range(model_id, id_ranges):
+	return any([model_id <= r[1] and model_id >= r[0] for r in id_ranges])
+
+def collect_model_info(modeldir, id_ranges):
 	psnrs = []
 	costs = []
 	model_ids = []
@@ -47,10 +50,14 @@ def collect_model_info(modeldir, max_id):
 
 	evaluator = cost.ModelEvaluator(None)
 
+	skipped = 0
 	for model in os.listdir(modeldir):
 		model_id = int(model)
-		if model_id > max_id:
-			continue
+		if not id_ranges is None:
+			if not is_in_range(model_id, id_ranges):
+				skipped += 1
+				continue
+
 		model_dir = os.path.join(modeldir, model)
 
 		training_info_file = os.path.join(model_dir, f"model_{model}_training_log")
@@ -72,5 +79,6 @@ def collect_model_info(modeldir, max_id):
 		costs.append(model_cost)
 		best_inits.append(init)
 
+	print(f"skipped {skipped} models out of id ranges")
 	return model_ids, costs, psnrs, best_inits
 

@@ -19,12 +19,18 @@ if __name__ == "__main__":
 	parser.add_argument("--psnr_file", type=str, default="psnrs.txt", help="where to write paths to selected models psnrs")
 	parser.add_argument("--cost_file", type=str, default="costs.txt", help="where to write paths to selected models costs")
 	parser.add_argument("--ids_file", type=str, default="modelids.txt", help="where to write paths to selected model ids")
-	parser.add_argument("--max_id", type=str, default=-1)
+	parser.add_argument("--id_ranges", type=str)
 	parser.add_argument("--selected_models", type=str, default="models", help="where to copy over model data for selected models")
 
 	args = parser.parse_args()
 
-	model_ids, costs, psnrs, best_inits = collect_model_info(args.search_models, args.max_id)
+	if args.id_ranges:
+		id_ranges = [(int(x.split(",")[0]), int(x.split(",")[1])) for x in args.id_ranges.split(" ")]
+		print(f"valid id ranges {id_ranges}")
+	else:
+		id_ranges = None
+
+	model_ids, costs, psnrs, best_inits = collect_model_info(args.search_models, id_ranges)
 
 	# take the best model in each cost tier
 	min_cost = min([c for c in costs])
