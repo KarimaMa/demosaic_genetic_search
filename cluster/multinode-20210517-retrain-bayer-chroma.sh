@@ -67,6 +67,7 @@ df -h | grep shm
 # DATA=$ROOT/data
 DATA=/mnt/ilcompf8d1/data/demosaicnet
 DATA_LOCAL=$DATA
+# RuntimeError: Dataset filelist is invalid, coult not find /dev/shm/demosaic_genetic_search/train/moire/009/091892.png
 # mkdir -p /mnt/ssd/tmp/mgharbi
 # DATA_LOCAL=/mnt/ssd/tmp/mgharbi/demosaicnet
 # DATA_LOCAL=/dev/shm/data
