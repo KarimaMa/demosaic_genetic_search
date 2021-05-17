@@ -15,8 +15,10 @@ sys.path.append(sys.path[0].split("/")[0])
 import cost
 import util
 import superres_model_lib
+import superres_only_model_lib
 from torch_model import ast_to_model
-from superres_dataset import SGreenQuadDataset
+from superres_dataset import SGreenQuadDataset, SRGBQuadDataset
+from superres_only_dataset import SDataset
 from dataset import FastDataLoader
 from tree import print_parents
 import demosaic_ast
@@ -51,18 +53,20 @@ def run(args, models, model_id, model_dir):
   optimizers = [torch.optim.Adam(
       m.parameters(),
       args.learning_rate) for m in models]
- 
-  if args.full_model:
-      raise NotImplementedError
+
+  if args.superres_only:
+    train_data = SDataset(data_file=args.training_file) 
+    validation_data = SDataset(data_file=args.validation_file) 
+    test_data = SDataset(data_file=args.test_file) 
+  elif args.full_model:
+    train_data = SRGBQuadDataset(data_file=args.training_file) 
+    validation_data = SRGBQuadDataset(data_file=args.validation_file) 
+    test_data = SRGBQuadDataset(data_file=args.test_file) 
   else:
     train_data = SGreenQuadDataset(data_file=args.training_file) 
     validation_data = SGreenQuadDataset(data_file=args.validation_file) 
     test_data = SGreenQuadDataset(data_file=args.test_file) 
 
-    #   train_data = GreenQuadDataset(input_data_file=args.train_input, target_data_file=args.train_target) 
-    # validation_data = GreenQuadDataset(input_data_file=args.val_input, target_data_file=args.val_target) 
-    # test_data = GreenQuadDataset(input_data_file=args.test_input, target_data_file=args.test_target) 
-    
   num_train = len(train_data)
   train_indices = list(range(int(num_train*args.train_portion)))
 
@@ -108,25 +112,21 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
     m.train()
 
   for step, (input, target) in enumerate(train_queue):
-    if args.full_model:
-      if args.xtrans:
-        raise NotImplementedError
-      else:
-        bayer, redblue_bayer, green_grgb = input 
-        bayer = bayer.cuda()
-        redblue_bayer = redblue_bayer.cuda()
-        green_grgb = green_grgb.cuda()
-
+    if args.superres_only:
+      image = input.cuda()
+    if args.full_model: 
+      bayer, redblue_bayer = input 
+      bayer = bayer.cuda()
+      redblue_bayer = redblue_bayer.cuda()
     else:
-      mosaic = input
-      mosaic = mosaic.cuda()
-      target = target.cuda()
+      mosaic = input.cuda()
+    target = target.cuda()
 
     if args.testing:
       print("target")
       print(target[0,:,6:12,6:12])
       print("mosaic")
-      print(mosaic[0,:,1,1])
+      print(bayer[0,:,1,1])
 
     if args.crop > 0:
       target = target[..., args.crop:-args.crop, args.crop:-args.crop]
@@ -136,19 +136,22 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
     for i, model in enumerate(models):
       optimizers[i].zero_grad()
       model.reset()
-      if args.full_model:
-        model_inputs = {"Input(Bayer)": bayer, 
-                        "Input(Green@GrGb)": green_grgb, 
-                        "Input(RedBlueBayer)": redblue_bayer}
-        pred = model.run(model_inputs)
+      if args.superres_only:
+        model_inputs = {"Input(Image)": image}
+      elif args.full_model:
+        model_inputs = {"Input(Mosaic)": bayer, 
+                      "Input(RedBlueBayer)": redblue_bayer}
       else:
         model_inputs = {"Input(Mosaic)": mosaic}
-        pred = model.run(model_inputs)
+      
+      pred = model.run(model_inputs)
 
       if args.crop > 0:
         pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
 
       if args.testing:
+        print(f"target shape {target.shape}")
+        print(f"mosaic shape {bayer.shape}")
         print("pred")
         print(f"{pred[0,:,6:12,6:12].cpu().detach().numpy()}")
         diff = pred - target
@@ -191,15 +194,16 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
 
   with torch.no_grad():
     for step, (input, target) in enumerate(valid_queue):
-      if args.full_model:
-        bayer, redblue_bayer, green_grgb = input 
+      if args.superres_only:
+          image = input.cuda()
+      elif args.full_model:
+        bayer, redblue_bayer = input 
         bayer = bayer.cuda()
         redblue_bayer = redblue_bayer.cuda()
-        green_grgb = green_grgb.cuda()
       else:
-        mosaic = input
-        mosaic = mosaic.cuda()
-        target = target.cuda()
+        mosaic = input.cuda()
+      
+      target = target.cuda()
       
       if args.crop > 0:
         target = target[..., args.crop:-args.crop, args.crop:-args.crop]
@@ -208,14 +212,18 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
 
       for i, model in enumerate(models):
         model.reset()
-        if args.full_model:
-          model_inputs = {"Input(Bayer)": bayer, 
-                          "Input(Green@GrGb)": green_grgb, 
+        if args.superres_only:
+          model_inputs = {"Input(Image)": image}
+        elif args.full_model:
+          model_inputs = {"Input(Mosaic)": bayer, 
                           "Input(RedBlueBayer)": redblue_bayer}
-          pred = model.run(model_inputs)
         else:
-          model_inputs = {"Input(Mosaic)": mosaic}
-          pred = model.run(model_inputs)
+          if args.superres_only:
+            model_inputs = {"Input(Image)": image}
+          else:
+            model_inputs = {"Input(Mosaic)": mosaic}
+        
+        pred = model.run(model_inputs)
 
         clamped = torch.clamp(pred, min=0, max=1)
 
@@ -258,9 +266,15 @@ if __name__ == "__main__":
   parser.add_argument('--epochs', type=int, default=10, help='num of training epochs')
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
 
-  parser.add_argument('--green_demosaicnet', action='store_true')
-  parser.add_argument('--multiresgreen', action='store_true')
- 
+  parser.add_argument('--green_net', action='store_true')
+  parser.add_argument('--green_weighted', action='store_true')
+  parser.add_argument('--rgb_dnet', action='store_true')
+  parser.add_argument('--rgb_weighted', action='store_true')
+  parser.add_argument('--snet', action='store_true')
+  parser.add_argument('--sweighted', action='store_true')
+   
+  parser.add_argument('--model_file', type=str)
+
   parser.add_argument('--green_model_ast', type=str, help="green model ast to use for chroma model")
   parser.add_argument('--no_grad', action='store_true', help='whether or not to backprop through green model')
   parser.add_argument('--green_model_id', type=int, help='id of green model used')
@@ -275,13 +289,15 @@ if __name__ == "__main__":
 
   parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
   parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/subset7_100k_train_files.txt", help='filename of file with list of training data image files')
-  parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/val_files.txt", help='filename of file with list of validation data image files')
-  parser.add_argument('--test_file', type=str, default="/home/karima/cnn-data/test_files.txt")
+  parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/val.txt", help='filename of file with list of validation data image files')
+  parser.add_argument('--test_file', type=str, default="/home/karima/cnn-data/test.txt")
 
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
   parser.add_argument('--validation_freq', type=int, default=None, help='validation frequency')
 
-  parser.add_argument('--full_model', action="store_true")
+  parser.add_argument("--superres_only", action="store_true")
+  parser.add_argument("--full_model", action="store_true")
+
   parser.add_argument('--testing', action='store_true')
   parser.add_argument('--train', action='store_true')
 
@@ -316,23 +332,40 @@ if __name__ == "__main__":
   logger = util.create_logger('training_logger', logging.INFO, log_format, \
                                 os.path.join(args.save, 'training_log'))
   logger.info("args = %s", args)
-  args.width = [int(w.strip()) for w in args.width.split(",")]
-  if len(args.width) == 1:
-    args.width = args.width[0]
+  
+  if args.width:
+    args.width = [int(w.strip()) for w in args.width.split(",")]
+    if len(args.width) == 1:
+      args.width = args.width[0]
 
-  if args.green_demosaicnet:
-    logger.info("TRAINING DEMOSAICNET GREEN")
-    model = superres_model_lib.GreenDemosaicknet(args.depth, args.width)
-  if args.multiresgreen:
-    model = superres_model_lib.GreenMultires(args.depth, args.width)
+  if args.superres_only:
+    if args.snet:
+      model = superres_only_model_lib.RGBNet(args.depth, args.width)
+    elif args.sweighted:
+      model = superres_only_model_lib.RGBWeighted(args.depth, args.width)
+  else:
+    if args.green_net:
+      model = superres_model_lib.GreenDemosaicknet(args.depth, args.width)
+    if args.green_weighted:
+      model = superres_model_lib.GreenMultires(args.depth, args.width)
+    elif args.rgb_weighted:
+      green_model = demosaic_ast.load_ast(args.green_model_ast)
+      model = superres_model_lib.ChromaMultires(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
+    elif args.rgb_dnet:
+      green_model = demosaic_ast.load_ast(args.green_model_ast)
+      model = superres_model_lib.ChromaDemosaicknet(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
+    else:
+      model = demosaic_ast.load_ast(args.model_file)
 
+  ev = cost.ModelEvaluator(None)
 
-  if args.full_model and not (args.chromagradienthalide or args.fullrgbdemosaicnet or args.fullrgbgradienthalide):
+  if args.full_model:
     print(f'--- setting the no_grad parameter in green model {args.no_grad} ---')
 
     set_no_grad(green_model, args.no_grad)
     set_no_grad(model, args.no_grad)
 
+    print(f"green model cost {ev.compute_cost(green_model)}")
     print('--- inserting green model ---')
 
     def insert_green(model):
@@ -361,7 +394,6 @@ if __name__ == "__main__":
 
   print(model.dump())
 
-  ev = cost.ModelEvaluator(None)
   model_cost = ev.compute_cost(model)
   print(f"model compute cost: {model_cost}")
   model_footprint = model.compute_footprint(1)

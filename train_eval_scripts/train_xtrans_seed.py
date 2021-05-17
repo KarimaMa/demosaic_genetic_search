@@ -21,6 +21,7 @@ from xtrans_dataset import XGreenDataset, XRGBDataset
 from tree import print_parents
 import demosaic_ast
 from async_loader import AsynchronousLoader
+from type_check import compute_resolution
 
 
 def run(args, models, model_id, model_dir):
@@ -280,7 +281,7 @@ if __name__ == "__main__":
   parser.add_argument('--xrgb_dnet1', action='store_true')    
   parser.add_argument('--xrgb_dnet2', action='store_true')    
   parser.add_argument('--xrgb_dnet3', action='store_true')    
-  parser.add_argument('--xrgb_dnet4', action='store_true')    
+  parser.add_argument('--xrgb_weighted', action='store_true')
 
   parser.add_argument('--green_model_ast', type=str, help="green model ast to use for chroma model")
   parser.add_argument('--no_grad', action='store_true', help='whether or not to backprop through green model')
@@ -336,6 +337,8 @@ if __name__ == "__main__":
   if len(args.width) == 1:
     args.width = args.width[0]
 
+  ev = cost.ModelEvaluator(None)
+
   if args.xgreen_dnet1:
     model = xtrans_model_lib.XGreenDemosaicknet1(args.depth, args.width)
   elif args.xflatgreen_dnet:
@@ -350,24 +353,27 @@ if __name__ == "__main__":
     model = xtrans_model_lib.XGreenDemosaicknet3(args.depth, args.width)
   elif args.xgreen_dnet4:
     model = xtrans_model_lib.XGreenDemosaicknet4(args.depth, args.width)
-  elif args.xgreen_dnet5:
-    model = xtrans_model_lib.XGreenDemosaicknet5(args.depth, args.width)
-  elif args.xgreen_dnet6:
-    model = xtrans_model_lib.XGreenDemosaicknet6(args.depth, args.width)
   elif args.xrgb_dnet1:
     green_model = demosaic_ast.load_ast(args.green_model_ast)
+    compute_resolution(green_model)
     model = xtrans_model_lib.XRGBDemosaicknet1(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
   elif args.xrgb_dnet2:
     green_model = demosaic_ast.load_ast(args.green_model_ast)
+    compute_resolution(green_model)
     model = xtrans_model_lib.XRGBDemosaicknet2(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
   elif args.xrgb_dnet3:
     green_model = demosaic_ast.load_ast(args.green_model_ast)
+    compute_resolution(green_model)
     model = xtrans_model_lib.XRGBDemosaicknet3(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
-  elif args.xrgb_dnet4:
+  elif args.xrgb_weighted:
     green_model = demosaic_ast.load_ast(args.green_model_ast)
-    model = xtrans_model_lib.XRGBDemosaicknet4(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
+    compute_resolution(green_model)
+    model = xtrans_model_lib.XRGBWeightedFilters(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
 
+  
   if args.full_model:
+    green_cost = ev.compute_cost(green_model)
+    print(f"the green model cost: {green_cost}")
     print(f'--- setting the no_grad parameter in green model {args.no_grad} ---')
 
     set_no_grad(green_model, args.no_grad)
@@ -400,10 +406,10 @@ if __name__ == "__main__":
 
   print(model.dump())
 
-  ev = cost.ModelEvaluator(None)
-  model_cost = ev.compute_cost(model, xtrans=True)
+  model_cost = ev.compute_cost(model)
   print(f"model compute cost: {model_cost}")
-
+  exit()
+  
   if not torch.cuda.is_available():
     sys.exit(1)
 

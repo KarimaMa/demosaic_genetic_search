@@ -138,3 +138,68 @@ def ChromaMultires(depth, width, no_grad, green_model, green_model_id):
   compute_resolution(out)
   return out
 
+
+def RGBNet(depth, width):
+  image = Input(3, name="Image", resolution=1)  
+  upsampled_image = LearnedUpsample(image, 3, factor=2)
+
+  for i in range(depth):
+    if i == 0:
+      conv = Conv2D(image, width, kwidth=3)
+    else:
+      conv = Conv2D(relu, width, kwidth=3)
+    relu = Relu(conv)
+
+  residual = LearnedUpsample(relu, 3, factor=2)
+  # stack the simple upsampled image and superres green with the predicted residual
+  stacked = Stack(upsampled_image, residual) 
+  post_conv = Conv2D(stacked, 3, kwidth=3)
+
+  out = SExtractor(post_conv)
+  
+  out.assign_parents()
+  out.compute_input_output_channels()
+  compute_resolution(out)
+  return out
+
+
+def RGBWeighted(depth, width):
+  image = Input(3, name="Image", resolution=1)
+  upsampled_image = LearnedUpsample(image, 3, factor=2)
+
+  for i in range(depth):
+    if i == 0:
+      conv = Conv2D(image, width, kwidth=3)
+    else:
+      conv = Conv2D(relu, width, kwidth=3)
+    relu = Relu(conv) 
+  fresidual = LearnedUpsample(relu, 3, factor=2)
+
+
+  # weight trunk
+  for i in range(depth):
+    if i == 0:
+      wconv = Conv2D(image, width, kwidth=3)
+    else:
+      wconv = Conv2D(wrelu, width, kwidth=3)
+    wrelu = Relu(wconv)
+
+  wresidual = LearnedUpsample(wrelu, 3, factor=2)
+
+  weights = Softmax(wresidual)
+  weighted_interps = Mul(weights, fresidual)
+  summed = GroupedSum(weighted_interps, 3)
+
+  # stack the simple upsampled image and superres green with the predicted residual
+  stacked = Stack(upsampled_image, summed) 
+  # do a final conv
+  post_conv = Conv2D(stacked, 3, kwidth=3)
+
+  out = SExtractor(post_conv)
+  # predicing all the missing values
+  out.assign_parents()
+  out.compute_input_output_channels()
+  compute_resolution(out)
+  return out
+
+

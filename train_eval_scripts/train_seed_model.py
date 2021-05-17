@@ -20,6 +20,7 @@ from dataset import GreenQuadDataset, NASDataset, FullPredictionQuadDataset, Fas
 from tree import print_parents
 import demosaic_ast
 from footprint import compute_footprint
+from type_check import compute_resolution
 
 
 def run(args, models, model_id, model_dir):
@@ -58,9 +59,9 @@ def run(args, models, model_id, model_dir):
       validation_data = NASDataset(data_file=args.validation_file)
       test_data = NASDataset(data_file=args.test_file)
     else:
-      train_data = FullPredictionProcessedDataset(data_file=args.training_file)
-      validation_data = FullPredictionProcessedDataset(data_file=args.validation_file)
-      test_data = FullPredictionProcessedDataset(data_file=args.test_file)
+      train_data = FullPredictionQuadDataset(data_file=args.training_file)
+      validation_data = FullPredictionQuadDataset(data_file=args.validation_file)
+      test_data = FullPredictionQuadDataset(data_file=args.test_file)
 
   else:
     train_data = GreenQuadDataset(data_file=args.training_file) 
@@ -124,7 +125,7 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
         bayer = bayer.cuda()
         redblue_bayer = redblue_bayer.cuda()
         green_grgb = green_grgb.cuda()
-
+        target = target.cuda()
     else:
       mosaic = input
       mosaic = mosaic.cuda()
@@ -148,7 +149,7 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
         if args.nas:
           model_inputs = {"Input(Mosaic)": bayer}
         else:     
-          model_inputs = {"Input(Bayer)": bayer, 
+          model_inputs = {"Input(Mosaic)": bayer, 
                         "Input(Green@GrGb)": green_grgb, 
                         "Input(RedBlueBayer)": redblue_bayer}
 
@@ -214,6 +215,7 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
           bayer = bayer.cuda()
           redblue_bayer = redblue_bayer.cuda()
           green_grgb = green_grgb.cuda()
+          target = target.cuda()
       else:
         mosaic = input
         mosaic = mosaic.cuda()
@@ -230,7 +232,7 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
           if args.nas:
             model_inputs = {"Input(Mosaic)": bayer}
           else:     
-            model_inputs = {"Input(Bayer)": bayer, 
+            model_inputs = {"Input(Mosaic)": bayer, 
                           "Input(Green@GrGb)": green_grgb, 
                           "Input(RedBlueBayer)": redblue_bayer}
           pred = model.run(model_inputs)
@@ -294,6 +296,8 @@ if __name__ == "__main__":
   parser.add_argument('--fullrgbgradienthalide', action='store_true')
   parser.add_argument('--fullrgbdemosaicnet', action='store_true')
 
+  parser.add_argument('--model_file', type=str)
+
   parser.add_argument('--green_model_ast', type=str, help="green model ast to use for chroma model")
   parser.add_argument('--no_grad', action='store_true', help='whether or not to backprop through green model')
   parser.add_argument('--green_model_id', type=int, help='id of green model used')
@@ -309,8 +313,8 @@ if __name__ == "__main__":
 
   parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
   parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/subset7_100k_train_files.txt", help='filename of file with list of training data image files')
-  parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/val_files.txt", help='filename of file with list of validation data image files')
-  parser.add_argument('--test_file', type=str, default="/home/karima/cnn-data/test_files.txt")
+  parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/val.txt", help='filename of file with list of validation data image files')
+  parser.add_argument('--test_file', type=str, default="/home/karima/cnn-data/test.txt")
 
   parser.add_argument('--results_file', type=str, default='training_results', help='where to store training results')
   parser.add_argument('--validation_freq', type=int, default=None, help='validation frequency')
@@ -339,9 +343,11 @@ if __name__ == "__main__":
   logger = util.create_logger('training_logger', logging.INFO, log_format, \
                                 os.path.join(args.save, 'training_log'))
   logger.info("args = %s", args)
-  args.width = [int(w.strip()) for w in args.width.split(",")]
-  if len(args.width) == 1:
-    args.width = args.width[0]
+
+  if args.width:
+    args.width = [int(w.strip()) for w in args.width.split(",")]
+    if len(args.width) == 1:
+      args.width = args.width[0]
 
   if args.green_demosaicnet:
     logger.info("TRAINING DEMOSAICNET GREEN")
@@ -375,29 +381,34 @@ if __name__ == "__main__":
   elif args.chromaseed1:
     logger.info("TRAINING CHROMA SEED MODEL1")
     green_model = demosaic_ast.load_ast(args.green_model_ast)
+    compute_resolution(green_model)
     model = model_lib.ChromaSeedModel1(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
   elif args.chromaseed2:
     logger.info("TRAINING CHROMA SEED MODEL2")
     green_model = demosaic_ast.load_ast(args.green_model_ast)
+    compute_resolution(green_model)
     model = model_lib.ChromaSeedModel2(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
   elif args.chromaseed3:
     logger.info("TRAINING CHROMA SEED MODEL3")
     green_model = demosaic_ast.load_ast(args.green_model_ast)
+    compute_resolution(green_model)
     model = model_lib.ChromaSeedModel3(args.depth, args.width, args.no_grad, green_model, args.green_model_id)
   elif args.chromagradhalideseed:
     logger.info("TRAINING CHROMA GRADIENT HALIDE SEED")
     green_model = demosaic_ast.load_ast(args.green_model_ast)
     model = model_lib.ChromaGradientHalideModel(args.width, args.k, args.no_grad, green_model, args.green_model_id)
   else:
-    logger.info("TRAINING BASIC GREEN")
-    model = model_lib.basic1D_green_model()
+    model = demosaic_ast.load_ast(args.model_file)
 
+  ev = cost.ModelEvaluator(None)
 
   if args.full_model and not (args.chromagradienthalide or args.fullrgbdemosaicnet or args.fullrgbgradienthalide or args.nas):
     print(f'--- setting the no_grad parameter in green model {args.no_grad} ---')
 
     set_no_grad(green_model, args.no_grad)
     set_no_grad(model, args.no_grad)
+
+    print(f"green model cost: {ev.compute_cost(green_model)}")
 
     print('--- inserting green model ---')
 
@@ -427,7 +438,6 @@ if __name__ == "__main__":
 
   print(model.dump())
 
-  ev = cost.ModelEvaluator(None)
   model_cost = ev.compute_cost(model)
   print(f"model compute cost: {model_cost}")
   model_footprint = compute_footprint(model, 1)
