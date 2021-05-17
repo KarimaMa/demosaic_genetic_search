@@ -1,11 +1,11 @@
-HALIDE_DIR=$(shell echo ~/projects/Halide_master/distrib)
+HALIDE_DIR=$(shell echo ~/projects/Halide/distrib)
 RTPROCESS_DIR=$(shell echo ~/projects/librtprocess/install)
-HL_TARGET=x86-64-osx-avx2-disable_llvm_loop_opt
+HL_TARGET=x86-64-linux-avx2-disable_llvm_loop_opt
 
 # This is the combined contents of the two chroma model search folders
-MODEL_DIR ?= FLAGSHIP-CHROMA_MODEL_SEARCH-INSERT-NODE12-ASTS
+MODEL_DIR ?= chroma-pareto-models/bayer-chroma-05-14/models
 # The pareto green models have been dumped in the location indicated by the paths in this text file
-GREEN_MODELS ?= flagship-green-pareto-files/pareto_green_asts.txt
+GREEN_MODELS ?= PARETO_GREEN_MODELS/PARETO_BAYER_GREEN_05-14/ast_files.txt
 
 CXX=g++ -std=c++14
 
@@ -37,7 +37,7 @@ bin/RunGenMain.o: $(HALIDE_DIR)/tools/RunGenMain.cpp
 
 .PRECIOUS: bin/%/run_model
 bin/%/run_model: bin/%/halide_model.a bin/runtime.a bin/RunGenMain.o
-	$(CXX) -I $(HALIDE_DIR)/include -I $(HALIDE_DIR)/tools -lpthread -lpng -ldl -lz -ljpeg bin/$*/halide_model.registration.cpp $^ -o $@
+	$(CXX) -I $(HALIDE_DIR)/include -I $(HALIDE_DIR)/tools bin/$*/halide_model.registration.cpp $^ -o $@ -lpthread -ldl -ljpeg -lpng -lz
 
 bin/%/circle_out.tmp: bin/%/run_model
 	$^ raw=circle.png output=$@

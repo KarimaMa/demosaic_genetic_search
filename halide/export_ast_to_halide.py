@@ -92,7 +92,7 @@ if __name__ == '__main__':
     bayer = torch.Tensor(bayer)
     rb_bayer = bayer[:,1:3,:,:]
     g_bayer = bayer[:,0::3,:,:]    
-    model_inputs = {'Input(Bayer)' : bayer,
+    model_inputs = {'Input(Mosaic)' : bayer,
                     'Input(RedBlueBayer)' : rb_bayer,
                     'Input(Green@GrGb)': g_bayer}
     output = model.run(model_inputs)

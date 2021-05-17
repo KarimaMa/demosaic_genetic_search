@@ -81,15 +81,12 @@ struct Op {
         Func in_1, in_2, in_3;
         if (inputs[0] >= 0) {
             in_1 = ops[inputs[0]].func;
-            ops[inputs[0]].outputs.push_back(id);
         }
         if (inputs[1] >= 0) {
             in_2 = ops[inputs[1]].func;
-            ops[inputs[1]].outputs.push_back(id);
         }
         if (inputs[2] >= 0) {
             in_3 = ops[inputs[2]].func;
-            ops[inputs[2]].outputs.push_back(id);
         }
 
         if (name == "Add") {
@@ -145,7 +142,13 @@ struct Op {
             for (int ci = 0; ci < in_group_size; ci++) {
                 e += weights0(0, 0, ci, co) * in_1(x, y, ci + group * in_group_size);
             }
-            func(x, y, co) = e;
+
+            if (outputs.size() == 1 && ops[outputs[0]].name == "Relu") {
+                func(x, y, co) = max(e, 0);
+                ops[outputs[0]].name = "Id";
+            } else {
+                func(x, y, co) = e;
+            }
 
             pointwise = false;
 
@@ -164,13 +167,38 @@ struct Op {
             for (int ci = 0; ci < in_group_size; ci++) {
                 e += weights0(r.x, r.y, ci, co) * in_1(x + r.x - 1, y + r.y - 1, ci + group * in_group_size);
             }
-            func(x, y, co) = sum(e);
+            Func inner_sum("conv2d_sum");
+            inner_sum(x, y, co) += e;
+
+            inner_sum.compute_at(func, co)
+                .vectorize(x)
+                .unroll(co)
+                .unroll(y)
+                .update()
+                .reorder(co, x, y, r.x, r.y)
+                .vectorize(x)
+                .unroll(y)
+                .unroll(co);
+
+            if (outputs.size() == 1 && ops[outputs[0]].name == "Relu") {
+                func(x, y, co) = max(inner_sum(x, y, co), 0);
+                ops[outputs[0]].name = "Id";
+            } else {
+                func(x, y, co) = inner_sum(x, y, co);
+            }
             pointwise = false;
-        } else if (name == "Downsample") {
+            may_inline = false;
+
+        } else if (name == "LearnedDownsample") {
             weights0 = decode_buffer(weight0_shape, name + "." + std::to_string(id) + ".weights", weight0_b64);
+
+            int in_group_size = in_channels[0] / groups;
+            int out_group_size = out_channels / groups;
+            Expr group = co / out_group_size;
+
             assert(weights0.dim(0).extent() == 4);
             assert(weights0.dim(1).extent() == 4);
-            assert(weights0.dim(2).extent() == in_channels[0]);
+            assert(weights0.dim(2).extent() * groups == in_channels[0]);
             assert(weights0.dim(3).extent() == out_channels);
 
             Func interleave{"interleave"};
@@ -179,11 +207,11 @@ struct Op {
 
             Expr e = 0.0f;
             RDom r(0, 4, 0, 4);
-            for (int ci = 0; ci < in_channels[0]; ci++) {
+            for (int ci = 0; ci < in_group_size; ci++) {
                 e += weights0(r.x, r.y, ci, co) *
-                    interleave(x + (r.x - 1)/2, 2*y + r.y - 1, (r.x - 1) % 2, ci);
+                    interleave(x + (r.x - 1)/2, 2*y + r.y - 1, (r.x - 1) % 2, ci + group * in_group_size);
             }
-            func(x, y, co) = sum(e);
+            func(x, y, co) = sum(e, "LearnedDownsample_sum");
 
             interleave
                 .compute_at(func, Var::outermost())
@@ -235,13 +263,19 @@ struct Op {
             pointwise = false;
         } else if (name == "InterleavedSum") {
             int values_per_group = in_channels[0] / out_channels;
-            Expr e = 0.0f;
-            for (int i = 0; i < values_per_group; i++) {
-                e += in_1(x, y, co + i * out_channels);
+            if (values_per_group == 1) {
+                func(x, y, co) = in_1(x, y, co);
+                must_inline = true;
+            } else {
+                Expr e = 0.0f;
+                for (int i = 0; i < values_per_group; i++) {
+                    e += in_1(x, y, co + i * out_channels);
+                }
+                func(x, y, co) = e;
+                pointwise = false;
             }
-            func(x, y, co) = e;
-            pointwise = false;
-        } else if (name == "Input(Bayer)") {
+
+        } else if (name == "Input(Mosaic)") {
             // Real input
             func(x, y, co) = to_float(mux(co, {raw(2*x, 2*y),
                                                raw(2*x + 1, 2*y),
@@ -283,8 +317,45 @@ struct Op {
             } else {
                 func(x, y, co) = in_1(x, y, co) * in_2(x, y, co);
             }
+        } else if (name == "Pack") {
+            int factor = std::sqrt(out_channels / in_channels[0]);
+            if (in_channels[0] * factor * factor != out_channels) {
+                std::cerr << "Bad pack factor: " << factor << "\n";
+                assert(false);
+            }
+            vector<Expr> values(factor * factor);
+            for (int i = 0; i < factor; i++) {
+                for (int j = 0; j < factor; j++) {
+                    // TODO: figure out row vs col major
+                    values[i*factor + j] = in_1(x*factor + i, y*factor + j, co / (factor * factor));
+                }
+            }
+            func(x, y, co) = mux(co % (factor * factor), values);
+            pointwise = false;
+            unroll_channels = true;
+            must_inline = false;
+        } else if (name == "Unpack") {
+            int factor = std::sqrt(in_channels[0] / out_channels);
+            if (out_channels * factor * factor != in_channels[0]) {
+                std::cerr << "Bad unpack factor: " << factor << "\n";
+                assert(false);
+            }
+            vector<Expr> values(factor * factor);
+            for (int i = 0; i < factor; i++) {
+                for (int j = 0; j < factor; j++) {
+                    // TODO: figure out row vs col major
+                    values[i*factor + j] = in_1(x/factor, y/factor, (co * factor + i) * factor + j);
+                }
+            }
+            func(x, y, co) = mux((x % factor) * factor + (y % factor), values);
+            pointwise = false;
+            unroll_channels = true;
+            may_inline = false;
         } else if (name == "Relu") {
             func(x, y, co) = max(0.0f, in_1(x, y, co));
+        } else if (name == "Id") {
+            func(x, y, co) = in_1(x, y, co);
+            must_inline = true;
         } else if (name == "RGBExtractor") {
             // Args are, 4 greens, 2 red/blue from the bayer, 6 predicted chroma
             /*
@@ -341,6 +412,7 @@ struct Op {
                                     in_2(x, y, clamp(co - in_channels[0], 0, in_channels[1] - 1)));
             unroll_channels = true;
             pointwise = false;
+            must_inline = true;
         } else if (name == "Sub") {
             if (in_channels[0] > in_channels[1]) {
                 int r = in_channels[0] / in_channels[1];
@@ -351,7 +423,7 @@ struct Op {
             } else {
                 func(x, y, co) = in_1(x, y, co) - in_2(x, y, co);
             }
-        } else if (name == "Upsample") {
+        } else if (name == "BilinearUpsample") {
             // Bilinear
             Expr x_near = (x / 2) + (x % 2);
             Expr x_far = (x / 2) + 1 - (x % 2);
@@ -363,6 +435,26 @@ struct Op {
                  in_1(x_far, y_far, co)) * (1.0f / 16);
             pointwise = false;
             may_inline = false;
+        } else if (name == "LearnedUpsample") {
+
+            weights0 = decode_buffer(weight0_shape, name + "." + std::to_string(id) + ".weights", weight0_b64);
+
+            assert(weights0.dim(0).extent() == 2);
+            assert(weights0.dim(1).extent() == 2);
+            assert(weights0.dim(2).extent() == in_channels[0] / groups);
+            assert(weights0.dim(3).extent() == out_channels);
+
+            Expr e = 0.0f;
+            int in_group_size = in_channels[0] / groups;
+            int out_group_size = out_channels / groups;
+            Expr group = co / out_group_size;
+            for (int ci = 0; ci < in_group_size; ci++) {
+                e += weights0(x % 2, y % 2, ci, co) * in_1(x / 2, y / 2, ci + group * in_group_size);
+            }
+            func(x, y, co) = e;
+            pointwise = false;
+            may_inline = false;
+
         } else {
             std::cerr << "Unknown op: " << name << "\n";
             assert(false);
@@ -416,6 +508,36 @@ public:
             }
         }
         f.close();
+
+        // Connect up outputs
+        for (auto &op : ops) {
+            if (op.inputs[0] >= 0) {
+                ops[op.inputs[0]].outputs.push_back(op.id);
+            }
+            if (op.inputs[1] >= 0) {
+                ops[op.inputs[1]].outputs.push_back(op.id);
+            }
+            if (op.inputs[2] >= 0) {
+                ops[op.inputs[2]].outputs.push_back(op.id);
+            }
+        }
+
+        // Dedup input nodes
+        std::map<string, int> inputs;
+        for (auto &op : ops) {
+            if (Internal::starts_with(op.name, "Input(") &&
+                inputs.find(op.name) == inputs.end()) {
+                inputs[op.name] = op.id;
+            }
+            for (int &i : op.inputs) {
+                if (i >= 0) {
+                    if (Internal::starts_with(ops[i].name, "Input(")) {
+                        i = inputs[ops[i].name];
+                    }
+                }
+            }
+        }
+
     }
 
     void generate() {
@@ -432,7 +554,7 @@ public:
             .tile(x, y, xo, yo, x, y, 256, 128)
             .split(y, y, yi, 2)
             .reorder(co, yi, x, y, xo, yo)
-            .vectorize(x, 16)
+            .vectorize(x, 32)
             .unroll(co)
             .unroll(yi);
 
@@ -450,7 +572,7 @@ public:
                     .store_in(MemoryType::Stack)
                     .align_storage(x, 8)
                     .compute_at(output, xo)
-                    .vectorize(x, 16, TailStrategy::RoundUp)
+                    .vectorize(x, 32, TailStrategy::RoundUp)
                     .split(y, y, yi, 2)
                     .reorder(yi, co, x, y)
                     .unroll(yi);
