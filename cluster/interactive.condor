@@ -1,11 +1,11 @@
 universe                = docker
 docker_image            = docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v14
 
-# Requirements = TARGET.Machine=="ilcomp78.ilcomp"
-Requirements = TARGET.Machine=="ilcomp6u.ilcomp"
+Requirements = TARGET.Machine=="ilcomp6b.ilcomp"
 
 # We need this to get 64GB of /dev/shm
-environment = "HIGHMEM=1 MULTIGPU=0123"
+#environment = "HIGHMEM=1 MULTIGPU=0123"
+environment = "HIGHMEM=1"
 
 should_transfer_files = no
 transfer_executable   = false
@@ -14,4 +14,4 @@ output                = log/interactive.$(process).out
 error                 = log/interactive.$(process).err
 log                   = log/interactive.$(process).log
 
-queue 4
+queue 1

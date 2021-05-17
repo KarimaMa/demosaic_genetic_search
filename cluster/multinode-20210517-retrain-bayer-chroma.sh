@@ -4,7 +4,7 @@
 ROOT=/mnt/ilcompf9d1/user/mgharbi/code/karima
 CODE=$ROOT/demosaic_genetic_search
 
-RETRAIN_DATA=$ROOT/retrain_data/chroma-pareto-models/bayer-chroma-05-14/
+RETRAIN_DATA=$ROOT/retrain_data/chroma-pareto-models/bayer-chroma-05-14
 RETRAIN_LIST=$RETRAIN_DATA/model_ids.txt
 RETRAIN_LOGS=$ROOT/retrain_logs/bayer-chroma-05-14
 
@@ -66,34 +66,36 @@ df -h | grep shm
 
 # DATA=$ROOT/data
 DATA=/mnt/ilcompf8d1/data/demosaicnet
-mkdir -p /mnt/ssd/tmp/mgharbi
-DATA_LOCAL=/mnt/ssd/tmp/mgharbi/demosaicnet
+DATA_LOCAL=$DATA
+# RuntimeError: Dataset filelist is invalid, coult not find /dev/shm/demosaic_genetic_search/train/moire/009/091892.png
+# mkdir -p /mnt/ssd/tmp/mgharbi
+# DATA_LOCAL=/mnt/ssd/tmp/mgharbi/demosaicnet
 # DATA_LOCAL=/dev/shm/data
 # rsync -av $DATA /dev/shm
 
-if [ -d $DATA_LOCAL ]
-then
-    echo "Dataset already exist at $DATA_LOCAL"
-    echo "rsyncing in case files are missing"
-    rsync -av $DATA /mnt/ssd/tmp/mgharbi
-    echo "done rsyncing data"
-else
-    freespace=$(df | grep ssd | awk '{print $4}')
-    echo "Disk space" $freespace
-    if (( $freespace < 90000000 )); then
-        echo $(hostname)  job $1 "not enough space to copy data, aborting"
-        echo $(date) >> $CRASHED/$MODEL_ID
-        echo $(hostname)  job $1 >> $CRASHED/$MODEL_ID
-        echo "no space to copy data" >>  $CRASHED/$MODEL_ID
-
-        # TODO: try shm 
-        exit
-    fi
-    echo "Sufficient free space for data" $freespace
-    echo "Copying dataset $DATA to $DATA_LOCAL"
-    rsync -av $DATA /mnt/ssd/tmp/mgharbi
-    echo "done copying data"
-fi
+# if [ -d $DATA_LOCAL ]
+# then
+#     echo "Dataset already exist at $DATA_LOCAL"
+#     echo "rsyncing in case files are missing"
+#     rsync -av $DATA /mnt/ssd/tmp/mgharbi
+#     echo "done rsyncing data"
+# else
+#     freespace=$(df | grep ssd | awk '{print $4}')
+#     echo "Disk space" $freespace
+#     if (( $freespace < 90000000 )); then
+#         echo $(hostname)  job $1 "not enough space to copy data, aborting"
+#         echo $(date) >> $CRASHED/$MODEL_ID
+#         echo $(hostname)  job $1 >> $CRASHED/$MODEL_ID
+#         echo "no space to copy data" >>  $CRASHED/$MODEL_ID
+#
+#         # TODO: try shm 
+#         exit
+#     fi
+#     echo "Sufficient free space for data" $freespace
+#     echo "Copying dataset $DATA to $DATA_LOCAL"
+#     rsync -av $DATA /mnt/ssd/tmp/mgharbi
+#     echo "done copying data"
+# fi
 
 echo "Copying code to local memory drive"
 CODE_LOCAL=/dev/shm/demosaic_genetic_search

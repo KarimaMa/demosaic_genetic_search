@@ -12,7 +12,6 @@ VALID_MACHINES_V10 = [
     "ilcomp6a",
     "ilcomp6e",
     "ilcomp6f",
-    "ilcomp6m",
     "ilcomp6r",
     "ilcomp6w",
     "ilcomp6x",
@@ -25,7 +24,9 @@ VALID_MACHINES_V10 = [
     "ilcomp49",
     "ilcomp64",
 ]
+# BUGGY
     # "ilcomp45",
+    # "ilcomp6m",
 
 # not v10
     # "ilcomp60",
