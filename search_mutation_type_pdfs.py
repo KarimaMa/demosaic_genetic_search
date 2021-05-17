@@ -14,14 +14,20 @@ nas_pdfs = {
   "uniform": [0.2, 0.2, 0.2, 0.2, 0.2]
 }
 
+sr_pdfs = {
+  "insertion_bias": {"early": [0.1, 0.15, 0.1, 0.1, 0.1, 0.15, 0.1, 0.1, 0.1], "late": [float(1/9) for i in range(9)]},
+  "uniform": [float(1/9) for i in range(9)]
+}
+
 green_model_pdfs = {
-  "insertion_bias": {"early": [0.1, 0.1, 0.15, 0.1, 0.1, 0.15, 0.1, 0.1, 0.1], "late": [float(1/9) for i in range(9)]},
+  "insertion_bias": {"early": [0.1, 0.15, 0.1, 0.1, 0.1, 0.15, 0.1, 0.1, 0.1], "late": [float(1/9) for i in range(9)]},
   "uniform": [float(1/9) for i in range(9)]
 }
 
 mutation_types_pdfs = {
   "full_model": full_model_pdfs,
   "nas": nas_pdfs,
+  "superres_only": sr_pdfs, 
   "rgb8chan": rgb8chan_pdfs,
   "green_model": green_model_pdfs  
 }

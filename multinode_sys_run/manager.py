@@ -340,6 +340,14 @@ class Searcher():
       "Input(Mosaic)": bayer,
     }
 
+  def construct_sr_only_inputs(self):
+    image = demosaic_ast.Input(3, name="Image", resolution=float(1.0))
+
+    return {
+      "Input(Image)": image,
+    }
+
+
   def construct_xgreen_inputs(self):
     mosaic = demosaic_ast.Input(36, resolution=1/6, name="Mosaic3x3")
     flat_mosaic = demosaic_ast.Input(1, resolution=1, name="FlatMosaic")
@@ -368,6 +376,10 @@ class Searcher():
             model_inputs = self.construct_chroma_inputs(green_model_id)
           model_input_names = OrderedSet(model_inputs.keys())
           self.args.input_ops = OrderedSet([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
+        elif self.args.superres_only:
+          model_inputs = self.construct_sr_only_inputs()
+          model_input_names = OrderedSet(model_inputs.keys())
+          self.args.input_ops = OrderedSet(list(model_inputs.values()))
         elif self.args.rgb8chan: # full rgb model search uses same inputs as green search
           model_inputs = self.construct_green_inputs()
           model_input_names = OrderedSet(model_inputs.keys())
@@ -897,6 +909,9 @@ if __name__ == "__main__":
   parser.add_argument('--green_seed_model_files', type=str, help='file with list of filenames of green seed model asts')
   parser.add_argument('--green_seed_model_psnrs', type=str, help='file with list of psnrs of green seed models')
 
+  parser.add_argument('--sr_seed_model_files', type=str, help='file with list of filenames of sr only seed model asts')
+  parser.add_argument('--sr_seed_model_psnrs', type=str, help='file with list of psnrs of sr only seed models')
+
   parser.add_argument('--nas_seed_model_files', type=str, help='file with list of filenames of nas seed model asts')
   parser.add_argument('--nas_seed_model_psnrs', type=str, help='file with list of psnrs of nas seed models')
 
@@ -957,8 +972,7 @@ if __name__ == "__main__":
   parser.add_argument('--xtrans_green', action="store_true")  
   parser.add_argument('--superres_green', action="store_true")
   parser.add_argument('--superres_rgb', action="store_true")
-  parser.add_argument('--superres_only_green', action="store_true")
-  parser.add_argument('--superres_only_rgb', action="store_true")
+  parser.add_argument('--superres_only', action="store_true")
   
   parser.add_argument('--gridsearch', action='store_true')
   parser.add_argument('--nas', action='store_true')
@@ -983,6 +997,9 @@ if __name__ == "__main__":
     args.seed_model_psnrs = args.chroma_seed_model_psnrs
     args.green_model_ast_files = [l.strip() for l in open(args.green_model_asts)]
     args.green_model_weight_files = [l.strip() for l in open(args.green_model_weights)]
+  elif args.superres_only:
+    args.seed_model_files = args.sr_seed_model_files
+    args.seed_model_psnrs = args.sr_seed_model_psnrs
   elif args.rgb8chan:
     args.seed_model_files = args.rgb8chan_seed_model_files
     args.seed_model_psnrs = args.rgb8chan_seed_model_psnrs

@@ -277,6 +277,8 @@ class ModelEvaluator():
       cost += self.compute_cost_helper(root.rchild, seen) 
       ratio = 1/4
       cost *= ratio
+    elif isinstance(root, SExtractor):
+      cost += self.compute_cost_helper(root.child, seen)
     elif isinstance(root, SRGBExtractor):
       cost += self.compute_cost_helper(root.lchild, seen)
       cost += self.compute_cost_helper(root.rchild, seen)

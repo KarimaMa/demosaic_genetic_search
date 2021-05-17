@@ -92,6 +92,12 @@ class Mutator():
           self.late_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["insertion_bias"]["late"])
         else:
           self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["full_model"]["uniform"])
+    elif self.args.superres_only:
+      if self.args.insertion_bias:
+        self.early_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["superres_only"]["insertion_bias"]["early"])
+        self.late_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["superres_only"]["insertion_bias"]["late"])
+      else:
+        self.mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["superres_only"]["uniform"])    
     elif self.args.rgb8chan:
       if self.args.insertion_bias:
         self.early_mutation_type_cdf = np.cumsum(search_mutation_type_pdfs["rgb8chan"]["insertion_bias"]["early"])
@@ -1311,7 +1317,8 @@ def accept_tree(self, tree):
     return False, f"rejecting tree with size {len(tree.preorder())} larger than max tree size"
 
   if compute_resolution(tree) is None:
-    self.debug_logger.debug("rejecting invalid spatial resolution")
+    self.debug_logger.debug("rejecting invalid spatial resolution in tree:")
+    self.debug_logger.debug(tree.dump())
     return False, "rejecting invalid spatial resolution"
     
   if isinstance(tree, Downsample):

@@ -92,7 +92,7 @@ class SOnlyGreenQuadDataset(data.Dataset):
         return (input, target)
 
 
-class SOnlyRGBQuadDataset(data.Dataset):
+class SDataset(data.Dataset):
   def __init__(self, data_file=None, return_index=False):
     
     if data_file:

@@ -15,7 +15,7 @@ sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
 from dataset import Dataset, FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, NASDataset, ids_from_file, FastDataLoader
 from xtrans_dataset import XGreenDataset, XRGBDataset
 from superres_dataset import SGreenQuadDataset, SRGBQuadDataset
-from superres_only_dataset import SOnlyGreenQuadDataset, SOnlyRGBQuadDataset
+from superres_only_dataset import SDataset
 from async_loader import AsynchronousLoader
 
 import util
@@ -43,13 +43,13 @@ def create_train_dataset(args, gpu_id, shared_data=None, logger=None, batch_size
 
   if args.gridsearch:
     train_data = Dataset(data_file=args.training_file, flatten=False)
+  elif args.superres_only:
+    train_data = SDataset(data_file=args.training_file)
   elif args.full_model:
     if args.xtrans_chroma:
       train_data = XRGBDataset(data_file=args.training_file)
     elif args.superres_rgb:
       train_data = SRGBQuadDataset(data_file=args.training_file)
-    elif args.superres_only_rgb:
-      train_data = SOnlyRGBQuadDataset(data_file=args.training_file)
     else:
       train_data = FullPredictionQuadDataset(data_file=args.training_file, RAM=args.ram, lazyRAM=args.lazyram, \
                                           shared_data=shared_data, logger=logger)
@@ -62,8 +62,6 @@ def create_train_dataset(args, gpu_id, shared_data=None, logger=None, batch_size
       train_data = XGreenDataset(data_file=args.training_file, flat=True)
     elif args.superres_green:
       train_data = SGreenQuadDataset(data_file=args.training_file)
-    elif args.superres_only_green:
-      train_data = SOnlyGreenQuadDataset(data_file=args.training_file)
     else: 
       train_data = GreenQuadDataset(data_file=args.training_file) 
 
@@ -98,13 +96,13 @@ def create_validation_dataset(args, gpu_id, shared_data=None, batch_size=None):
 
   if args.gridsearch:
     validation_data = Dataset(data_file=args.validation_file, flatten=False)
+  elif args.superres_only:
+    validation_data = SDataset(data_file=args.validation_file)
   elif args.full_model:
     if args.xtrans_chroma:
       validation_data = XRGBDataset(data_file=args.validation_file)
     elif args.superres_rgb:
       validation_data = SRGBQuadDataset(data_file=args.validation_file)
-    elif args.superres_only_rgb:
-      validation_data = SOnlyRGBQuadDataset(data_file=args.validation_file)
     else:
       validation_data = FullPredictionQuadDataset(data_file=args.validation_file, RAM=args.ram, lazyRAM=args.lazyram,\
                                                shared_data=shared_data)
@@ -117,8 +115,6 @@ def create_validation_dataset(args, gpu_id, shared_data=None, batch_size=None):
       validation_data = XGreenDataset(data_file=args.validation_file, flat=True)
     elif args.superres_green:
       validation_data = SGreenQuadDataset(data_file=args.validation_file)
-    elif args.superres_only_green:
-      validation_data = SOnlyGreenQuadDataset(data_file=args.validation_file)
     else:
       validation_data = GreenQuadDataset(data_file=args.validation_file)
 
@@ -376,6 +372,8 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
   for step, (input, target) in enumerate(train_queue):
     if args.gridsearch:
       pass
+    elif args.superres_only:
+      image = input
     elif args.full_model:
       if args.xtrans_chroma:
         packed_mosaic, mosaic3chan, flat_mosaic, rb = input 
@@ -388,8 +386,6 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
     else:
       if args.xtrans_green:
         mosaic3x3, mosaic3chan, flat_mosaic = input
-      elif args.superres_only_green:
-        image = input
       else: 
         bayer = input
 
@@ -406,6 +402,8 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
 
       if args.gridsearch:
         pass
+      elif args.superres_only:
+        model_inputs = {"Input(Image)": image}
       elif args.full_model:
         if args.xtrans_chroma:
           model_inputs = {"Input(Mosaic)": mosaic3chan,
@@ -415,8 +413,6 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
         elif args.superres_rgb:
           model_inputs = {"Input(Mosaic)": bayer, 
                         "Input(RedBlueBayer)": redblue_bayer}
-        elif args.superres_only_rgb:
-          model_inputs = {"Input(Image)", image}
         else:
           model_inputs = {"Input(Mosaic)": bayer, 
                         "Input(Green@GrGb)": green_grgb, 
@@ -428,8 +424,6 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
           model_inputs = {"Input(Mosaic)": mosaic3chan,
                           "Input(FlatMosaic)": flat_mosaic,
                           "Input(Mosaic3x3)": mosaic3x3}
-        elif args.superres_only_green:
-          model_inputs = {"Input(Image)": image}
         else:
           model_inputs = {"Input(Mosaic)": bayer}
 
@@ -479,13 +473,13 @@ def infer(args, gpu_id, valid_queue, models, criterion):
     for step, (input, target) in enumerate(valid_queue):
       if args.gridsearch:
         pass
+      elif args.superres_only:
+        image = input
       elif args.full_model:
         if args.xtrans_chroma:
           packed_mosaic, mosaic3chan, flat_mosaic, rb = input 
         elif args.superres_rgb:
           bayer, redblue_bayer = input 
-        elif args.superres_only_rgb:
-          image = input
         else:
           bayer, redblue_bayer, green_grgb = input
       elif args.nas:
@@ -493,8 +487,6 @@ def infer(args, gpu_id, valid_queue, models, criterion):
       else:
         if args.xtrans_green:
           mosaic3x3, mosaic3chan, flat_mosaic = input
-        elif args.superres_only_green:
-          image = input
         else: 
           bayer = input
 
@@ -509,6 +501,8 @@ def infer(args, gpu_id, valid_queue, models, criterion):
   
         if args.gridsearch:
           pass
+        elif args.superres_only:
+          model_inputs = {"Input(Image)": image}
         elif args.full_model:
           if args.xtrans_chroma:
             model_inputs = {"Input(Mosaic)": mosaic3chan,
@@ -518,8 +512,6 @@ def infer(args, gpu_id, valid_queue, models, criterion):
           elif args.superres_rgb:
             model_inputs = {"Input(Mosaic)": bayer, 
                         "Input(RedBlueBayer)": redblue_bayer}
-          elif args.superres_only_rgb:
-            model_inputs = {"Input(Image)": image}
           else:           
             model_inputs = {"Input(Mosaic)": bayer, 
                           "Input(Green@GrGb)": green_grgb, 
@@ -531,8 +523,6 @@ def infer(args, gpu_id, valid_queue, models, criterion):
             model_inputs = {"Input(Mosaic)": mosaic3chan,
                             "Input(FlatMosaic)": flat_mosaic,
                             "Input(Mosaic3x3)": mosaic3x3}
-          elif args.superres_only_green:
-            model_inputs = {"Input(Image)": image}
           else:
             model_inputs = {"Input(Mosaic)": bayer}
        
@@ -556,6 +546,4 @@ def infer(args, gpu_id, valid_queue, models, criterion):
         psnr_trackers[i].update(batch_avg_psnr.item(), n)
 
   return [loss_tracker.avg for loss_tracker in loss_trackers], [psnr_tracker.avg for psnr_tracker in psnr_trackers]
-
-
 

@@ -354,6 +354,31 @@ class SRGBExtractorOp(nn.Module):
     self._operands[1].to_gpu(gpu_id)
 
 
+class SExtractorOp(nn.Module):
+  def __init__(self, pred):
+    super(SExtractorOp, self).__init__()
+    self._operands = nn.ModuleList([pred])
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand1 = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand1)
+    return self.output 
+
+  def forward(self, pred):
+    return pred
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+
 
 # Takes FullGreenQuad predction, RedBlueQuad from Bayer, and 
 # 6 channel chroma quad prection: R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
@@ -1926,6 +1951,21 @@ def ast_to_model(self, shared_children=None):
 
   shared_children[id(self)] = model 
   return model
+
+
+@extclass(SExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child_model = self.child.ast_to_model(shared_children)
+  model = SExtractorOp(child_model)
+
+  shared_children[id(self)] = model 
+  return model
+
 
 @extclass(RGB8ChanExtractor)
 def ast_to_model(self, shared_children=None):
