@@ -3,6 +3,7 @@ import os
 import sys
 import random
 from train import train_model
+import demosaicnet_models
 
 rootdir = '/'.join(sys.path[0].split("/")[0:-1])
 sys_run_dir = os.path.join(rootdir, "sys_run")
@@ -27,7 +28,12 @@ def parse_task_info_str(task_info_str):
   model_dir = task_info[1]
   model_id = int(task_info[2])
 
-  return task_id, model_id, model_dir
+  if len(task_info) == 4:
+    lr = float(task_info[3])
+  else:
+    lr = None
+
+  return task_id, model_id, model_dir, lr
 
 
 class Args(object):
@@ -90,22 +96,27 @@ def run_worker(args):
 
       print(f"Received work {task_info_str}")
 
-      task_id, model_id, model_dir = parse_task_info_str(task_info_str)
+      task_id, model_id, model_dir, lr = parse_task_info_str(task_info_str)
 
-      model_ast = demosaic_ast.load_ast(os.path.join(model_dir, "model_ast"))
+      if train_args.gridsearch:
+        model_params = model_dir.split("/")[-1]
+        depth = int(model_params.split("-")[0])
+        width = int(model_params.split("-")[1])
+        print(f"d {depth} w {width} lr {lr}")
+        train_args.learning_rate = lr
+        models = [demosaicnet_models.FullDemosaicknet(depth=depth, width=width).cuda() \
+                        for i in range(train_args.model_initializations)]
+      else:
+        model_ast = demosaic_ast.load_ast(os.path.join(model_dir, "model_ast"))
+        # get model info
+        if train_args.full_model:
+          green_model_ast_files = [l.strip() for l in open(train_args.green_model_asts)]
+          green_model_weight_files = [l.strip() for l in open(train_args.green_model_weights)]
+          insert_green_model(model_ast, green_model_ast_files, green_model_weight_files)
 
-      # get model info
-      if train_args.full_model:
-        green_model_ast_files = [l.strip() for l in open(train_args.green_model_asts)]
-        green_model_weight_files = [l.strip() for l in open(train_args.green_model_weights)]
-        insert_green_model(model_ast, green_model_ast_files, green_model_weight_files)
-
-      models = [model_ast.ast_to_model() for i in range(train_args.model_initializations)]
+        models = [model_ast.ast_to_model() for i in range(train_args.model_initializations)]
 
       logger.info(f'---worker {worker_id} running task {task_id} model {model_id} on gpu {gpu_id} ---')
-      
-      for m in models:
-        m._initialize_parameters()
        
       util.create_dir(model_dir)
       train_logger = util.create_logger(f'model_{model_id}_train_logger', logging.INFO, log_format, \
