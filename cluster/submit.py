@@ -9,6 +9,9 @@ VALID_MACHINES_V10 = [
     "ilcomp4a",
     "ilcomp4c",
     "ilcomp4e",
+    "ilcomp5k",
+    "ilcomp5l",
+    "ilcomp5z",
     "ilcomp6a",
     "ilcomp6e",
     "ilcomp6f",
@@ -28,7 +31,10 @@ VALID_MACHINES_V10 = [
     # "ilcomp45",
     # "ilcomp6m",
 
+# not v14
+
 # not v10
+    # "ilcomp26",
     # "ilcomp60",
     # "ilcomp4d",
     # "ilcomp6l",
@@ -46,12 +52,6 @@ VALID_MACHINES_V10 = [
     # "ilcomp46",
     # "ilcomp65",
     # "ilcomp6y",
-
-# not v14
-    # "ilcomp26",
-    # "ilcomp5k",
-    # "ilcomp5l",
-    # "ilcomp5z",
 
 #buggy: gather device 3
 # Error from slot4@ilcomp57.ilcomp: Error running docker job: linux runtime spec devices: error gathering device information while adding custom device '/dev/nvidia3': lstat /dev/nvidia3: no such file or directory
