@@ -67,7 +67,8 @@ df -h | grep shm
 # DATA=$ROOT/data
 DATA=/mnt/ilcompf8d1/data/demosaicnet
 mkdir -p /mnt/ssd/tmp/mgharbi
-DATA_LOCAL=/mnt/ssd/tmp/mgharbi/demosaicnet
+DATA_LOCAL=$DATA
+# DATA_LOCAL=/mnt/ssd/tmp/mgharbi/demosaicnet
 # DATA_LOCAL=/dev/shm/data
 # rsync -av $DATA /dev/shm
 
