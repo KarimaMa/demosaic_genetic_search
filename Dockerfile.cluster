@@ -179,4 +179,7 @@ RUN ln -s /mnt/ilcompf9d1/user/mgharbi/.ssh/id_rsa /home/mgharbi/.ssh/id_rsa
 RUN ln -s /mnt/ilcompf9d1/user/mgharbi/.ssh/id_rsa.pub /home/mgharbi/.ssh/id_rsa.pub
 RUN ln -s /mnt/ilcompf9d1/user/mgharbi/.ssh/known_hosts /home/mgharbi/.ssh/known_hosts
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        iputils-ping
+
 CMD ["/usr/sbin/sshd", "-D", "-p", "2000"]

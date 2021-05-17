@@ -1,4 +1,5 @@
 from demosaic_ast import *
+from type_check import compute_resolution
 
 
 def XGreenDemosaicknet1(depth, width):
@@ -90,7 +91,120 @@ def XGreenDemosaicknet3(depth, width):
   green = XFlatGreenExtractor(mosaic3chan, missing_green)
   green.assign_parents()
   green.compute_input_output_channels()
+  compute_resolution(green)
+  return green
 
+
+def XGreenWeightedFilters(depth, width):
+  mosaic = Input(36, resolution=1/6, name="Mosaic3x3")
+  # upsample to bayer quad level resolution
+  unpacked = Unpack(mosaic, factor=2)
+  higher_res = LearnedUpsample(mosaic, width, factor=2, groups=1)
+
+  w_input = higher_res
+
+  # main processing 
+  for i in range(depth):
+    w_conv = Conv2D(w_input, width, kwidth=3)
+    w_relu = Relu(w_conv)
+    w_input = w_relu
+
+  f_input = higher_res
+
+  for i in range(depth):
+    f_conv = Conv2D(f_input, width, kwidth=3)
+    f_relu = Relu(f_conv)
+    f_input = f_relu
+
+  f_full_res = Unpack(f_input, factor=3)
+  flat_mosaic = Input(1, resolution=1, name="FlatMosaic")
+
+  f_stacked = Stack(f_full_res, flat_mosaic) 
+  f_residual_conv = Conv2D(f_stacked, width//9, kwidth=3)
+
+  w_full_res = Unpack(w_input, factor=3)
+  flat_mosaic = Input(1, resolution=1, name="FlatMosaic")
+
+  w_stacked = Stack(w_full_res, flat_mosaic) 
+  w_residual_conv = Conv2D(w_stacked, width//9, kwidth=3)
+  weights = Softmax(w_residual_conv)
+  
+  weighted_interps = Mul(f_residual_conv, weights)
+  missing_green = GroupedSum(weighted_interps, 1) 
+
+  mosaic3chan = Input(3, resolution=1, name="Mosaic")
+  green = XFlatGreenExtractor(mosaic3chan, missing_green)
+  green.assign_parents()
+  green.compute_input_output_channels()
+  compute_resolution(green)
+  return green
+
+
+def XGreenMultires(depth, width):
+  mosaic = Input(36, resolution=1/6, name="Mosaic3x3")
+  # upsample to bayer quad level resolution
+  unpacked = Unpack(mosaic, factor=2)
+  low_res = LearnedUpsample(mosaic, width, factor=3, groups=1)
+  high_res = LearnedUpsample(mosaic, width, factor=6, groups=1)
+
+  w_input = high_res
+
+  # main processing 
+  for i in range(depth):
+    w_conv = Conv2D(w_input, width, kwidth=3)
+    w_relu = Relu(w_conv)
+    w_input = w_relu
+
+  hf_input = high_res
+
+  for i in range(depth):
+    hf_conv = Conv2D(hf_input, width, kwidth=3)
+    hf_relu = Relu(hf_conv)
+    hf_input = hf_relu
+
+  lf_input = low_res
+  for i in range(depth):
+    lf_conv = Conv2D(lf_input, width, kwidth=3)
+    lf_relu = Relu(lf_conv)
+    lf_input = lf_relu
+
+
+  lf_full_res = Unpack(lf_input, factor=2)
+  flat_mosaic = Input(1, resolution=1, name="FlatMosaic")
+
+  lf_stacked = Stack(lf_full_res, flat_mosaic) 
+  lf_residual_conv = Conv2D(lf_stacked, width//9, kwidth=3)
+
+
+  # hf_full_res = Unpack(hf_input, factor=2)
+  hf_full_res = hf_input
+  flat_mosaic = Input(1, resolution=1, name="FlatMosaic")
+
+  hf_stacked = Stack(hf_full_res, flat_mosaic) 
+  hf_residual_conv = Conv2D(hf_stacked, width//9, kwidth=3)
+
+
+  #w_full_res = Unpack(w_input, factor=2)
+  w_full_res = w_input
+  flat_mosaic = Input(1, resolution=1, name="FlatMosaic")
+
+  w_stacked = Stack(w_full_res, flat_mosaic) 
+  w_residual_conv = Conv2D(w_stacked, width//9, kwidth=3)
+  weights = Softmax(w_residual_conv)
+
+  
+  l_weighted = Mul(lf_residual_conv, weights)
+  h_weighted = Mul(hf_residual_conv, weights)
+
+  l_green = GroupedSum(l_weighted, 1) 
+  h_green = GroupedSum(h_weighted, 1)
+  missing_green = Add(l_green, h_green)
+
+  mosaic3chan = Input(3, resolution=1, name="Mosaic")
+  green = XFlatGreenExtractor(mosaic3chan, missing_green)
+  green.assign_parents()
+  green.compute_input_output_channels()
+  compute_resolution(green)
   return green
 
 
@@ -128,74 +242,6 @@ def XGreenDemosaicknet4(depth, width):
   return green
 
 
-"""
-post processing on flat resolution but using periodic_conv method 
-for translation invariance on the flat resolution
-"""
-def XGreenDemosaicknet5(depth, width):
-  mosaic = Input(36, "Mosaic3x3")
-  # upsample to bayer quad level resolution
-  higher_res = LearnedUpsample(mosaic, width, factor=2, groups=1)
- 
-  input_tensor = higher_res
-
-  # main processign 
-  for i in range(depth):
-    conv = Conv2D(input_tensor, width, kwidth=3)
-    relu = Relu(conv)
-    input_tensor = relu
-
-  full_res = Unpack(input_tensor, factor=3)
-  flat_mosaic = Input(1, "FlatMosaic")
-
-  stacked = Stack(full_res, flat_mosaic) 
-
-  periodic_conv = PeriodicConv(stacked, width//9, period=6, kwidth=3)
-  post_relu = Relu(periodic_conv)
-  missing_green = Conv1x1(post_relu, 1)
-
-  mosaic3chan = Input(3, "Mosaic")
-  green = XFlatGreenExtractor(mosaic3chan, missing_green)
-  green.assign_parents()
-  green.compute_input_output_channels()
-
-  return green
-
-
-
-"""
-post processing on flat resolution using 36 NON periodic convs
-to see if the reason why period conv is worse is because of higher
-parameter count
-"""
-def XGreenDemosaicknet6(depth, width):
-  mosaic = Input(36, "Mosaic3x3")
-  # upsample to bayer quad level resolution
-  higher_res = LearnedUpsample(mosaic, width, factor=2, groups=1)
- 
-  input_tensor = higher_res
-
-  # main processign 
-  for i in range(depth):
-    conv = Conv2D(input_tensor, width, kwidth=3)
-    relu = Relu(conv)
-    input_tensor = relu
-
-  full_res = Unpack(input_tensor, factor=3)
-  flat_mosaic = Input(1, "FlatMosaic")
-
-  stacked = Stack(full_res, flat_mosaic) 
-
-  post_conv = Conv2D(stacked, 36*(width//9), kwidth=3) # learning 36 convolutions
-  post_relu = Relu(post_conv)
-  missing_green = Conv1x1(post_relu, 1)
-
-  mosaic3chan = Input(3, "Mosaic")
-  green = XFlatGreenExtractor(mosaic3chan, missing_green)
-  green.assign_parents()
-  green.compute_input_output_channels()
-
-  return green
 
 
 def XFlatGreenDemosaicknet(depth, width):
@@ -229,20 +275,21 @@ Color difference with post processing on flat resolution
 
 def XRGBDemosaicknet1(depth, width, no_grad, green_model, green_model_id):
   # set up our inputs
-  rb_xtrans = Input(16, "RBXtrans")
-  green_pred = Input(1, "GreenExtractor", no_grad=no_grad, node=green_model, green_model_id=green_model_id)
+  rb_xtrans = Input(16, name="RBXtrans", resolution=1/6)
+  green_pred = Input(1, name="GreenExtractor", resolution=1, no_grad=no_grad, node=green_model, green_model_id=green_model_id)
   packed_green = Pack(green_pred, factor=3) # pack it to the 3x3 grid 
   packed_green.compute_input_output_channels()
-  packed_green_input = Input(9, "PackedGreen", node=packed_green, no_grad=no_grad)
+  packed_green_input = Input(9, name="PackedGreen", resolution=1/3, node=packed_green, no_grad=no_grad)
 
   green_rb = XGreenRBExtractor(green_pred)
   green_rb.compute_input_output_channels()
-  green_rb_input = Input(16, "Green@RB", node=green_rb, no_grad=no_grad)
+  green_rb_input = Input(16, name="Green@RB", resolution=1/6, node=green_rb, no_grad=no_grad)
 
   # subtract green at red and blue locations from red and blue values
   diff = Sub(rb_xtrans, green_rb_input)
   # upsample to 1/3 resolution where each pixel corresponds to a 3x3 block
   higher_res_diff = LearnedUpsample(diff, width, factor=2, groups=1) 
+
   # stack color diff with full green prediction ( both are now in the 3x3 block format )
   stacked = Stack(higher_res_diff, packed_green_input) # width + 9 channels 
   
@@ -256,7 +303,7 @@ def XRGBDemosaicknet1(depth, width, no_grad, green_model, green_model_id):
   # bring things up to full res
   flat_residual = Unpack(input_tensor, factor=3)
   
-  flat_mosaic = Input(1, "FlatMosaic")
+  flat_mosaic = Input(1, name="FlatMosaic", resolution=1)
   xtrans_and_green = Stack(green_pred, flat_mosaic) 
   post_input = Stack(xtrans_and_green, flat_residual)
 
@@ -266,12 +313,80 @@ def XRGBDemosaicknet1(depth, width, no_grad, green_model, green_model_id):
 
   chroma_pred = Add(chroma_diff_pred, green_pred)
  
-  mosaic3chan = Input(3, "Mosaic")
+  mosaic3chan = Input(3, name="Mosaic", resolution=1)
   chroma = XFlatRGBExtractor(green_pred, mosaic3chan, chroma_pred)
   chroma.assign_parents()
   chroma.compute_input_output_channels()
+  compute_resolution(chroma)
 
   return chroma
+
+
+
+def XRGBWeightedFilters(depth, width, no_grad, green_model, green_model_id):
+  # set up our inputs
+  rb_xtrans = Input(16, name="RBXtrans", resolution=1/6)
+  green_pred = Input(1, resolution=1, name="GreenExtractor", no_grad=no_grad, node=green_model, green_model_id=green_model_id)
+  packed_green = Pack(green_pred, factor=3) # pack it to the 3x3 grid 
+  packed_green.compute_input_output_channels()
+  packed_green_input = Input(9, resolution=1/3, name="PackedGreen", node=packed_green, no_grad=no_grad)
+
+  green_rb = XGreenRBExtractor(green_pred)
+  green_rb.compute_input_output_channels()
+  green_rb_input = Input(16, resolution=1/6, name="Green@RB", node=green_rb, no_grad=no_grad)
+
+  # subtract green at red and blue locations from red and blue values
+  diff = Sub(rb_xtrans, green_rb_input)
+  # upsample to 1/3 resolution where each pixel corresponds to a 3x3 block
+  higher_res_diff = LearnedUpsample(diff, width, factor=2, groups=1) 
+  # stack color diff with full green prediction ( both are now in the 3x3 block format )
+  stacked = Stack(higher_res_diff, packed_green_input) # width + 9 channels 
+  
+  f_input = stacked
+  # main processing
+  for i in range(depth):
+    conv = Conv2D(f_input, width, kwidth=3)
+    relu = Relu(conv)
+    f_input = relu
+
+  w_input = stacked
+  # main processing
+  for i in range(depth):
+    conv = Conv2D(w_input, width, kwidth=3)
+    relu = Relu(conv)
+    w_input = relu
+
+  # bring things up to full res
+  flat_mosaic = Input(1, resolution=1, name="FlatMosaic")
+  xtrans_and_green = Stack(green_pred, flat_mosaic) 
+
+  # upsample filter outputs
+  f_flat_residual = Unpack(f_input, factor=3)
+  f_post_input = Stack(xtrans_and_green, f_flat_residual)
+
+  # upsample weight outputs
+  w_flat_residual = Unpack(w_input, factor=3)
+  w_post_input = Stack(xtrans_and_green, w_flat_residual)
+
+  # do final conv on full res 
+  out_c = width // 9 + width % 2
+  f_post_conv = Conv2D(f_post_input, out_c, kwidth=3)
+  w_post_conv = Conv2D(w_post_input, out_c, kwidth=3)
+
+  weights = Softmax(w_post_conv)
+  weighted_interps = Mul(f_post_conv, weights)
+
+  chroma_diff_pred = GroupedSum(weighted_interps, 2) 
+
+  chroma_pred = Add(chroma_diff_pred, green_pred)
+ 
+  mosaic3chan = Input(3, resolution=1, name="Mosaic")
+  chroma = XFlatRGBExtractor(green_pred, mosaic3chan, chroma_pred)
+  chroma.assign_parents()
+  chroma.compute_input_output_channels()
+  compute_resolution(chroma)
+  return chroma
+
 
 
 """
@@ -369,7 +484,6 @@ def XRGBDemosaicknet3(depth, width, no_grad, green_model, green_model_id):
 
 
 
-
 """
 No Color difference with post processing on flat resolution
 """
@@ -411,4 +525,5 @@ def XRGBDemosaicknet4(depth, width, no_grad, green_model, green_model_id):
   chroma.compute_input_output_channels()
 
   return chroma
+
 

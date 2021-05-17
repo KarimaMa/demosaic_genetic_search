@@ -1,7 +1,5 @@
 import math 
 import logging
-import sys
-import asyncio
 import time
 import os
 import argparse
@@ -14,6 +12,7 @@ import torch
 import sys
 sys.path.append(sys.path[0].split("/")[0])
 from tree import has_loop
+from type_check import compute_resolution
 import cost
 import pareto_util
 from cost import ModelEvaluator, CostTiers
@@ -29,11 +28,6 @@ import torch.multiprocessing as mp
 import ctypes
 import datetime
 import mysql_db
-# from dataset import bayer
-# from imageio import imread
-#from multiprocessing import shared_memory
-from queue import Empty
-import psutil
 
 
 def build_model_database(args):
@@ -172,57 +166,111 @@ class MutationBatchInfo:
  worker subprocess function that runs training
  gpu_id: the gpu assigned to this worker
 """
-def run_train(work_q, worker_id, pending_start_times, pending_tasks, pending_l, finished_tasks, \
-              gpu_id, args, validation_psnrs, log_format, logger):
-  # keep pulling from work queue
+def run_train(task_list_lock, tasks_file, task_ticker_file, worker_id, \
+              pending_start_times, pending_tasks, pending_l, finished_tasks, \
+              gpu_id, args, validation_psnrs, \
+              log_format, logger):
+  num_tasks = len([l for l in open(tasks_file, "r")])
+
   while True:
-    try:
-      train_task_info = work_q.get(block=False)
-      if train_task_info is None:
-        return
+    task_list_lock.acquire()
+    with open(task_ticker_file, "r") as f:
+      next_task_id = int(f.read().strip())
+    if next_task_id == num_tasks:
+      print(f"no more tasks to run, worker {worker_id} exiting")
+      task_list_lock.release()
+      return
+    else:
+      task_info_str = [l for l in open(tasks_file, "r")][next_task_id]
+      task_info = task_info_str.split("--")
+      task_id = int(task_info[0])
+      model_dir = task_info[1]
+      model_id = int(task_info[2])
+      green_model_asts = task_info[3]
+      green_model_weights = task_info[4]
+      model_inits = int(task_info[5])
 
-      model_id = train_task_info["model_id"]
-      task_id = train_task_info["task_id"]
-      model_dir = train_task_info["model_dir"]
-      models = train_task_info["models"]
+      with open(task_ticker_file, "w") as f:
+        f.write(f"{next_task_id+1}")
 
-      pending_l.acquire()
-      pending_start_times[worker_id] = time.time()
-      pending_tasks[worker_id] = task_id
-      pending_l.release()
+    task_list_lock.release()
 
-      logger.info(f'---worker on gpu {gpu_id} running task {task_id} model {model_id} ---')
-      print(f'--- worker on gpu {gpu_id} running model {model_id} with {len([p for p in models[0].parameters()])} params ---')
+    model_ast = demosaic_ast.load_ast(os.path.join(model_dir, "model_ast"))
+
+    # get model info
+    if args.full_model:
+      green_model_ast_files = [l.strip() for l in open(args.green_model_asts)]
+      green_model_weight_files = [l.strip() for l in open(args.green_model_weights)]
+      insert_green_model(model_ast, green_model_ast_files, green_model_weight_files)
+
+    models = [model_ast.ast_to_model() for i in range(model_inits)]
+
+    pending_l.acquire()
+    pending_start_times[worker_id] = time.time()
+    pending_tasks[worker_id] = task_id
+    pending_l.release()
+
+    logger.info(f'---worker on gpu {gpu_id} running task {task_id} model {model_id} out of {num_tasks} tasks ---')
+    print(f'--- worker on gpu {gpu_id} running model {model_id} with {len([p for p in models[0].parameters()])} params ---')
+  
+    for m in models:
+      m._initialize_parameters()
+   
+    util.create_dir(model_dir)
+    train_logger = util.create_logger(f'model_{model_id}_train_logger', logging.INFO, log_format, \
+                                os.path.join(model_dir, f'model_{model_id}_training_log'))
+
+    model_val_psnrs = train_model(args, gpu_id, model_id, models, model_dir, train_logger)
     
-      for m in models:
-        m._initialize_parameters()
-     
-      util.create_dir(model_dir)
-      train_logger = util.create_logger(f'model_{model_id}_train_logger', logging.INFO, log_format, \
-                                  os.path.join(model_dir, f'model_{model_id}_training_log'))
+    logger.info(f"worker on gpu {gpu_id} with task {task_id} writing to validation psnrs")
 
-      model_val_psnrs = train_model(args, gpu_id, model_id, models, model_dir, train_logger)
-      
-      logger.info(f"worker on gpu {gpu_id} with task {task_id} writing to validation psnrs")
+    for i in range(args.keep_initializations):
+      index = args.keep_initializations * task_id + i 
+      validation_psnrs[index] = model_val_psnrs[i]
+      print(f"worker on gpu {gpu_id} task {task_id} psnr {model_val_psnrs[i]}")
 
-      for i in range(args.keep_initializations):
-        index = args.keep_initializations * task_id + i 
-        validation_psnrs[index] = model_val_psnrs[i]
-        print(f"worker on gpu {gpu_id} task {task_id} psnr {model_val_psnrs[i]}")
+    pending_l.acquire()
+    start_time = pending_start_times[worker_id]
+    pending_start_times[worker_id] = -1
+    pending_tasks[worker_id] = -1
+    pending_l.release()
 
-      pending_l.acquire()
-      start_time = pending_start_times[worker_id]
-      pending_start_times[worker_id] = -1
-      pending_tasks[worker_id] = -1
-      pending_l.release()
-      #work_q.task_done()
+    print(f"task {task_id} took {time.time() - start_time}")
+    finished_tasks[task_id] = time.time() - start_time # store time task took
 
-      print(f"task {task_id} took {time.time() - start_time}")
-      finished_tasks[task_id] = time.time() - start_time # store time task took
 
-    except Empty:
-      time.sleep(10)
+def create_worker(worker_id, task_list_lock, tasks_file, task_ticker_file, validation_psnrs, args, \
+                  pending_start_times, pending_tasks, pending_locks, \
+                  finished_tasks, log_format, worker_log):
+  gpu_id = worker_id
+  worker = mp.Process(target=run_train, args=(task_list_lock, tasks_file, task_ticker_file, worker_id, \
+                                            pending_start_times, pending_tasks, pending_locks[worker_id], finished_tasks, \
+                                            gpu_id, args, validation_psnrs, \
+                                            log_format, worker_log))
+  return worker
 
+"""
+inserts the green model ast referenced by the green_model_id stored in 
+an input node into the input node.
+NOTE: WE MAKE SURE ONLY ONE GREEN MODEL DAG IS CREATED SO THAT 
+IT IS ONLY RUN ONCE PER RUN OF THE FULL MODEL
+"""
+def insert_green_model(new_model_ast, green_model_asts, green_model_weights, green_model=None, green_model_weight_file=None):
+  if green_model is None:
+    green_model_id = get_green_model_id(new_model_ast)
+    green_model_ast_file = green_model_asts[green_model_id]
+    green_model_weight_file = green_model_weights[green_model_id]
+
+    green_model = demosaic_ast.load_ast(green_model_ast_file)
+
+  nodes = new_model_ast.preorder()
+  for n in nodes:
+    if type(n) is demosaic_ast.Input:
+      if n.name == "Input(GreenExtractor)":
+        n.node = green_model
+        n.weight_file = green_model_weight_file
+      elif hasattr(n, "node"): # other input ops my run submodels that also require the green model
+        insert_green_model(n.node, green_model_asts, green_model_weights, green_model, green_model_weight_file)
 
 
 class Searcher():
@@ -236,6 +284,12 @@ class Searcher():
                                   os.path.join(args.save, 'search_log'))
     self.debug_logger = util.create_logger('debug_logger', logging.DEBUG, self.log_format, \
                                   os.path.join(args.save, 'debug_log'))
+    self.debug_logger.propagate = False
+
+    self.progress_logger = util.create_logger('progress_log', logging.INFO, self.log_format, \
+                                  os.path.join(args.save, 'progress_log'))
+    self.progress_logger.propagate = False
+
     self.mysql_logger = util.create_logger('mysql_logger', logging.INFO, self.log_format, \
                                   os.path.join(args.save, 'mysql_log'))
     self.monitor_logger = util.create_logger('monitor_logger', logging.INFO, self.log_format, \
@@ -263,12 +317,14 @@ class Searcher():
     mp.set_start_method("spawn", force=True)
 
     self.num_workers = self.args.num_gpus
-    self.models_per_gen = self.args.mutations_per_generation * self.args.keep_initializations * len(args.cost_tiers)
-    self.work_queue = mp.Queue(self.models_per_gen + self.num_workers)
+    self.models_per_gen = self.args.mutations_per_generation * len(args.cost_tiers)
     self.pending_locks = [mp.Lock() for w in range(self.num_workers)]
+    self.task_list_lock = mp.Lock()
+    self.tasks_file = os.path.join(args.save, "subproc_tasks_file")
+    self.task_ticker_file = os.path.join(args.save, "task_ticker_file")
+
     self.work_loggers = [util.create_logger('work_logger', logging.INFO, self.log_format, \
                         os.path.join(args.save, f'work_log_{i}')) for i in range(self.num_workers)]
-
 
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '29500'
@@ -356,15 +412,57 @@ class Searcher():
       "Input(RBdiffG_GreenQuad)": rb_min_g_stack_green_input
     }
     
+
+  def construct_xchroma_inputs(self, green_model_id):
+    rb_xtrans = demosaic_ast.Input(16, name="RBXtrans", resolution=1/6)
+    green_pred = demosaic_ast.Input(1, name="GreenExtractor", resolution=1, no_grad=True, green_model_id=green_model_id)
+    packed_green = demosaic_ast.Pack(green_pred, factor=3) # pack it to the 3x3 grid 
+    packed_green.compute_input_output_channels()
+    packed_green_input = demosaic_ast.Input(9, name="PackedGreen", resolution=1/3, node=packed_green, no_grad=True)
+
+    green_rb = demosaic_ast.XGreenRBExtractor(green_pred, resolution=1/6)
+    green_rb.compute_input_output_channels()
+    green_rb_input = demosaic_ast.Input(16, name="Green@RB", resolution=1/6, node=green_rb, no_grad=True)
+
+    flat_mosaic = demosaic_ast.Input(1, name="FlatMosaic", resolution=1)
+    mosaic3chan = demosaic_ast.Input(3, name="Mosaic", resolution=1)
+
+    return {
+      "Input(RBXtrans)": rb_xtrans,
+      "Input(GreenExtractor)": green_pred,
+      "Input(PackedGreen)": packed_green_input,
+      "Input(Green@RB)": green_rb_input,
+      "Input(FlatMosaic)": flat_mosaic,
+      "Input(Mosaic)": mosaic3chan
+    }
+
  
   """
   Builds valid input nodes for a green model
   """
   def construct_green_inputs(self):
-    bayer = demosaic_ast.Input(4, "Bayer")
+    bayer = demosaic_ast.Input(4, name="Mosaic", resolution=float(1/2))
 
     return {
-      "Input(Bayer)": bayer,
+      "Input(Mosaic)": bayer,
+    }
+
+  def construct_nas_inputs(self):
+    bayer = demosaic_ast.Input(3, name="Bayer", resolution=float(1.0))
+
+    return {
+      "Input(Mosaic)": bayer,
+    }
+
+  def construct_xgreen_inputs(self):
+    mosaic = demosaic_ast.Input(36, resolution=1/6, name="Mosaic3x3")
+    flat_mosaic = demosaic_ast.Input(1, resolution=1, name="FlatMosaic")
+    mosaic3chan = demosaic_ast.Input(3, resolution=1, name="Mosaic")
+
+    return {
+      "Input(Mosaic3x3)": mosaic,
+      "Input(FlatMosaic)": flat_mosaic,
+      "Input(Mosaic)": mosaic3chan,
     }
 
 
@@ -376,15 +474,25 @@ class Searcher():
           green_model_id = get_green_model_id(model_ast)
           if partner_ast:
             set_green_model_id(partner_ast, green_model_id)
-          model_inputs = self.construct_chroma_inputs(green_model_id)
+          if args.xtrans_chroma:
+            model_inputs = self.construct_xchroma_inputs(green_model_id)
+          else:
+            model_inputs = self.construct_chroma_inputs(green_model_id)
           model_input_names = OrderedSet(model_inputs.keys())
           self.args.input_ops = OrderedSet([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
         elif self.args.rgb8chan: # full rgb model search uses same inputs as green search
           model_inputs = self.construct_green_inputs()
           model_input_names = OrderedSet(model_inputs.keys())
           self.args.input_ops = OrderedSet(list(model_inputs.values()))
+        elif self.args.nas:
+          model_inputs = self.construct_nas_inputs()
+          model_input_names = OrderedSet(model_inputs.keys())
+          self.args.input_ops = OrderedSet(list(model_inputs.values()))
         else: 
-          model_inputs = self.construct_green_inputs()
+          if self.args.xtrans_green:
+            model_inputs = self.construct_xgreen_inputs()
+          else:
+            model_inputs = self.construct_green_inputs()
           model_input_names = OrderedSet(model_inputs.keys())
           self.args.input_ops = OrderedSet(list(model_inputs.values()))
 
@@ -402,30 +510,6 @@ class Searcher():
         return None, None, None
       else:
         return new_model_ast, shash, mutation_stats
-              
-
-  """
-  inserts the green model ast referenced by the green_model_id stored in 
-  an input node into the input node.
-  NOTE: WE MAKE SURE ONLY ONE GREEN MODEL DAG IS CREATED SO THAT 
-  IT IS ONLY RUN ONCE PER RUN OF THE FULL MODEL
-  """
-  def insert_green_model(self, new_model_ast, green_model=None, green_model_weight_file=None):
-    if green_model is None:
-      green_model_id = get_green_model_id(new_model_ast)
-      green_model_ast_file = self.args.green_model_asts[green_model_id]
-      green_model_weight_file = self.args.green_model_weights[green_model_id]
-
-      green_model = demosaic_ast.load_ast(green_model_ast_file)
-
-    nodes = new_model_ast.preorder()
-    for n in nodes:
-      if type(n) is demosaic_ast.Input:
-        if n.name == "Input(GreenExtractor)":
-          n.node = green_model
-          n.weight_file = green_model_weight_file
-        elif hasattr(n, "node"): # other input ops my run submodels that also require the green model
-          self.insert_green_model(n.node, green_model, green_model_weight_file)
 
 
   def lower_model(self, new_model_id, new_model_ast):
@@ -439,14 +523,10 @@ class Searcher():
         return new_models
 
 
-  def create_worker(self, worker_id, validation_psnrs):
-    gpu_id = worker_id
-    worker = mp.Process(target=run_train, args=(self.work_queue, worker_id, self.pending_start_times, self.pending_tasks, self.pending_locks[worker_id], \
-                                              self.finished_tasks, gpu_id, self.args, validation_psnrs, self.log_format, self.work_loggers[worker_id]))
-    return worker
-
-
-  def monitor_training_tasks(self, validation_psnrs):
+  # def monitor_training_tasks(self, workers, work_queue, training_tasks, pending_tasks, pending_start_times, validation_psnrs):
+  def monitor_training_tasks(self, workers, training_tasks, pending_tasks, pending_start_times, finished_tasks, validation_psnrs):
+    num_tasks = len([l for l in open(self.tasks_file, "r")])
+    
     timeout = self.args.train_timeout
     if self.args.ram:
       bootup_time = 300
@@ -455,7 +535,7 @@ class Searcher():
     
     alive = set()
     failed_tasks = []
-    for wid, worker in enumerate(self.workers):
+    for wid, worker in enumerate(workers):
       worker.start()
       alive.add(wid)
 
@@ -463,31 +543,37 @@ class Searcher():
     while True:
       if tick % 6 == 0:
         self.work_manager_logger.info(f"alive workers: {alive}")
-        print(f"work queue size {self.work_queue.qsize()}")
+        print(f"num_tasks {num_tasks}")
 
-      if self.work_queue.empty():
-        self.work_manager_logger.info("No more models in work queue, waiting for all tasks to complete")
+        self.task_list_lock.acquire()
+        with open(self.task_ticker_file, "r") as f:
+          ticker = int(f.read().strip())
+        self.task_list_lock.release()
+        
+      if ticker == num_tasks: #work_queue.empty():
+        self.work_manager_logger.info("No more models left to train, waiting for all tasks to complete")
 
-      for wid, worker in enumerate(self.workers): 
+      for wid, worker in enumerate(workers): 
         if not worker.is_alive() and (wid in alive):
           worker.join()
           alive.remove(wid)
           self.work_manager_logger.info(f"worker {wid} is dead with exit code {worker.exitcode}")
 
-          pending_task = self.pending_tasks[wid]
-          failed_tasks.append(pending_task)
+          pending_task = pending_tasks[wid]
+          if pending_task > 0:
+            failed_tasks.append(pending_task)
 
         else: # check if worker has run out of time on current task
           self.pending_locks[wid].acquire()
-          start_time = self.pending_start_times[wid]
-          task_id = self.pending_tasks[wid]
+          start_time = pending_start_times[wid]
+          task_id = pending_tasks[wid]
 
           if start_time >= 0 and task_id >= 0:
             curr_time = time.time()
 
             terminated = False 
             if curr_time - start_time > bootup_time:
-              if not os.path.exists(f"{self.training_tasks[task_id].model_dir}/v0_train_log"):
+              if not os.path.exists(f"{training_tasks[task_id].model_dir}/v0_train_log"):
                 self.work_manager_logger.info(f"worker {wid} running task {task_id} has no 'v0_train_log', terminating")
                 worker.terminate()
                 worker.join()
@@ -500,15 +586,17 @@ class Searcher():
               terminated = True
 
             if terminated:
+              print(f"task {task_id} terminated")
               failed_tasks.append(task_id)
-              new_worker = self.create_worker(wid, validation_psnrs)
+              new_worker = create_worker(wid, self.task_list_lock, self.tasks_file, self.task_ticker_file, \
+                                        validation_psnrs, self.args, pending_start_times, pending_tasks, self.pending_locks, \
+                                        finished_tasks, self.log_format, self.work_loggers[wid])
               new_worker.start()
-              self.workers[wid] = new_worker
+              workers[wid] = new_worker
           
           self.pending_locks[wid].release()
       
       if len(alive) == 0:
-        assert self.work_queue.empty(), "all workers are dead with work left in the queue"
         self.work_manager_logger.info("All tasks are done")
         break
 
@@ -553,7 +641,9 @@ class Searcher():
       seed_ast = demosaic_ast.load_ast(seed_model_file)
       seed_ast.compute_input_output_channels()
       if self.args.full_model:
-        self.insert_green_model(seed_ast)
+        insert_green_model(seed_ast, self.args.green_model_ast_files, self.args.green_model_weight_files)
+
+      compute_resolution(seed_ast)
 
       seed_model_dir = self.model_manager.model_dir(seed_model_id)
       util.create_dir(seed_model_dir)
@@ -603,6 +693,8 @@ class Searcher():
 
   # searches over program mutations within tiers of computational cost
   def search(self, compute_cost_tiers, tier_size):
+    search_start_time = datetime.datetime.now()
+
     cost_tiers = CostTiers(self.args.tier_database_dir, compute_cost_tiers, self.search_logger)
 
     if self.args.restart_generation is not None:
@@ -619,7 +711,7 @@ class Searcher():
       end_generation = self.args.generations 
 
     self.search_logger.info(f"--- STARTING SEARCH AT GENERATION {start_generation} AND ENDING AT {end_generation} ---")
-      
+
     for generation in range(start_generation, end_generation):
       generational_tier_sizes = [len(tier.items()) for tier in cost_tiers.tiers]
       if self.args.restart_generation and (generation == self.args.restart_generation):
@@ -637,13 +729,13 @@ class Searcher():
       new_cost_tiers = copy.deepcopy(cost_tiers)
 
       task_id = 0
-      self.training_tasks = {}
-      validation_psnrs = mp.Array(ctypes.c_double, [-1]*self.models_per_gen)
-      self.finished_tasks = mp.Array(ctypes.c_double, [-1]*self.models_per_gen)
-      self.pending_start_times = mp.Array(ctypes.c_double, [-1]*self.num_workers)
-      self.pending_tasks = mp.Array(ctypes.c_double, [-1]*self.num_workers)
+      training_tasks = {}
 
-      self.workers = [self.create_worker(worker_id, validation_psnrs) for worker_id in range(self.num_workers)]
+      subproc_tasks = []
+      validation_psnrs = mp.Array(ctypes.c_double, [-1]*self.models_per_gen)
+      finished_tasks = mp.Array(ctypes.c_double, [-1]*self.models_per_gen)
+      pending_start_times = mp.Array(ctypes.c_double, [-1]*self.num_workers)
+      pending_tasks = mp.Array(ctypes.c_double, [-1]*self.num_workers)
 
       for tid, tier in enumerate(cost_tiers.tiers):
         if self.args.restart_generation and (generation == self.args.restart_generation) and (tid < self.args.restart_tier):
@@ -688,7 +780,7 @@ class Searcher():
           print(f"model {new_model_id} hash: {hash(new_model_ast)}\n------------------")
 
           if self.args.full_model:
-            self.insert_green_model(new_model_ast)
+            insert_green_model(new_model_ast, self.args.green_model_ast_files, self.args.green_model_weight_files)
 
           pytorch_models = self.lower_model(new_model_id, new_model_ast)
           print(sys.getsizeof(pytorch_models[0])/1000)
@@ -704,7 +796,7 @@ class Searcher():
                                                 shash, generation, compute_cost, model_id, mutation_stats)
           
           task_info = MutationTaskInfo(task_id, new_model_entry, new_model_dir, pytorch_models, new_model_id)
-          subproc_task_info = {"task_id":task_id, "model_dir":new_model_dir, "models":pytorch_models, "model_id":new_model_id}
+          subproc_task_str = f"{task_id}--{new_model_dir}--{new_model_id}--{self.args.green_model_asts}--{self.args.green_model_weights}--{self.args.model_initializations}"
 
           util.create_dir(task_info.model_dir)
           self.save_model_ast(new_model_ast, task_info.model_id, task_info.model_dir)
@@ -724,21 +816,34 @@ class Searcher():
             new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
           else:
             print(f"PUTTING TASK {task_id}")
-            self.work_queue.put(subproc_task_info)
-            self.training_tasks[task_id] = task_info
+            training_tasks[task_id] = task_info
+            subproc_tasks.append(subproc_task_str)
             task_id += 1
         
-      for w in range(self.num_workers):
-        self.work_queue.put(None) # place sentinels telling workers to exit
+      with open(self.tasks_file, "w+") as tf:
+        for task_str in subproc_tasks:
+          tf.write(f"{task_str}\n")
+      with open(self.task_ticker_file, "w+") as ttf:
+        ttf.write(f'{0}')
 
-      failed_tasks = self.monitor_training_tasks(validation_psnrs)
+      workers = [create_worker(wid, self.task_list_lock, self.tasks_file, self.task_ticker_file, validation_psnrs, self.args, \
+                              pending_start_times, pending_tasks, self.pending_locks, \
+                              finished_tasks, self.log_format, self.work_loggers[wid]) for wid in range(self.num_workers)]
 
+      failed_tasks = self.monitor_training_tasks(workers, training_tasks, pending_tasks, pending_start_times, finished_tasks, validation_psnrs)
+
+      num_failed = len(failed_tasks)
+      num_finished = sum([1 for ttime in finished_tasks if ttime >= 0])
+      minutes_passed = (datetime.datetime.now() - search_start_time).total_seconds() / 60
+
+      self.progress_logger.info(f"Minutes elapsed: {minutes_passed} Generation: {generation} - successfully trained: {num_finished} - failed train: {num_failed}")
+      
       print("finished tasks")
       # update model database 
-      for task_id, task_time in enumerate(self.finished_tasks):
+      for task_id, task_time in enumerate(finished_tasks):
         if task_time < 0: 
           continue # this task was not run
-        task_info = self.training_tasks[task_id]
+        task_info = training_tasks[task_id]
         task_id = task_info.task_id 
         print(f"task_id {task_id} task id in task info: {task_info.task_id} model id {task_info.model_id}")
 
@@ -756,10 +861,12 @@ class Searcher():
         self.search_logger.info(f"adding model {task_info.model_id} with psnrs {model_psnrs} to db")
 
         compute_cost = task_info.database_entry["compute_cost"]
-        new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
+        if not math.isinf(best_psnr):
+          new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
         
         self.update_model_database(task_info, model_psnrs)
         self.update_perf_database(task_info.model_id, compute_cost, task_time)
+        
         """
         mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
                               self.args.save, self.args.experiment_name, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
@@ -779,6 +886,9 @@ class Searcher():
       self.failure_database.save()
       cost_tiers.update_database(generation)
       cost_tiers.tier_database.save()
+
+      # work_queue.close()
+      # del work_queue
 
       print(f"generation {generation} seen models {len(self.mutator.seen_models)}")
       print(f"number of killed mutations {generation_stats.generational_killed} caused by:")
@@ -812,14 +922,18 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
 
   parser.add_argument('--experiment_name', type=str)
-  parser.add_argument('--max_channels', type=int, default=32, help='max channel count')
+  parser.add_argument('--max_channels', type=int, default=64, help='max channel count')
   parser.add_argument('--default_channels', type=int, default=12, help='initial channel count for Convs')
-  parser.add_argument('--max_nodes', type=int, default=40, help='max number of nodes in a tree')
+  parser.add_argument('--max_nodes', type=int, default=50, help='max number of nodes in a tree')
   parser.add_argument('--min_subtree_size', type=int, default=1, help='minimum size of subtree in insertion')
-  parser.add_argument('--max_subtree_size', type=int, default=15, help='maximum size of subtree in insertion')
+  parser.add_argument('--max_subtree_size', type=int, default=20, help='maximum size of subtree in insertion')
+  parser.add_argument('--max_resolution_change_tries', type=int, default=20, help='max number of times to try finding a subgraph to change resolution')
+  parser.add_argument('--pixel_width', type=int, help='pixel width of input image')
+  parser.add_argument('--min_resolution', type=float, default=float(1/6), help='minimum resolution allowed for any intermediate output of DAG')
+  parser.add_argument('--resolution_change_factors', type=str, help='allowed up/downsampling factors')
   parser.add_argument('--structural_sim_reject', type=float, default=0.2, help='rejection probability threshold for structurally similar trees')
-  parser.add_argument('--max_footprint', type=int, default=16, help='max DAG footprint size on input image')
-  parser.add_argument('--crop', type=int, default=16, help='how much to crop images during training and inference')
+  parser.add_argument('--max_footprint', type=int, help='max DAG footprint size on input image')
+  parser.add_argument('--crop', type=int, help='how much to crop images during training and inference')
 
   parser.add_argument('--starting_model_id', type=int)
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
@@ -844,6 +958,9 @@ if __name__ == "__main__":
   # seed models 
   parser.add_argument('--green_seed_model_files', type=str, help='file with list of filenames of green seed model asts')
   parser.add_argument('--green_seed_model_psnrs', type=str, help='file with list of psnrs of green seed models')
+
+  parser.add_argument('--nas_seed_model_files', type=str, help='file with list of filenames of nas seed model asts')
+  parser.add_argument('--nas_seed_model_psnrs', type=str, help='file with list of psnrs of nas seed models')
 
   parser.add_argument('--rgb8chan_seed_model_files', type=str, help='file with list of filenames of rgb8chan seed model asts')
   parser.add_argument('--rgb8chan_seed_model_psnrs', type=str, help='file with list of psnrs of rgb8chan seed models')
@@ -870,11 +987,12 @@ if __name__ == "__main__":
   parser.add_argument('--load_timeout', type=int, default=10)
   parser.add_argument('--mutate_timeout', type=int, default=60)
   parser.add_argument('--lowering_timeout', type=int, default=10)
-  parser.add_argument('--train_timeout', type=int, default=600)
+  parser.add_argument('--train_timeout', type=int, default=900)
   parser.add_argument('--save_timeout', type=int, default=10)
 
   # training parameters
   parser.add_argument('--num_gpus', type=int, default=4, help='number of available GPUs') # change this to use all available GPUs
+
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
   parser.add_argument('--learning_rate', type=float, default=0.01, help='initial learning rate')
   parser.add_argument('--lrsearch', action='store_true', help='whether or not to use lr search')
@@ -897,6 +1015,11 @@ if __name__ == "__main__":
 
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
+  parser.add_argument('--xtrans_chroma', action="store_true")
+  parser.add_argument('--xtrans_green', action="store_true")  
+  parser.add_argument('--superres_green', action="store_true")
+
+  parser.add_argument('--nas', action='store_true')
   parser.add_argument('--rgb8chan', action="store_true")
   parser.add_argument('--binop_change', action="store_true")
   parser.add_argument('--insertion_bias', action="store_true")
@@ -920,12 +1043,16 @@ if __name__ == "__main__":
   if args.full_model:
     args.seed_model_files = args.chroma_seed_model_files
     args.seed_model_psnrs = args.chroma_seed_model_psnrs
-    args.green_model_asts = [l.strip() for l in open(args.green_model_asts)]
-    args.green_model_weights = [l.strip() for l in open(args.green_model_weights)]
+    args.green_model_ast_files = [l.strip() for l in open(args.green_model_asts)]
+    args.green_model_weight_files = [l.strip() for l in open(args.green_model_weights)]
     args.task_out_c = 3
   elif args.rgb8chan:
     args.seed_model_files = args.rgb8chan_seed_model_files
     args.seed_model_psnrs = args.rgb8chan_seed_model_psnrs
+    args.task_out_c = 3
+  elif args.nas:
+    args.seed_model_files = args.nas_seed_model_files
+    args.seed_model_psnrs = args.nas_seed_model_psnrs
     args.task_out_c = 3
   else:
     args.seed_model_files = args.green_seed_model_files
@@ -933,6 +1060,8 @@ if __name__ == "__main__":
     args.task_out_c = 1
 
   args.cost_tiers = parse_cost_tiers(args.cost_tiers)
+  args.resolution_change_factors = [int(f) for f in args.resolution_change_factors.split(",")]
+
   util.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
   args.model_path = os.path.join(args.save, args.model_path)
   util.create_dir(args.model_path)

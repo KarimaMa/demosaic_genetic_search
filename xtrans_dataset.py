@@ -36,6 +36,10 @@ class XGreenDataset(data.Dataset):
     flat_mosaic = np.sum(mosaic3chan, axis=0, keepdims=True)
     packed_mosaic = xtrans_3x3_invariant(flat_mosaic)
 
+    mosaic3chan = torch.Tensor(mosaic3chan)
+    flat_mosaic = torch.Tensor(flat_mosaic)
+    packed_mosaic = torch.Tensor(packed_mosaic)
+
     input = packed_mosaic, mosaic3chan, flat_mosaic
   
     target = np.expand_dims(img[1,...], axis=0)

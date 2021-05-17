@@ -290,10 +290,28 @@ class Searcher():
   Builds valid input nodes for a green model
   """
   def construct_green_inputs(self):
-    bayer = demosaic_ast.Input(4, "Bayer")
+    bayer = demosaic_ast.Input(4, name="Bayer", resolution=float(1/2))
 
     return {
-      "Input(Bayer)": bayer,
+      "Input(Mosaic)": bayer,
+    }
+
+  def construct_nas_inputs(self):
+    bayer = demosaic_ast.Input(3, name="Bayer", resolution=float(1.0))
+
+    return {
+      "Input(Mosaic)": bayer,
+    }
+
+  def construct_xgreen_inputs(self):
+    mosaic = demosaic_ast.Input(36, resolution=1/6, name="Mosaic3x3")
+    flat_mosaic = demosaic_ast.Input(1, resolution=1, name="FlatMosaic")
+    mosaic3chan = demosaic_ast.Input(3, resolution=1, name="Mosaic")
+
+    return {
+      "Input(Mosaic3x3)": mosaic,
+      "Input(FlatMosaic)": flat_mosaic,
+      "Input(Mosaic)": mosaic3chan,
     }
 
 
@@ -305,12 +323,19 @@ class Searcher():
           green_model_id = get_green_model_id(model_ast)
           if partner_ast:
             set_green_model_id(partner_ast, green_model_id)
-          model_inputs = self.construct_chroma_inputs(green_model_id)
-          model_input_names = set(model_inputs.keys())
-          self.args.input_ops = set([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
-
+          if args.nas:
+            model_inputs = self.construct_nas_inputs()
+            model_input_names = set(model_inputs.keys())
+            self.args.input_ops = set(list(model_inputs.values()))
+          else:
+            model_inputs = self.construct_chroma_inputs(green_model_id)
+            model_input_names = set(model_inputs.keys())
+            self.args.input_ops = set([v for k,v in model_inputs.items() if k != "Input(GreenExtractor)"]) # green extractor is on flat bayer, can only use green quad input
         else: 
-          model_inputs = self.construct_green_inputs()
+          if self.args.xtrans_green:
+            model_inputs = self.construct_xgreen_inputs()
+          else:
+            model_inputs = self.construct_green_inputs()
           model_input_names = set(model_inputs.keys())
           self.args.input_ops = set(list(model_inputs.values()))
 
@@ -552,6 +577,7 @@ class Searcher():
     for seed_model_i, seed_model_file in enumerate(seed_model_files):
       seed_ast = demosaic_ast.load_ast(seed_model_file)
       seed_ast.compute_input_output_channels()
+
       if self.args.full_model:
         self.insert_green_model(seed_ast)
 
@@ -673,7 +699,7 @@ class Searcher():
           if reloaded_cost != parent_model_cost:
             print(f"--- ERROR: parent model saved cost {parent_model_cost} computed cost from reload {reloaded_cost} ---")
             #exit()
-          self.debug_logger.debug(f"new model\n{new_model_ast.dump()}\n")
+          # self.debug_logger.debug(f"new model\n{new_model_ast.dump()}\n")
 
           pytorch_models = self.lower_model(new_model_id, new_model_ast)
           if pytorch_models is None:
@@ -691,9 +717,10 @@ class Searcher():
 
           task_info = MutationTaskInfo(task_id, new_model_entry, new_model_dir, pytorch_models, new_model_id)
 
+          seen_psnrs = None
           # consult mysql db for seen models on other machines
-          seen_psnrs = mysql_db.find(self.args.mysql_auth, self.args.tablename, hash(new_model_ast), \
-                                      new_model_ast.id_string(), self.mysql_logger)
+          # seen_psnrs = mysql_db.find(self.args.mysql_auth, self.args.tablename, hash(new_model_ast), \
+          #                             new_model_ast.id_string(), self.mysql_logger)
           if not seen_psnrs is None: # model seen on other machine, skip training and use the given psnrs
             self.search_logger.info(f"model {new_model_id} already seen on another machine")
             self.update_model_database(task_info, seen_psnrs)
@@ -744,8 +771,8 @@ class Searcher():
 
           compute_cost = task_info.database_entry["compute_cost"]
           new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
-          mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
-                                self.args.save, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
+          # mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
+          #                       self.args.save, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
 
         self.model_database.save()
 
@@ -791,13 +818,16 @@ def parse_cost_tiers(s):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser("Demosaic")
-  parser.add_argument('--max_channels', type=int, default=32, help='max channel count')
+  parser.add_argument('--max_channels', type=int, default=64, help='max channel count')
   parser.add_argument('--default_channels', type=int, default=12, help='initial channel count for Convs')
-  parser.add_argument('--max_nodes', type=int, default=40, help='max number of nodes in a tree')
+  parser.add_argument('--max_nodes', type=int, default=50, help='max number of nodes in a tree')
   parser.add_argument('--min_subtree_size', type=int, default=1, help='minimum size of subtree in insertion')
   parser.add_argument('--max_subtree_size', type=int, default=15, help='maximum size of subtree in insertion')
   parser.add_argument('--structural_sim_reject', type=float, default=0.2, help='rejection probability threshold for structurally similar trees')
-  parser.add_argument('--max_footprint', type=int, default=16, help='max DAG footprint size on input image')
+  parser.add_argument('--max_footprint', type=int, default=20, help='max DAG footprint size on input image')
+  parser.add_argument('--max_resolution_change_tries', type=int, default=20, help='max number of times to try finding a subgraph to change resolution')
+  parser.add_argument('--min_resolution', type=float, default=float(1/6), help='minimum resolution allowed for any intermediate output of DAG')
+  parser.add_argument('--resolution_change_factors', type=str, default="2,3", help='allowed up/downsampling factors')
   parser.add_argument('--crop', type=int, default=16, help='how much to crop images during training and inference')
 
   parser.add_argument('--starting_model_id', type=int)
@@ -860,6 +890,11 @@ if __name__ == "__main__":
 
   # training full chroma + green parameters
   parser.add_argument('--full_model', action="store_true")
+  parser.add_argument('--xtrans_green', action="store_true")
+  parser.add_argument('--superres_green', action="store_true")
+
+  parser.add_argument('--nas', action='store_true')
+  parser.add_argument('--rgb8chan', action="store_true")
   parser.add_argument('--binop_change', action="store_true")
   parser.add_argument('--insertion_bias', action="store_true")
   parser.add_argument('--demosaicnet_search', action="store_true", help='whether to run search over demosaicnet space')
@@ -898,6 +933,7 @@ if __name__ == "__main__":
     args.task_out_c = 1
 
   args.cost_tiers = parse_cost_tiers(args.cost_tiers)
+  args.resolution_change_factors = [int(f) for f in args.resolution_change_factors.split(",")]
   util.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
   args.model_path = os.path.join(args.save, args.model_path)
   util.create_dir(args.model_path)

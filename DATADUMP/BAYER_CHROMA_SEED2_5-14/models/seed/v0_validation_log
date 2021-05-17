@@ -1,0 +1,6 @@
+2021-05-14 21:55:06,053 INFO validation epoch 000 mse 1.063905e-03 psnr 3.182613e+01
+2021-05-14 21:58:12,600 INFO validation epoch 001 mse 1.059568e-03 psnr 3.182749e+01
+2021-05-14 22:01:21,318 INFO validation epoch 002 mse 1.033066e-03 psnr 3.201747e+01
+2021-05-14 22:04:30,550 INFO validation epoch 003 mse 1.027468e-03 psnr 3.215715e+01
+2021-05-14 22:07:40,322 INFO validation epoch 004 mse 9.966962e-04 psnr 3.217602e+01
+2021-05-14 22:10:49,616 INFO validation epoch 005 mse 9.980665e-04 psnr 3.220182e+01

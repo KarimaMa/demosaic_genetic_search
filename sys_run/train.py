@@ -12,7 +12,9 @@ import time
 sys.path.append(sys.path[0].split("/")[0])
 sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
 
-from dataset import FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, ids_from_file, FastDataLoader
+from dataset import FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, NASDataset, ids_from_file, FastDataLoader
+from xtrans_dataset import XGreenDataset, XRGBDataset
+from superres_dataset import SGreenQuadDataset
 from async_loader import AsynchronousLoader
 
 import util
@@ -39,12 +41,22 @@ def create_train_dataset(args, gpu_id, shared_data=None, logger=None, batch_size
   device = torch.device(f'cuda:{gpu_id}')
 
   if args.full_model:
-    train_data = FullPredictionQuadDataset(data_file=args.training_file, RAM=args.ram, lazyRAM=args.lazyram, \
+    if args.xtrans_chroma:
+      train_data = XRGBDataset(data_file=args.training_file)
+    else:
+      train_data = FullPredictionQuadDataset(data_file=args.training_file, RAM=args.ram, lazyRAM=args.lazyram, \
                                           shared_data=shared_data, logger=logger)
   elif args.rgb8chan:
     train_data = RGB8ChanDataset(data_file=args.training_file)
+  elif args.nas:
+    train_data = NASDataset(data_file=args.training_file)
   else:
-    train_data = GreenQuadDataset(data_file=args.training_file) 
+    if args.xtrans_green:
+      train_data = XGreenDataset(data_file=args.training_file, flat=True)
+    elif args.superres_green:
+      train_data = SGreenQuadDataset(data_file=args.training_file)
+    else: 
+      train_data = GreenQuadDataset(data_file=args.training_file) 
 
   num_train = len(train_data)
   train_indices = list(range(num_train))
@@ -64,8 +76,8 @@ def create_train_dataset(args, gpu_id, shared_data=None, logger=None, batch_size
       train_data, batch_size=bs,
       sampler=sampler,
       pin_memory=True, num_workers=8)
-  logger.info("Finished creating FastDataLoader")
 
+  logger.info("Finished creating FastDataLoader")
   logger.info("Creating AsyncLoader...")
   loader = AsynchronousLoader(train_queue, device)
   logger.info("Finished creating AsyncLoader")
@@ -76,12 +88,22 @@ def create_validation_dataset(args, gpu_id, shared_data=None, batch_size=None):
   device = torch.device(f'cuda:{gpu_id}')
 
   if args.full_model:
-    validation_data = FullPredictionQuadDataset(data_file=args.validation_file, RAM=args.ram, lazyRAM=args.lazyram,\
+    if args.xtrans_chroma:
+      validation_data = XRGBDataset(data_file=args.validation_file)
+    else:
+      validation_data = FullPredictionQuadDataset(data_file=args.validation_file, RAM=args.ram, lazyRAM=args.lazyram,\
                                                shared_data=shared_data)
   elif args.rgb8chan:
     validation_data = RGB8ChanDataset(data_file=args.validation_file)
+  elif args.nas:
+    validation_data = NASDataset(data_file=args.training_file)
   else:
-    validation_data = GreenQuadDataset(data_file=args.validation_file)
+    if args.xtrans_green:
+      validation_data = XGreenDataset(data_file=args.validation_file, flat=True)
+    elif args.superres_green:
+      validation_data = SGreenQuadDataset(data_file=args.validation_file)
+    else:
+      validation_data = GreenQuadDataset(data_file=args.validation_file)
 
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
@@ -217,6 +239,8 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
     train_loggers[i].info(f"STARTING TRAINING AT LR {chosen_lr}") 
     validation_loggers[i].info(f"STARTING TRAINING AT LR {chosen_lr}") 
 
+  best_val_psnrs = [-1 for i in range(args.keep_initializations)]
+
   for epoch in range(cur_epoch, args.epochs):
     if args.keep_initializations < args.model_initializations:
       if epoch == 1:
@@ -229,13 +253,15 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
     end_time = time.time()
     experiment_logger.info(f"time to finish epoch {epoch} : {end_time-start_time}")
     val_losses, val_psnrs = infer(args, gpu_id, valid_queue, models, criterion)
+    if epoch >= 1:
+      best_val_psnrs = [max(best_p, new_p) for (best_p, new_p) in zip(best_val_psnrs, val_psnrs)]
 
     start_time = time.time()
     for i in range(len(models)):
       validation_loggers[i].info('validation epoch %03d %e %2.3f', epoch, val_losses[i], val_psnrs[i])
     end_time = time.time()
     experiment_logger.info(f"time to validate after epoch {epoch} : {end_time - start_time}")
-  return val_psnrs
+  return best_val_psnrs
 
 
 def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue, train_loggers, validation_queue, validation_loggers, experiment_logger):
@@ -265,20 +291,43 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
 
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
-      bayer, redblue_bayer, green_grgb = input 
-    else:
+      if args.xtrans_chroma:
+        packed_mosaic, mosaic3chan, flat_mosaic, rb = input 
+      else:
+        bayer, redblue_bayer, green_grgb = input
+    elif args.nas:
       bayer = input
-    n = bayer.size(0)
+    else:
+      if args.xtrans_green:
+        mosaic3x3, mosaic3chan, flat_mosaic = input
+      else: 
+        bayer = input
+    
+    n = target.size(0)
 
     for i, model in enumerate(models):
       model.reset()
       optimizers[i].zero_grad()
       if args.full_model:
-        model_inputs = {"Input(Bayer)": bayer, 
-                        "Input(Green@GrGb)": green_grgb, 
-                        "Input(RedBlueBayer)": redblue_bayer}
+        if args.xtrans_chroma:
+          model_inputs = {"Input(Mosaic)": mosaic3chan,
+                        "Input(Mosaic3x3)": packed_mosaic, 
+                        "Input(FlatMosaic)": flat_mosaic,
+                        "Input(RBXtrans)": rb}        
+        else:
+          model_inputs = {"Input(Bayer)": bayer, 
+                          "Input(Green@GrGb)": green_grgb, 
+                          "Input(RedBlueBayer)": redblue_bayer}
+
+      elif args.nas:
+        model_inputs = {"Input(Mosaic)": bayer}
       else:
-        model_inputs = {"Input(Bayer)": bayer}
+        if args.xtrans_green:
+          model_inputs = {"Input(Mosaic)": mosaic3chan,
+                          "Input(FlatMosaic)": flat_mosaic,
+                          "Input(Mosaic3x3)": mosaic3x3}
+        else:
+          model_inputs = {"Input(Mosaic)": bayer}
 
       pred = model.run(model_inputs)
       loss = criterion(pred, target)
@@ -312,27 +361,50 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
 
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
-      bayer, redblue_bayer, green_grgb = input 
-    else:
+      if args.xtrans_chroma:
+        packed_mosaic, mosaic3chan, flat_mosaic, rb = input 
+      else:
+        bayer, redblue_bayer, green_grgb = input
+    elif args.nas:
       bayer = input
-    target = target[..., args.crop:-args.crop, args.crop:-args.crop]
+    else:
+      if args.xtrans_green:
+        mosaic3x3, mosaic3chan, flat_mosaic = input
+      else: 
+        bayer = input
 
-    n = bayer.size(0)
+    if args.crop > 0:
+      target = target[..., args.crop:-args.crop, args.crop:-args.crop]
+
+    n = target.size(0)
 
     for i, model in enumerate(models):
       optimizers[i].zero_grad()
       model.reset()
       if args.full_model:
-        model_inputs = {"Input(Bayer)": bayer, 
+        if args.xtrans_chroma:
+          model_inputs = {"Input(Mosaic)": mosaic3chan,
+                        "Input(Mosaic3x3)": packed_mosaic, 
+                        "Input(FlatMosaic)": flat_mosaic,
+                        "Input(RBXtrans)": rb}
+        else:
+          model_inputs = {"Input(Bayer)": bayer, 
                         "Input(Green@GrGb)": green_grgb, 
                         "Input(RedBlueBayer)": redblue_bayer}
+      elif args.nas:
+        model_inputs = {"Input(Mosaic)": bayer}
       else:
-        model_inputs = {"Input(Bayer)": bayer}
+        if args.xtrans_green:
+          model_inputs = {"Input(Mosaic)": mosaic3chan,
+                          "Input(FlatMosaic)": flat_mosaic,
+                          "Input(Mosaic3x3)": mosaic3x3}
+        else:
+          model_inputs = {"Input(Mosaic)": bayer}
 
       pred = model.run(model_inputs)
       
-      # crop
-      pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
+      if args.crop > 0:
+        pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
 
       loss = criterion(pred, target)
 
@@ -366,28 +438,49 @@ def infer(args, gpu_id, valid_queue, models, criterion):
   with torch.no_grad():
     for step, (input, target) in enumerate(valid_queue):
       if args.full_model:
-        bayer, redblue_bayer, green_grgb = input 
-      else:
+        if args.xtrans_chroma:
+          packed_mosaic, mosaic3chan, flat_mosaic, rb = input 
+        else:
+          bayer, redblue_bayer, green_grgb = input
+      elif args.nas:
         bayer = input
+      else:
+        if args.xtrans_green:
+          mosaic3x3, mosaic3chan, flat_mosaic = input
+        else: 
+          bayer = input
 
-      target = target[..., args.crop:-args.crop, args.crop:-args.crop]
+      if args.crop > 0:
+        target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
-      n = bayer.size(0)
+      n = target.size(0)
 
       for i, model in enumerate(models):
         model.reset()
         if args.full_model:
-          model_inputs = {"Input(Bayer)": bayer, 
+          if args.xtrans_chroma:
+            model_inputs = {"Input(Mosaic)": mosaic3chan,
+                          "Input(Mosaic3x3)": packed_mosaic, 
+                          "Input(FlatMosaic)": flat_mosaic,
+                          "Input(RBXtrans)": rb}
+          else:           
+            model_inputs = {"Input(Bayer)": bayer, 
                           "Input(Green@GrGb)": green_grgb, 
                           "Input(RedBlueBayer)": redblue_bayer}
-          pred = model.run(model_inputs)
+        elif args.nas:
+          model_inputs = {"Input(Mosaic)": bayer}
         else:
-          model_inputs = {"Input(Bayer)": bayer}
+          if args.xtrans_green:
+            model_inputs = {"Input(Mosaic)": mosaic3chan,
+                            "Input(FlatMosaic)": flat_mosaic,
+                            "Input(Mosaic3x3)": mosaic3x3}
+          else:
+            model_inputs = {"Input(Mosaic)": bayer}
        
         pred = model.run(model_inputs)
 
-        # crop
-        pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
+        if args.crop > 0:
+          pred = pred[..., args.crop:-args.crop, args.crop:-args.crop]
         
         clamped = torch.clamp(pred, min=0, max=1)
 

@@ -4,6 +4,7 @@ Functions for managing AST trees
 from abc import ABC, abstractmethod
 import hashlib
 import numpy as np
+from tree_manipulation import get_children, get_parents
 
 
 def make_tuple(x):
@@ -117,7 +118,11 @@ class Node:
       printstr += f" g{self.groups}"
     if hasattr(self, "green_model_id"):
       printstr += f" green_model{self.green_model_id}"
-    printstr += f" res-{self.resolution:.2f}"
+    if hasattr(self, "factor"):
+      printstr += f" factor{self.factor}"
+
+    if self.resolution is not None:
+        printstr += f" res-{self.resolution:.2f}"
     printstr += f"  [ID: {nodeid}] {id(self)}"
 
     nodeid += 1
@@ -261,7 +266,7 @@ class Node:
   returns whether or not two ASTs are the same
   """
   def is_same_as(self, other, root, other_root):
-    if self.num_children != other.num_children or type(self) != type(other):
+    if self.num_children != other.num_children or type(self) != type(other) or self.resolution != other.resolution:
       return False
 
     if type(self.parent) is tuple:
@@ -290,6 +295,9 @@ class Node:
         return False
       if hasattr(self, "groups"):
         if self.groups != other.groups:
+          return False
+      if hasattr(self, "factor"):
+        if self.factor != other.factor:
           return False
       return self.child.is_same_as(other.child, root, other_root)
     elif self.num_children == 2:
@@ -352,6 +360,15 @@ class Node:
     for i,n in enumerate(self.preorder()):
       n.in_c = in_out_channels[i][0]
       n.out_c = in_out_channels[i][1]
+
+  """
+  Returns whether this node is downstream of the other node
+  """
+  def is_downstream(self, other):
+    if id(self) == id(other):
+      return True
+    children = get_children(self)
+    return any([c.is_downstream(other) for c in children])
 
   def __eq__(self, other):
     return self.is_same_as_wrapper(other)

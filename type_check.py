@@ -127,6 +127,8 @@ returns none if resolution is invalid
 """
 def compute_resolution(tree):
   if isinstance(tree, Input):
+    if hasattr(tree, "node"):
+      compute_resolution(tree.node)
     return tree.resolution
   elif isinstance(tree, LearnedDownsample) or isinstance(tree, Pack):
     child_resolution = compute_resolution(tree.child)
@@ -204,7 +206,8 @@ def check_channel_count(node):
   if isinstance(node, BinopIII):    
     lchild_c = check_channel_count(node.lchild)
     rchild_c = check_channel_count(node.rchild)
-    assert(lchild_c == rchild_c or rchild_c % lchild_c == 0 or lchild_c % rchild_c == 0) # allow broadcasting
+    ok = lchild_c == rchild_c or rchild_c % lchild_c == 0 or lchild_c % rchild_c == 0
+    assert ok, f"BinopIII {node.dump()}" # allow broadcasting
     return max(rchild_c, lchild_c)
   elif isinstance(node, BinopIJK):
     lchild_c = check_channel_count(node.lchild)
@@ -214,7 +217,7 @@ def check_channel_count(node):
   elif isinstance(node, BinopIcJcKc):
     lchild_c = check_channel_count(node.lchild)
     rchild_c = check_channel_count(node.rchild)
-    assert(lchild_c == node.Ic() and rchild_c == node.Jc())
+    assert(lchild_c == node.Ic() and rchild_c == node.Jc()), f"BinopIcJcKc {node.dump()}" 
     return node.Kc()
   elif isinstance(node, TernaryHcIcJcKc):
     child1_c = check_channel_count(node.child1)
@@ -224,20 +227,30 @@ def check_channel_count(node):
     return node.Kc()
   elif isinstance(node, UnopIcJc):
     child_c = check_channel_count(node.child)
-    assert(child_c == node.Ic())
+    assert(child_c == node.Ic()), f"UnopIcJc {node.dump()}" 
     return node.Jc()
   elif isinstance(node, UnopII):
-    child_c = check_channel_count(node.child)
-    return child_c
+    child_out_c = check_channel_count(node.child)
+    assert(node.in_c == child_out_c), f"UnopII {node.dump()}" 
+    return node.out_c
   elif isinstance(node, UnopIJ):
-    assert((node.in_c % node.groups == 0) and (node.out_c % node.groups == 0))
-    check_channel_count(node.child)
+    assert((node.in_c % node.groups == 0) and (node.out_c % node.groups == 0)), f"UnopIJJ {node.dump()}"
+    child_out_c = check_channel_count(node.child)
+    assert(node.in_c == child_out_c), f"UnopIJ {node.dump()} "
     return node.out_c
   elif isinstance(node, UnopIIdiv):
-    assert((node.in_c % node.out_c == 0) and (node.in_c >= node.out_c))
+    assert((node.in_c % node.out_c == 0) and (node.in_c >= node.out_c)), f"UnopIIdiv {node.dump()}"
+    child_out_c = check_channel_count(node.child)
+    assert (node.in_c == child_out_c), f"UnopIIdiv {node.dump()}"
     return node.out_c
   elif isinstance(node, UnopIJFixed):
-    assert( (node.in_c / node.factor**2) == node.out_c and (node.in_c % node.groups == 0) and (node.out_c % node.groups == 0) ) 
+    if isinstance(node, Unpack):
+      assert( (node.in_c / node.factor**2) == node.out_c ), f"Unpack {node.dump()}"
+    elif isinstance(node, Pack):
+      assert( (node.in_c * node.factor**2) == node.out_c ), f"Pack {node.dump()}"
+    child_out_c = check_channel_count(node.child)
+    assert(node.in_c == child_out_c)
+    return node.out_c
   elif isinstance(node, Const):
     return node.out_c
 
@@ -384,17 +397,13 @@ def fix_channel_count_downwards(root, parent, out_c, fixed_nodes=None):
       if root.out_c == out_c:
         fixed = True
       else:
-        in_c = out_c * (root.factor**2)
-        fixed = fix_channel_count_downwards(root.child, root, in_c, fixed_nodes)
-        if fixed:
-          root.in_c = in_c 
-          root.out_c = out_c
-          # may need to change grouping due to new input channels  
-          in_c_factors = get_factors(root.in_c)
-          out_c_factors = get_factors(root.out_c)
-          factors = in_c_factors.intersection(out_c_factors)
-          closest_factor = get_closest_factor(factors, root.groups)
-          root.groups = closest_factor
+        if isinstance(root, Pack):
+          if out_c % (root.factor**2) == 0:
+            in_c = int(out_c // (root.factor**2))
+            fixed = fix_channel_count_downwards(root.child, root, in_c, fixed_nodes)
+        elif isinstance(root, Unpack):
+          in_c = out_c * int(root.factor**2)
+          fixed = fix_channel_count_downwards(root.child, root, in_c, fixed_nodes)
     elif isinstance(root, TernaryHcIcJcKc) \
       or isinstance(root, BinopIcJcKc) \
       or isinstance(root, UnopIcJc) \
@@ -453,7 +462,7 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c, fixed_nodes=None):
   fixed = True
   
   fixed_nodes[id(parent)] = parent
-
+  
   if isinstance(parent, BinopIII):
     if cur_node is parent.lchild:
       parent.in_c = (in_c, in_c)
@@ -516,15 +525,20 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c, fixed_nodes=None):
         parent.in_c = in_c
   elif isinstance(parent, UnopIJFixed): # want parent to have in_c input channels
     if in_c == parent.in_c:
+      out_c = parent.out_c
       fixed = True
-    elif in_c % (parent.factor**2) != 0:
-      fixed = False # not possible to produce integer output channels with this scale factor
-    else:
-      out_c = in_c * (parent.factor**2)
+    elif isinstance(parent, Unpack):
+      if in_c % (parent.factor**2) == 0:
+        out_c = int(in_c // (parent.factor**2))
+        fixed = fix_channel_count_upwards(parent, out_c, fixed_nodes)
+      else:
+        fixed = False
+    elif isinstance(parent, Pack):
+      out_c = in_c * int(parent.factor**2)
       fixed = fix_channel_count_upwards(parent, out_c, fixed_nodes)
-      if fixed:
-        parent.out_c = out_c 
-        parent.in_c = in_c
+    if fixed:
+      parent.out_c = out_c 
+      parent.in_c = in_c
   elif isinstance(parent, BinopIcJcKc):
     if cur_node is parent.lchild:
       fixed = parent.in_c[0] == in_c
@@ -544,6 +558,7 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c, fixed_nodes=None):
   else: # type is UnopII
     parent.in_c = in_c
     fixed = fix_channel_count_upwards(parent, in_c, fixed_nodes)
+
   return fixed
 
 

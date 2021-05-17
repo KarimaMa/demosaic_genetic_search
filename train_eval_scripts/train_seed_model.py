@@ -16,19 +16,20 @@ import cost
 import util
 import model_lib
 from torch_model import ast_to_model
-from dataset import GreenQuadDataset, XGreenDataset, FullPredictionQuadDataset, FastDataLoader, FullPredictionProcessedDataset, GreenProcessedQuadDataset
+from dataset import GreenQuadDataset, NASDataset, FullPredictionQuadDataset, FastDataLoader, FullPredictionProcessedDataset, GreenProcessedQuadDataset
 from tree import print_parents
 import demosaic_ast
+from footprint import compute_footprint
 
 
 def run(args, models, model_id, model_dir):
   print(f"training {len(models)} models")
   log_format = '%(asctime)s %(levelname)s %(message)s'
 
-  if args.train:
-    train_loggers = [util.create_logger(f'{model_id}_v{i}_train_logger', logging.INFO, \
-                                        log_format, os.path.join(model_dir, f'v{i}_train_log'))\
-                    for i in range(len(models))]
+
+  train_loggers = [util.create_logger(f'{model_id}_v{i}_train_logger', logging.INFO, \
+                                      log_format, os.path.join(model_dir, f'v{i}_train_log'))\
+                  for i in range(len(models))]
 
   validation_loggers = [util.create_logger(f'{model_id}_v{i}_validation_logger', logging.INFO, \
                                           log_format, os.path.join(model_dir, f'v{i}_validation_log')) \
@@ -52,42 +53,27 @@ def run(args, models, model_id, model_dir):
       args.learning_rate) for m in models]
  
   if args.full_model:
-    if args.train:
-      if args.xtrans:
-        raise NotImplementedError
+    if args.nas:
+      train_data = NASDataset(data_file=args.training_file) 
+      validation_data = NASDataset(data_file=args.validation_file)
+      test_data = NASDataset(data_file=args.test_file)
+    else:
       train_data = FullPredictionProcessedDataset(data_file=args.training_file)
-    validation_data = FullPredictionProcessedDataset(data_file=args.validation_file)
-    test_data = FullPredictionProcessedDataset(data_file=args.test_file)
+      validation_data = FullPredictionProcessedDataset(data_file=args.validation_file)
+      test_data = FullPredictionProcessedDataset(data_file=args.test_file)
 
   else:
-    if args.train:
-      if args.xtrans:
-        if args.flat:
-          if args.precomputed:
-            train_data = XGreenDataset(data_file=args.training_file, precomputed=args.training_mosaic_file, flat=True)
-            validation_data = XGreenDataset(data_file=args.validation_file, precomputed=args.validation_mosaic_file, flat=True)
-            test_data = XGreenDataset(data_file=args.test_file, precomputed=args.test_mosaic_file, flat=True)
-          else:
-            train_data = XGreenDataset(data_file=args.training_file, flat=True)
-            validation_data = XGreenDataset(data_file=args.validation_file, flat=True)
-            test_data = XGreenDataset(data_file=args.test_file, flat=True)
-        else:
-          train_data = XGreenDataset(data_file=args.training_file, precomputed=args.training_mosaic_file)
-          validation_data = XGreenDataset(data_file=args.validation_file, precomputed=args.validation_mosaic_file)
-          test_data = XGreenDataset(data_file=args.test_file, precomputed=args.test_mosaic_file)
-      else:
-        train_data = GreenProcessedQuadDataset(data_file=args.training_file) 
-        validation_data = GreenProcessedQuadDataset(data_file=args.validation_file)
-        test_data = GreenProcessedQuadDataset(data_file=args.test_file)
+    train_data = GreenQuadDataset(data_file=args.training_file) 
+    validation_data = GreenQuadDataset(data_file=args.validation_file)
+    test_data = GreenQuadDataset(data_file=args.test_file)
     
-  if args.train:
-    num_train = len(train_data)
-    train_indices = list(range(int(num_train*args.train_portion)))
+  num_train = len(train_data)
+  train_indices = list(range(int(num_train*args.train_portion)))
 
-    train_queue = FastDataLoader(
-        train_data, batch_size=args.batch_size,
-        sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
-        pin_memory=True, num_workers=8)
+  train_queue = FastDataLoader(
+      train_data, batch_size=args.batch_size,
+      sampler=torch.utils.data.sampler.SubsetRandomSampler(train_indices),
+      pin_memory=True, num_workers=8)
 
   num_validation = len(validation_data)
   validation_indices = list(range(num_validation))
@@ -104,32 +90,20 @@ def run(args, models, model_id, model_dir):
     sampler=torch.utils.data.sampler.SequentialSampler(test_indices),
     pin_memory=True, num_workers=8)
  
-  if args.train:
-    for epoch in range(args.epochs):
-      # training
-      train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, \
-        model_pytorch_files, validation_queue, validation_loggers, epoch)
-      print(f"finished epoch {epoch}")
-      # validation
-      valid_losses, val_psnrs = infer(args, validation_queue, models, criterion, validation_loggers)
-      test_losses, test_psnrs = infer(args, test_queue, models, criterion, test_loggers)
-
-      for i in range(len(models)):
-        validation_loggers[i].info('validation epoch %03d mse %e psnr %e', epoch, valid_losses[i], val_psnrs[i])
-        test_loggers[i].info('test epoch %03d mse %e psnr %e', epoch, test_losses[i], test_psnrs[i])
-
-    return valid_losses, train_losses
-  else:
+  for epoch in range(args.epochs):
+    # training
+    train_losses = train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, \
+      model_pytorch_files, validation_queue, validation_loggers, epoch)
+    print(f"finished epoch {epoch}")
+    # validation
     valid_losses, val_psnrs = infer(args, validation_queue, models, criterion, validation_loggers)
     test_losses, test_psnrs = infer(args, test_queue, models, criterion, test_loggers)
 
     for i in range(len(models)):
-      print(f"valid loss {valid_losses[i]}")
-      validation_loggers[i].info('validation mse %e psnr %e', valid_losses[i], val_psnrs[i])
-      test_loggers[i].info('test mse %e psnr %e', test_losses[i], test_psnrs[i])
+      validation_loggers[i].info('validation epoch %03d mse %e psnr %e', epoch, valid_losses[i], val_psnrs[i])
+      test_loggers[i].info('test epoch %03d mse %e psnr %e', epoch, test_losses[i], test_psnrs[i])
 
-    return valid_losses, test_losses 
-
+  return valid_losses, train_losses
 
 
 def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files, validation_queue, validation_loggers, epoch):
@@ -141,8 +115,10 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
 
   for step, (input, target) in enumerate(train_queue):
     if args.full_model:
-      if args.xtrans:
-        raise NotImplementedError
+      if args.nas:
+        bayer = input
+        bayer = bayer.cuda()
+        target = target.cuda()
       else:
         bayer, redblue_bayer, green_grgb = input 
         bayer = bayer.cuda()
@@ -158,10 +134,7 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
       print("target")
       print(target[0,:,6:12,6:12])
       print("mosaic")
-      if args.flat:
-        print(mosaic[0,:,6:12,6:12])
-      else:
-        print(mosaic[0,:,1,1])
+      print(mosaic[0,:,1,1])
 
     if args.crop > 0:
       target = target[..., args.crop:-args.crop, args.crop:-args.crop]
@@ -172,9 +145,13 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
       optimizers[i].zero_grad()
       model.reset()
       if args.full_model:
-        model_inputs = {"Input(Bayer)": bayer, 
+        if args.nas:
+          model_inputs = {"Input(Mosaic)": bayer}
+        else:     
+          model_inputs = {"Input(Bayer)": bayer, 
                         "Input(Green@GrGb)": green_grgb, 
                         "Input(RedBlueBayer)": redblue_bayer}
+
         pred = model.run(model_inputs)
       else:
         model_inputs = {"Input(Mosaic)": mosaic}
@@ -228,15 +205,20 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
   with torch.no_grad():
     for step, (input, target) in enumerate(valid_queue):
       if args.full_model:
-        bayer, redblue_bayer, green_grgb = input 
-        bayer = bayer.cuda()
-        redblue_bayer = redblue_bayer.cuda()
-        green_grgb = green_grgb.cuda()
+        if args.nas:
+          bayer = input
+          bayer = bayer.cuda()
+          target = target.cuda()
+        else:
+          bayer, redblue_bayer, green_grgb = input 
+          bayer = bayer.cuda()
+          redblue_bayer = redblue_bayer.cuda()
+          green_grgb = green_grgb.cuda()
       else:
         mosaic = input
         mosaic = mosaic.cuda()
         target = target.cuda()
-      
+    
       if args.crop > 0:
         target = target[..., args.crop:-args.crop, args.crop:-args.crop]
 
@@ -245,7 +227,10 @@ def infer(args, valid_queue, models, criterion, validation_loggers):
       for i, model in enumerate(models):
         model.reset()
         if args.full_model:
-          model_inputs = {"Input(Bayer)": bayer, 
+          if args.nas:
+            model_inputs = {"Input(Mosaic)": bayer}
+          else:     
+            model_inputs = {"Input(Bayer)": bayer, 
                           "Input(Green@GrGb)": green_grgb, 
                           "Input(RedBlueBayer)": redblue_bayer}
           pred = model.run(model_inputs)
@@ -295,14 +280,12 @@ if __name__ == "__main__":
   parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
 
   parser.add_argument('--green_demosaicnet', action='store_true')
-  parser.add_argument('--xgreen_demosaicnet', action='store_true')
-  parser.add_argument('--xflatgreen_demosaicnet', action='store_true')    
   parser.add_argument('--ahd', action='store_true')
   parser.add_argument('--ahd2d', action='store_true')
   parser.add_argument('--multiresquadgreen', action='store_true')
-  parser.add_argument('--xmultiresquadgreen', action='store_true')
   parser.add_argument('--gradienthalide', action='store_true')
   parser.add_argument('--bilinear', action='store_true')
+
   parser.add_argument('--chromagradienthalide', action='store_true')
   parser.add_argument('--chromaseed1', action='store_true')
   parser.add_argument('--chromaseed2', action='store_true')
@@ -326,10 +309,6 @@ if __name__ == "__main__":
 
   parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
   parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/subset7_100k_train_files.txt", help='filename of file with list of training data image files')
-  parser.add_argument('--training_mosaic_file', type=str, default="/home/karima/cnn-data/xtrans-flat-subset7-100k-train.txt", help="filename of file with list of training data mosaic files")
-  parser.add_argument('--validation_mosaic_file', type=str, default="/home/karima/cnn-data/xtrans-flat-subset7-100k-val.txt", help="filename of file with list of val data mosaic files")
-  parser.add_argument('--test_mosaic_file', type=str, default="/home/karima/cnn-data/xtrans-flat-subset7-100k-test.txt", help="filename of file with list of test data mosaic files")
-
   parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/val_files.txt", help='filename of file with list of validation data image files')
   parser.add_argument('--test_file', type=str, default="/home/karima/cnn-data/test_files.txt")
 
@@ -337,11 +316,9 @@ if __name__ == "__main__":
   parser.add_argument('--validation_freq', type=int, default=None, help='validation frequency')
 
   parser.add_argument('--full_model', action="store_true")
-  parser.add_argument('--xtrans', action='store_true')
-  parser.add_argument('--flat', action='store_true')
   parser.add_argument('--testing', action='store_true')
+  parser.add_argument('--nas', action='store_true')
 
-  parser.add_argument('--train', action='store_true')
   parser.add_argument('--pretrained', action='store_true')
   parser.add_argument('--weights', type=str, help="pretrained weights")
   parser.add_argument('--green_pretrained', action='store_true')
@@ -369,12 +346,6 @@ if __name__ == "__main__":
   if args.green_demosaicnet:
     logger.info("TRAINING DEMOSAICNET GREEN")
     model = model_lib.GreenDemosaicknet(args.depth, args.width)
-  elif args.xgreen_demosaicnet:
-    logger.info("TRAINING XTRANS DEMOSAICNET GREEN")
-    model = model_lib.XGreenDemosaicknet(args.depth, args.width)
-  elif args.xflatgreen_demosaicnet:
-    logger.info("TRAINING XTRANS FLAT DEMOSAICNET GREEN")
-    model = model_lib.XFlatGreenDemosaicknet(args.depth, args.width)
   elif args.ahd:
     logger.info(f"TRAINING AHD GREEN")
     model = model_lib.ahd1D_green_model()
@@ -384,15 +355,14 @@ if __name__ == "__main__":
   elif args.multiresquadgreen:
     logger.info("TRAINING MULTIRES QUAD GREEN")
     model = model_lib.MultiresQuadGreenModel(args.depth, args.width)
-  elif args.xmultiresquadgreen:
-    logger.info("TRAINING XTRANS MULTIRES QUAD GREEN")
-    model = model_lib.XtransMultiresQuadGreenModel(args.depth, args.width)
   elif args.gradienthalide:
     logger.info("TRAINING GRADIENT HALIDE GREEN")
     model = model_lib.GradientHalideModel(args.width, args.k)
   elif args.bilinear:
     logger.info("TRAINING GRADIENT HALIDE GREEN")
     model = model_lib.Bilinear(args.width, args.k)
+  elif args.nas:
+    model = model_lib.NASNet(args.depth, args.width)
   elif args.chromagradienthalide:
     logger.info("TRAINING CHROMA GRADIENT HALIDE")
     model = model_lib.RGBGradientHalideModel(args.width, args.k)
@@ -423,7 +393,7 @@ if __name__ == "__main__":
     model = model_lib.basic1D_green_model()
 
 
-  if args.full_model and not (args.chromagradienthalide or args.fullrgbdemosaicnet or args.fullrgbgradienthalide):
+  if args.full_model and not (args.chromagradienthalide or args.fullrgbdemosaicnet or args.fullrgbgradienthalide or args.nas):
     print(f'--- setting the no_grad parameter in green model {args.no_grad} ---')
 
     set_no_grad(green_model, args.no_grad)
@@ -458,9 +428,11 @@ if __name__ == "__main__":
   print(model.dump())
 
   ev = cost.ModelEvaluator(None)
-  model_cost = ev.compute_cost(model, xtrans=True)
+  model_cost = ev.compute_cost(model)
   print(f"model compute cost: {model_cost}")
-  
+  model_footprint = compute_footprint(model, 1)
+  print(f"model footprint: {model_footprint}")
+
   if not torch.cuda.is_available():
     sys.exit(1)
 

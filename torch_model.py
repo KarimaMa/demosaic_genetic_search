@@ -316,9 +316,9 @@ class StackOp(nn.Module):
     self._operands[1].to_gpu(gpu_id)
 
 
-class RGBSuperResExtractorOp(nn.Module):
+class SRGBExtractorOp(nn.Module):
   def __init__(self, green, chromapred):
-    super(RGBSuperResExtractorOp, self).__init__()
+    super(SRGBExtractorOp, self).__init__()
     self._operands = nn.ModuleList([green, chromapred])
     self.output = None
 
@@ -339,12 +339,13 @@ class RGBSuperResExtractorOp(nn.Module):
     return self.output 
 
   def forward(self, green, chromapred):
-    out_shape = green.shape
-    img = torch.empty(torch.Size(out_shape), device=green.device)
+    out_shape = list(chromapred.shape)
+    out_shape[1] = 3
+    img = torch.empty(torch.Size(out_shape), device=chromapred.device)
 
     # fill in reds
     img[:,0,:,:] = chromapred[:,0,:,:]
-    img[:,1,:,:] = green[:,:,:,:]
+    img[:,1,:,:] = green[:,0,:,:]
     img[:,2,:,:] = chromapred[:,1,:,:]
 
     return img 
@@ -640,8 +641,8 @@ class RGB8ChanExtractorOp(nn.Module):
     return self.output
 
   """
-  Takes bayer quad and 2 channel green prediction
-  Spits out full green channel 
+  Takes bayer quad and 8 channel prediction
+  Spits out full rgb  
   """
   def forward(self, bayer_quad, rgb_pred):
     # input: bayer an rgb missing values
@@ -672,6 +673,56 @@ class RGB8ChanExtractorOp(nn.Module):
     output[:,0,1::2,1::2] =  flat_pred[:,0,1::2,1::2] # R at Gb
     output[:,1,1::2,1::2] = flat_bayer[:,0,1::2,1::2] 
     output[:,2,1::2,1::2] =  flat_pred[:,1,1::2,1::2] # B at Gb
+
+    return output
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
+    self._operands[1].to_gpu(gpu_id)
+
+
+class FlatRGB8ChanExtractorOp(nn.Module):
+  def __init__(self, operand1, operand2):
+    super(FlatRGB8ChanExtractorOp, self).__init__()
+    self._operands = nn.ModuleList([operand1, operand2])
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+    self._operands[1]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self._operands[1].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand1 = self._operands[0].run(model_inputs)
+      operand2 = self._operands[1].run(model_inputs)
+      self.output = self.forward(operand1, operand2)
+    return self.output
+
+  """
+  Takes 3chan bayer and 8 channel prediction
+  Spits out full rgb  
+  """
+  def forward(self, bayer3chan, rgb_pred):
+    # input: bayer an rgb missing values
+    # output: full image
+    out_shape = list(bayer3chan.shape)
+    output = torch.empty(torch.Size(out_shape), device=bayer3chan.device)
+    
+    output[:,:,:,:] = bayer3chan[:,:,:,:]
+
+    output[:,0,:,:] = rgb_pred[:,0,:,:]
+    output[:,1,:,:] = rgb_pred[:,1,:,:]
+    output[:,2,:,:] = rgb_pred[:,2,:,:]
+
+    output[:,0,0::2,1::2] = bayer3chan[:,0,0::2,1::2]
+    output[:,1,0::2,0::2] = bayer3chan[:,1,0::2,0::2]
+    output[:,1,1::2,1::2] = bayer3chan[:,1,1::2,1::2]
+    output[:,2,1::2,0::2] = bayer3chan[:,2,1::2,0::2]
 
     return output
 
@@ -718,6 +769,32 @@ class GreenExtractorOp(nn.Module):
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
+
+
+class SGreenExtractorOp(nn.Module):
+  def __init__(self, operand):
+    super(SGreenExtractorOp, self).__init__()
+    self._operands = nn.ModuleList([operand])
+    self.output = None
+
+  def _initialize_parameters(self):
+    self._operands[0]._initialize_parameters()
+
+  def reset(self):
+    self._operands[0].reset()
+    self.output = None
+
+  def run(self, model_inputs):
+    if self.output is None:
+      operand = self._operands[0].run(model_inputs)
+      self.output = self.forward(operand)
+    return self.output
+
+  def forward(self, green_pred):
+    return green_pred
+
+  def to_gpu(self, gpu_id):
+    self._operands[0].to_gpu(gpu_id)
 
 
 class XGreenExtractorOp(nn.Module):
@@ -1113,7 +1190,6 @@ class LearnedDownsampleOp(nn.Module):
     self._operands = nn.ModuleList([operand])
     self.scale_factor = scale_factor
     self.downsample_w = scale_factor * 2 + (scale_factor % 2) # use odd kernel width for odd sampling factors 
-
     downsampler = nn.Conv2d(C_in, C_out, self.downsample_w, stride=scale_factor, groups=groups, padding=math.ceil((self.downsample_w-self.scale_factor)/2), bias=False)
     self.param_name = param_name
     setattr(self, param_name, downsampler)
@@ -1136,7 +1212,11 @@ class LearnedDownsampleOp(nn.Module):
 
   def forward(self, x):
     downsampler = getattr(self, self.param_name)
-    return downsampler(x)
+    out = downsampler(x)
+    if out.shape[2] != x.shape[2] / self.scale_factor:
+      print(f'down input size {x.shape}')
+      print(f'output shape {out.shape}')
+    return out
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1369,9 +1449,9 @@ class UnpackOp(nn.Module):
     self._operands[0].to_gpu(gpu_id)
 
 
-class UpsampleOp(nn.Module):
+class BilinearUpsampleOp(nn.Module):
   def __init__(self, operand, C_in, scale_factor, param_name):
-    super(UpsampleOp, self).__init__()
+    super(BilinearUpsampleOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.in_c = C_in
     self.scale_factor = scale_factor
@@ -1395,7 +1475,11 @@ class UpsampleOp(nn.Module):
 
   def forward(self, x):
     upsampler = getattr(self, self.param_name)
-    return upsampler(x)
+    out = upsampler(x)
+    if out.shape[2] != x.shape[2] * self.scale_factor:
+      print(f'up input shape {x.shape}')
+      print(f'out shape {out.shape}')
+    return out
     
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1691,7 +1775,7 @@ def ast_to_model(self, shared_children=None):
       node_model = self.node.ast_to_model(shared_children)
       shared_children[id(self.node)] = node_model
 
-    kwargs = {"resolution":self.resolution, "model":node_model, "model_name":self.name, "no_grad":self.no_grad}
+    kwargs = {"model":node_model, "model_name":self.name, "no_grad":self.no_grad}
 
     if hasattr(self, "weight_file"):
       kwargs["weights"] = self.weight_file
@@ -1839,20 +1923,20 @@ def ast_to_model(self, shared_children=None):
   return model
 
 
-@extclass(RGBSuperResExtractor)
+@extclass(SRGBExtractor)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
   if id(self) in shared_children:
     return shared_children[id(self)]
 
-  child1_model = self.child1.ast_to_model(shared_children)
-  child2_model = self.child2.ast_to_model(shared_children)
-  model = RGBSuperResExtractorOp(child1_model, child2_model)
+  child1_model = self.lchild.ast_to_model(shared_children)
+  child2_model = self.rchild.ast_to_model(shared_children)
+  model = SRGBExtractorOp(child1_model, child2_model)
 
   self.model = model
   shared_children[id(self)] = model 
-  return mode
+  return model
 
 @extclass(RGB8ChanExtractor)
 def ast_to_model(self, shared_children=None):
@@ -1869,6 +1953,20 @@ def ast_to_model(self, shared_children=None):
   shared_children[id(self)] = model 
   return model
 
+@extclass(FlatRGB8ChanExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  lmodel = self.lchild.ast_to_model(shared_children)
+  rmodel = self.rchild.ast_to_model(shared_children)
+  model = FlatRGB8ChanExtractorOp(lmodel, rmodel)
+  
+  shared_children[id(self)] = model 
+  return model
+
 @extclass(GreenExtractor)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
@@ -1880,6 +1978,19 @@ def ast_to_model(self, shared_children=None):
   rmodel = self.rchild.ast_to_model(shared_children)
   model = GreenExtractorOp(lmodel, rmodel)
   self.model = model
+  
+  shared_children[id(self)] = model 
+  return model
+
+@extclass(SGreenExtractor)
+def ast_to_model(self, shared_children=None):
+  if shared_children is None:
+    shared_children = {}
+  if id(self) in shared_children:
+    return shared_children[id(self)]
+
+  child = self.child.ast_to_model(shared_children)
+  model = SGreenExtractorOp(child)
   
   shared_children[id(self)] = model 
   return model
@@ -2020,25 +2131,24 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = LearnedDownsampleOp(child_model, self.in_c, self.out_c, self.factor, self.groups, self.name)
+  model = LearnedDownsampleOp(child_model, self.in_c, self.out_c, int(self.factor), self.groups, self.name)
   self.model = model
-    
+  
   shared_children[id(self)] = model 
   return model
 
-@extclass(PeriodicConv)
-def ast_to_model(self, shared_children=None):
-  if shared_children is None:
-    shared_children = {}
-  if id(self) in shared_children:
-    return shared_children[id(self)]
+# @extclass(PeriodicConv)
+# def ast_to_model(self, shared_children=None):
+#   if shared_children is None:
+#     shared_children = {}
+#   if id(self) in shared_children:
+#     return shared_children[id(self)]
 
-  child_model = self.child.ast_to_model(shared_children)
-  model = PeriodicConvV2Op(child_model, self.in_c, self.out_c, self.period, self.kwidth, self.name)
-  self.model = model
+#   child_model = self.child.ast_to_model(shared_children)
+#   model = PeriodicConvV2Op(child_model, self.in_c, self.out_c, self.period, self.kwidth, self.name)
 
-  shared_children[id(self)] = model 
-  return model
+#   shared_children[id(self)] = model 
+#   return model
 
 @extclass(Pack)
 def ast_to_model(self, shared_children=None):
@@ -2048,25 +2158,24 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = PackOp(child_model, self.factor)
+  model = PackOp(child_model, int(self.factor))
   self.model = model
-    
+  
   shared_children[id(self)] = model 
   return model
 
-@extclass(LearnedPack)
-def ast_to_model(self, shared_children=None):
-  if shared_children is None:
-    shared_children = {}
-  if id(self) in shared_children:
-    return shared_children[id(self)]
+# @extclass(LearnedPack)
+# def ast_to_model(self, shared_children=None):
+#   if shared_children is None:
+#     shared_children = {}
+#   if id(self) in shared_children:
+#     return shared_children[id(self)]
 
-  child_model = self.child.ast_to_model(shared_children)
-  model = LearnedPackOp(child_model, self.in_c, self.out_c, self.factor, self.name)
-  self.model = model
-    
-  shared_children[id(self)] = model 
-  return model
+#   child_model = self.child.ast_to_model(shared_children)
+#   model = LearnedPackOp(child_model, self.in_c, self.out_c, self.factor, self.name)
+
+#   shared_children[id(self)] = model 
+#   return model
 
 
 @extclass(Unpack)
@@ -2077,13 +2186,13 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = UnpackOp(child_model, self.in_c, self.factor)
+  model = UnpackOp(child_model, self.in_c, int(self.factor))
   self.model = model
-    
+  
   shared_children[id(self)] = model 
   return model
 
-@extclass(Upsample)
+@extclass(BilinearUpsample)
 def ast_to_model(self, shared_children=None):
   if shared_children is None:
     shared_children = {}
@@ -2091,9 +2200,9 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = UpsampleOp(child_model, self.in_c, self.factor, self.name)
+  model = BilinearUpsampleOp(child_model, self.in_c, int(self.factor), self.name)
   self.model = model
-    
+  
   shared_children[id(self)] = model 
   return model
 
@@ -2105,9 +2214,9 @@ def ast_to_model(self, shared_children=None):
     return shared_children[id(self)]
 
   child_model = self.child.ast_to_model(shared_children)
-  model = LearnedUpsampleOp(child_model, self.in_c, self.out_c, self.factor, self.groups, self.name)
+  model = LearnedUpsampleOp(child_model, self.in_c, self.out_c, int(self.factor), self.groups, self.name)
   self.model = model
-    
+  
   shared_children[id(self)] = model 
   return model
 

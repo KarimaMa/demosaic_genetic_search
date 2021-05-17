@@ -275,10 +275,10 @@ class XFlatRGBExtractor(TernaryHcIcJcKc, Special, Node):
     return 3 # full rgb image
 
 
-class RGBSuperResExtractor(BinopIcJcKc, Special, Node):
+class SRGBExtractor(BinopIcJcKc, Special, Node):
   def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
-      name = "RGBSuperResExtractor"
+      name = "SRGBExtractor"
     Node.__init__(self, name, 2)
     self.lchild = lchild
     self.rchild = rchild
@@ -292,7 +292,6 @@ class RGBSuperResExtractor(BinopIcJcKc, Special, Node):
     return 2 # missing chroma
   def Kc(self): 
     return 3 # full rgb image
-
 
 
 
@@ -317,6 +316,28 @@ class RGB8ChanExtractor(BinopIcJcKc, Special, Node):
     return 3 # full rgb image
 
 
+# Takes flat 3 channel mosaic 8 channel predction
+# spits out full RGB Image at full resolution
+class FlatRGB8ChanExtractor(BinopIcJcKc, Special, Node):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
+    if name is None:
+      name = "FlatRGB8ChanExtractor"
+    Node.__init__(self, name, 2)
+    self.lchild = lchild
+    self.rchild = rchild
+    self.in_c = (3, 8) # bayer, 8 channel prediction
+    self.out_c = 3
+    self.resolution = resolution
+
+  def Ic(self):
+    return 3
+  def Jc(self):
+    return 8 
+  def Kc(self): 
+    return 3 # full rgb image
+
+
+
 """
 Takes BayerQuad and 2 channel green prediction 
 Spits out full Green image at full resolution  
@@ -339,6 +360,24 @@ class GreenExtractor(BinopIcJcKc, Special, Node):
   def Kc(self):
     return 1
 
+
+"""
+Dummy border op wrapper for superres task 
+"""
+class SGreenExtractor(UnopIcJc, Special, Node):
+  def __init__(self, child, resolution=None, name=None):
+    if name is None:
+      name = "SGreenExtractor"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.in_c = 1
+    self.out_c = 1 # output G channel
+    self.resolution = resolution
+  
+  def Ic(self):
+    return 1
+  def Jc(self):
+    return 1
 
 """
 Xtrans extractor for green channel 
@@ -412,6 +451,10 @@ class GreenRBExtractor(UnopIcJc, Special, Node):
   def Jc(self):
     return 2
 
+"""
+Takes flat green prediction returns 6x6 packed 
+green values at xtrans R and B locations
+"""
 class XGreenRBExtractor(UnopIcJc, Special, Node):
   def __init__(self, child, resolution=None, name=None):
     if name is None:
@@ -481,17 +524,17 @@ class LearnedDownsample(UnopIJ, Downsample):
     self.resolution = resolution
 
 
-class PeriodicConv(UnopIJFixed, Special, Node):
-  def __init__(self, child, out_c:int, period=None, kwidth=3, resolution=None, name=None):
-    if name is None:
-      name = "PeriodicConv"
-    Node.__init__(self, name, 1)
-    self.child = child
-    self.period = period
-    self.kwidth = kwidth
-    self.out_c = out_c
-    self.in_c = None  
-    self.resolution = resolution
+# class PeriodicConv(UnopIJFixed, Special, Node):
+#   def __init__(self, child, out_c:int, period=None, kwidth=3, resolution=None, name=None):
+#     if name is None:
+#       name = "PeriodicConv"
+#     Node.__init__(self, name, 1)
+#     self.child = child
+#     self.period = period
+#     self.kwidth = kwidth
+#     self.out_c = out_c
+#     self.in_c = None  
+#     self.resolution = resolution
 
 
 class Pack(UnopIJFixed, Downsample):
@@ -505,16 +548,16 @@ class Pack(UnopIJFixed, Downsample):
     self.in_c = None
     self.resolution = resolution
 
-class LearnedPack(UnopIJFixed, Special, Node):
-  def __init__(self, child, factor=None, resolution=None, name=None):
-    if name is None:
-      name = "LearnedPack"
-    Node.__init__(self, name, 1)
-    self.child = child
-    self.factor = factor
-    self.out_c = None
-    self.in_c = None
-    self.resolution = resolution
+# class LearnedPack(UnopIJFixed, Special, Node):
+#   def __init__(self, child, factor=None, resolution=None, name=None):
+#     if name is None:
+#       name = "LearnedPack"
+#     Node.__init__(self, name, 1)
+#     self.child = child
+#     self.factor = factor
+#     self.out_c = None
+#     self.in_c = None
+#     self.resolution = resolution
 
 class Unpack(UnopIJFixed, Upsample):
   def __init__(self, child, factor=None, resolution=None, name=None):
@@ -698,7 +741,7 @@ def compute_input_output_channels(self):
   self.child3.compute_input_output_channels()
   return self.in_c, self.out_c
 
-@extclass(RGBSuperResExtractor)
+@extclass(SRGBExtractor)
 def compute_input_output_channels(self):
   self.lchild.compute_input_output_channels()
   self.rchild.compute_input_output_channels()
@@ -710,10 +753,21 @@ def compute_input_output_channels(self):
   self.rchild.compute_input_output_channels()
   return self.in_c, self.out_c
 
+@extclass(FlatRGB8ChanExtractor)
+def compute_input_output_channels(self):
+  self.lchild.compute_input_output_channels()
+  self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
 @extclass(GreenExtractor)
 def compute_input_output_channels(self):
   self.lchild.compute_input_output_channels()
   self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(SGreenExtractor)
+def compute_input_output_channels(self):
+  self.child.compute_input_output_channels()
   return self.in_c, self.out_c
 
 @extclass(XGreenExtractor)
@@ -777,34 +831,34 @@ def compute_input_output_channels(self):
   self.in_c = child_out_c
   return self.in_c, self.out_c
 
-@extclass(PeriodicConv)
-def compute_input_output_channels(self):
-  _, child_out_c = self.child.compute_input_output_channels()
-  self.in_c = child_out_c
-  return self.in_c, self.out_c
+# @extclass(PeriodicConv)
+# def compute_input_output_channels(self):
+#   _, child_out_c = self.child.compute_input_output_channels()
+#   self.in_c = child_out_c
+#   return self.in_c, self.out_c
 
 @extclass(Pack)
 def compute_input_output_channels(self):
   _, lout_c = self.child.compute_input_output_channels()
   self.in_c = lout_c
-  self.out_c = lout_c * self.factor**2
+  self.out_c = int(lout_c * self.factor**2)
   return self.in_c, self.out_c
 
-@extclass(LearnedPack)
-def compute_input_output_channels(self):
-  child_in_c, child_out_c = self.child.compute_input_output_channels()
-  self.in_c = child_out_c
-  self.out_c = self.in_c * self.factor**2
-  return self.in_c, self.out_c
+# @extclass(LearnedPack)
+# def compute_input_output_channels(self):
+#   child_in_c, child_out_c = self.child.compute_input_output_channels()
+#   self.in_c = child_out_c
+#   self.out_c = self.in_c * self.factor**2
+#   return self.in_c, self.out_c
 
 @extclass(Unpack)
 def compute_input_output_channels(self):
   _, lout_c = self.child.compute_input_output_channels()
   self.in_c = lout_c
-  self.out_c = lout_c // self.factor**2
+  self.out_c = int(lout_c // self.factor**2)
   return self.in_c, self.out_c
 
-@extclass(Upsample)
+@extclass(BilinearUpsample)
 def compute_input_output_channels(self):
   _, lout_c = self.child.compute_input_output_channels()
   self.in_c = lout_c
@@ -944,7 +998,7 @@ def structure_to_array(self):
       node_info['factor'] = n.factor
 
     if hasattr(n, 'resolution'):
-      node_info['resolution'] = n.factor
+      node_info['resolution'] = n.resolution
 
     if hasattr(n, 'node'):
       if hasattr(n, 'green_model_id'):
@@ -1002,6 +1056,8 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None, shared_i
       extra_kwargs["factor"] = node_info["factor"]
     if "out_c" in node_info and "out_c" in signature(node_class).parameters: #(issubclass(node_class, UnopIJ) or issubclass(node_class, UnopIIdiv)):
       extra_kwargs["out_c"] = node_info["out_c"]
+    if "resolution" in node_info:
+      extra_kwargs["resolution"] = node_info["resolution"]
 
     if len(extra_kwargs) > 0:
       new_node = node_class(*child_nodes, name=node_name, **extra_kwargs)
@@ -1025,8 +1081,8 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None, shared_i
         extra_kwargs["node"] = input_ast
       if "no_grad" in node_info:
         extra_kwargs["no_grad"] = node_info["no_grad"]
-      if "resolution" in node_info:
-        extra_kwargs["resolution"] = node_info["resolution"]
+    if "resolution" in node_info:
+      extra_kwargs["resolution"] = node_info["resolution"]
 
     if len(extra_kwargs) > 0:
       new_node = node_class(node_info["in_c"], name=node_name, **extra_kwargs)
@@ -1110,9 +1166,7 @@ def structural_hash(tree):
     if isinstance(n, Binop):
       h += 1 << i
 
-  op_list = [Conv1x1, Conv1D, Conv2D, Softmax, Relu, Mul, Add, Sub, \
-            AddExp, LogSub, Stack, Upsample, LearnedDownsample, InterleavedSum, \
-            GroupedSum, RGBExtractor, RGB8ChanExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input]
+  op_list = list(all_ops)
 
   ops_used = OrderedSet([type(n) for n in nodes])
   op_coverage = 0
@@ -1397,13 +1451,9 @@ ops_with_changeable_channels = OrderedSet((LearnedDownsample, LearnedUpsample)) 
 special_linear_ops = OrderedSet((LearnedUpsample, LearnedDownsample))
 nonlinear_ops = OrderedSet((Softmax, Relu)) 
 
-sandwich_ops = OrderedSet((LearnedDownsample, Upsample, Pack, Unpack, LearnedUpsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
+border_ops = OrderedSet((RGBExtractor, XRGBExtractor, XFlatRGBExtractor, RGB8ChanExtractor, FlatRGB8ChanExtractor, \
+                        GreenExtractor, XGreenExtractor, XFlatGreenExtractor, GreenRBExtractor, XGreenRBExtractor, SGreenExtractor, SRGBExtractor, Flat2Quad, Input))
 
-sandwich_pairs = {
-  LearnedDownsample: Upsample
-}
+nas_ops = OrderedSet((Conv1x1, Conv2D, Relu, Softmax, Add, Stack))
 
-border_ops = OrderedSet((RGBExtractor, XRGBExtractor, XFlatRGBExtractor, RGB8ChanExtractor, GreenExtractor, XGreenExtractor, XFlatGreenExtractor, GreenRBExtractor, XGreenRBExtractor, Flat2Quad, Input))
-
-demosaicnet_ops = OrderedSet((Conv1x1, Conv2D, Relu))
-
+all_ops = all_insert_ops | downsample_ops | upsample_ops | nonlinear_ops | border_ops
