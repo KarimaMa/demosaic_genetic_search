@@ -4,9 +4,13 @@ import torch.nn.functional as F
 import os
 import numpy as np
 from torch.utils import data
-import random
 from imageio import imread
 from config import IMG_H, IMG_W
+from util import ids_from_file
+from mosaic_gen import bayer, xtrans, xtrans_invariant, xtrans_cell
+from skimage import color
+
+# from multiprocessing import shared_memory
 
 
 class _RepeatSampler(object):
@@ -34,54 +38,6 @@ class FastDataLoader(torch.utils.data.dataloader.DataLoader):
   def __iter__(self):
     for i in range(len(self)):
       yield next(self.iterator)
-
-
-"""
-from mgharbi demosaicnet code
-"""
-def bayer(im, return_mask=False):
-  """Bayer mosaic.
-  The patterned assumed is::
-  G r
-  b G
-
-  Args:
-  im (np.array): image to mosaic. Dimensions are [c, h, w]
-  return_mask (bool): if true return the binary mosaic mask, instead of the mosaic image.
-
-  Returns:
-  np.array: mosaicked image (if return_mask==False), or binary mask if (return_mask==True)
-  """
-
-  mask = np.ones_like(im)
-
-  if return_mask:
-    return mask
-
-  # red
-  mask[0, ::2, 0::2] = 0
-  mask[0, 1::2, :] = 0
-
-  # green
-  mask[1, ::2, 1::2] = 0
-  mask[1, 1::2, ::2] = 0
-
-  # blue
-  mask[2, 0::2, :] = 0
-  mask[2, 1::2, 1::2] = 0
-
-  return im*mask
-
-
-def ids_from_file(filename):
-  # Assume the list file has relative paths
-  root = os.path.dirname(os.path.abspath(filename))
-  ids = [os.path.join(root, l.strip()) for l in open(filename, "r")]
-  random.shuffle(ids)
-  if not os.path.exists(ids[0]):
-      raise RuntimeError(f"Dataset filelist is invalid, coult not find {ids[0]}")
-  return ids
-
 
 
 class GreenSharedDataset(data.Dataset):
@@ -155,6 +111,7 @@ class GreenDataset(data.Dataset):
       for kcore_id in kcore_ids:
         f.write(self.list_IDs[kcore_id] + "\n")
     
+
 
 class Dataset(data.Dataset):
   def __init__(self, data_file=None, data_filenames=None,\
@@ -239,329 +196,76 @@ class GradHalideDataset(data.Dataset):
     return (input, target) 
 
 
-class RedDataset(data.Dataset):
-  def __init__(self, data_file=None, data_filenames=None,\
-              return_index=False, \
-              green_file=None, green_filenames=None, \
-              green_input=False, green_pred_input=False,\
-              redgb=False, redgr=False, redb=False, all_red=False):
-    if data_file:
-      self.list_IDs = ids_from_file(data_file) # patch filenames
-    else:
-      self.list_IDs = data_filenames
-
-    self.green_pred_input = green_pred_input
-
-    if self.green_pred_input:
-      assert(not (green_file is None and green_filenames is None)), "missing precomputed green data"
-      if green_file:
-        self.green_list_IDs = ids_from_file(green_file)
-      else:
-        self.green_list_IDs = green_filenames
-
-    self.return_index = return_index
-    self.green_input = green_input
-    self.redgb = redgb
-    self.redgr = redgr
-    self.redb = redb
-    self.all_red = all_red
-
-    self.mask = np.zeros((1,128 ,128))
-
-    if self.redgr:
-      self.mask[0,0::2,0::2] = 1
-    elif self.redgb:
-      self.mask[0,1::2,1::2] = 1
-    elif self.redb:
-      self.mask[0,1::2,0::2] = 1
-
-  def __len__(self):
-    return len(self.list_IDs)
-
-  def __getitem__(self, index):
-    image_f = self.list_IDs[index]
-    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-    img = np.transpose(img, [2, 0, 1])
-
-    mosaic = bayer(img)
-    mosaic = np.sum(mosaic, axis=0, keepdims=True)
-
-    if self.green_input:
-      if self.green_pred_input:
-        green_f = self.green_list_IDs[index]
-        green = np.load(green_f)
-      else:
-        green = np.expand_dims(img[1,...], axis=0)
-
-      quad_size = list(img.shape)
-      quad_size[0] = 6
-      quad_size[1] //= 2
-      quad_size[2] //= 2
-
-      quad = np.zeros(quad_size)
-      quad[0,:,:] = mosaic[0,0::2,0::2]
-      quad[1,:,:] = mosaic[0,0::2,1::2]
-      quad[2,:,:] = mosaic[0,1::2,0::2]
-      quad[3,:,:] = mosaic[0,1::2,1::2]
-      quad[4,:,:] =  green[0,0::2,1::2]
-      quad[5,:,:] =  green[0,1::2,0::2]
-
-    else:
-      quad_size = list(img.shape)
-      quad_size[0] = 4
-      quad_size[1] //= 2
-      quad_size[2] //= 2
-
-      quad = np.zeros(quad_size)
-      quad[0,:,:] = mosaic[0,0::2,0::2]
-      quad[1,:,:] = mosaic[0,0::2,1::2]
-      quad[2,:,:] = mosaic[0,1::2,0::2]
-      quad[3,:,:] = mosaic[0,1::2,1::2]
-    
-    input = green, mosaic, img
-
-    if self.all_red:
-      target = np.expand_dims(img[0,...], axis=0)
-    else:
-      target = np.expand_dims(img[0,...], axis=0) * self.mask # red
-
-    if self.return_index:
-      return (index, input, target)
-  
-    return (input, target) 
- 
-
-class RedQuadDataset(data.Dataset):
-  def __init__(self, data_file=None, data_filenames=None,\
-              return_index=False, \
-              green_file=None, green_filenames=None, \
-              green_input=False, green_pred_input=False):
-    if data_file:
-      self.list_IDs = ids_from_file(data_file) # patch filenames
-    else:
-      self.list_IDs = data_filenames
-
-    self.green_pred_input = green_pred_input
-
-    if self.green_pred_input:
-      assert(not (green_file is None and green_filenames is None)), "missing precomputed green data"
-      if green_file:
-        self.green_list_IDs = ids_from_file(green_file)
-      else:
-        self.green_list_IDs = green_filenames
-
-    self.return_index = return_index
-    self.green_input = green_input
-
-  def __len__(self):
-    return len(self.list_IDs)
-
-  def __getitem__(self, index):
-    image_f = self.list_IDs[index]
-    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-    img = np.transpose(img, [2, 0, 1])
-
-    mosaic = bayer(img)
-    mosaic = np.sum(mosaic, axis=0, keepdims=True)
-
-    quad_size = list(img.shape)
-    quad_size[0] = 4
-    quad_size[1] //= 2
-    quad_size[2] //= 2
-
-    if self.green_input:
-      if self.green_pred_input:
-        green_f = self.green_list_IDs[index]
-        green = np.load(green_f)
-      else:
-        green = np.expand_dims(img[1,...], axis=0)
-
-      green_quad = np.zeros(quad_size)
-      green_quad[0,:,:] = green[0,0::2,0::2]
-      green_quad[1,:,:] = green[0,0::2,1::2]
-      green_quad[2,:,:] = green[0,1::2,0::2]
-      green_quad[3,:,:] = green[0,1::2,1::2]
-
-    bayer_quad = np.zeros(quad_size)
-    bayer_quad[0,:,:] = mosaic[0,0::2,0::2]
-    bayer_quad[1,:,:] = mosaic[0,0::2,1::2]
-    bayer_quad[2,:,:] = mosaic[0,1::2,0::2]
-    bayer_quad[3,:,:] = mosaic[0,1::2,1::2]
-
-    if self.green_input:
-      input = green_quad, bayer_quad, img
-    else:
-      input = bayer_quad, img
-
-    target = np.expand_dims(img[0,...], axis=0) # red
-
-    if self.return_index:
-      return (index, input, target)
-  
-    return (input, target) 
- 
-
-class BlueDataset(data.Dataset):
-  def __init__(self, data_file=None, data_filenames=None,\
-              return_index=False, \
-              green_file=None, green_filenames=None, \
-              green_input=False, green_pred_input=False,\
-              bluegb=False, bluegr=False, bluer=False, all_blue=False):
-    if data_file:
-      self.list_IDs = ids_from_file(data_file) # patch filenames
-    else:
-      self.list_IDs = data_filenames
-
-    self.green_pred_input = green_pred_input
-
-    if self.green_pred_input:
-      assert(not (green_file is None and green_filenames is None)), "missing precomputed green data"
-      if green_file:
-        self.green_list_IDs = ids_from_file(green_file)
-      else:
-        self.green_list_IDs = green_filenames
-
-    self.return_index = return_index
-    self.green_input = green_input
-    self.bluegb = bluegb
-    self.bluegr = bluegr
-    self.bluer = bluer
-    self.all_blue = all_blue
-
-    self.mask = np.zeros((1,128 ,128))
-
-    if self.bluegr:
-      self.mask[0,0::2,0::2] = 1
-    elif self.bluegb:
-      self.mask[0,1::2,1::2] = 1
-    elif self.bluer:
-      self.mask[0,0::2,1::2] = 1
-
-  def __len__(self):
-    return len(self.list_IDs)
-
-  def __getitem__(self, index):
-    image_f = self.list_IDs[index]
-    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-    img = np.transpose(img, [2, 0, 1])
-
-    mosaic = bayer(img)
-    mosaic = np.sum(mosaic, axis=0, keepdims=True)
-
-    if self.green_input:
-      if self.green_pred_input:
-        green_f = self.green_list_IDs[index]
-        green = np.load(green_f)
-      else:
-        green = np.expand_dims(img[1,...], axis=0)
-
-    input = green, mosaic, img
-
-    if self.all_blue:
-      target = np.expand_dims(img[2,...], axis=0)
-    else:
-      target = np.expand_dims(img[2,...], axis=0) * self.mask # blue
-
-    if self.return_index:
-      return (index, input, target)
-  
-    return (input, target) 
- 
-
-class RedBlueQuadDataset(data.Dataset):
-  def __init__(self, data_file=None, data_filenames=None,\
-              return_index=False, \
-              green_file=None, green_filenames=None, \
-              green_input=False, green_pred_input=False):
-    if data_file:
-      self.list_IDs = ids_from_file(data_file) # patch filenames
-    else:
-      self.list_IDs = data_filenames
-
-    self.green_pred_input = green_pred_input
-
-    if self.green_pred_input:
-      assert(not (green_file is None and green_filenames is None)), "missing precomputed green data"
-      if green_file:
-        self.green_list_IDs = ids_from_file(green_file)
-      else:
-        self.green_list_IDs = green_filenames
-
-    self.return_index = return_index
-    self.green_input = green_input
-
-  def __len__(self):
-    return len(self.list_IDs)
-
-  def __getitem__(self, index):
-    image_f = self.list_IDs[index]
-    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-    img = np.transpose(img, [2, 0, 1])
-
-    mosaic = bayer(img)
-    mosaic = np.sum(mosaic, axis=0, keepdims=True)
-
-    quad_size = list(img.shape)
-    quad_size[0] = 4
-    quad_size[1] //= 2
-    quad_size[2] //= 2
-
-    if self.green_input:
-      if self.green_pred_input:
-        green_f = self.green_list_IDs[index]
-        green = np.load(green_f)
-      else:
-        green = np.expand_dims(img[1,...], axis=0)
-
-      green_quad = np.zeros(quad_size)
-      green_quad[0,:,:] = green[0,0::2,0::2]
-      green_quad[1,:,:] = green[0,0::2,1::2]
-      green_quad[2,:,:] = green[0,1::2,0::2]
-      green_quad[3,:,:] = green[0,1::2,1::2]
-
-    bayer_quad = np.zeros(quad_size)
-    bayer_quad[0,:,:] = mosaic[0,0::2,0::2]
-    bayer_quad[1,:,:] = mosaic[0,0::2,1::2]
-    bayer_quad[2,:,:] = mosaic[0,1::2,0::2]
-    bayer_quad[3,:,:] = mosaic[0,1::2,1::2]
-
-    if self.green_input:
-      input = green_quad, bayer_quad, img
-    else:
-      input = bayer_quad, img
-
-    red_target = np.expand_dims(img[0,...], axis=0) # red
-    blue_target = np.expand_dims(img[2,...], axis=0) # blue
-
-    target = np.concatenate([red_target, blue_target], axis=0)
-
-    if self.return_index:
-      return (index, input, target)
-  
-    return (input, target) 
-
 
 """
 provides bayer quad, red and blue from bayer, gr and gb from bayer
 as inputs and the full RGB image as the target
 """
 class FullPredictionQuadDataset(data.Dataset):
-  def __init__(self, data_file=None, data_filenames=None, return_index=False):
+  def __init__(self, data_file=None, data_filenames=None, RAM=False, lazyRAM=False, \
+              shared_data=None, return_index=False, logger=None):
+    assert not (RAM and not (shared_data is None)), "RAM and shared data are mutually exclusive"
+
+    if RAM:
+      assert (shared_data is None), "RAM and shared data are mutually exclusive"
+      if not logger is None:
+        logger.info(f"USING RAM")
+    if not (shared_data is None):
+      assert not RAM, "RAM and shared data are mutually exclusive"
+      if not logger is None:
+        logger.info("USING SHARED MEMORY")
+
+    self.RAM = RAM
+    self.lazyRAM = lazyRAM
+    self.return_index = return_index
+    self.shared_data = shared_data
+
     if data_file:
       self.list_IDs = ids_from_file(data_file) # patch filenames
     else:
       self.list_IDs = data_filenames
-    self.return_index = return_index
+    
+    if self.RAM:
+      self.data_array = [None for i in range(len(self.list_IDs))]
+
+      for i, image_f in enumerate(self.list_IDs):
+        if not logger is None:
+          if i % 2000 == 0:
+            logger.info(f"loaded {i} images")
+        img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+        img = np.transpose(img, [2, 0, 1])
+        self.data_array[i] = img
+
+    if self.lazyRAM:
+      self.data_array = [None for i in range(len(self.list_IDs))]
+    # elif self.shared_data:
+    #   self.existing_shm = shared_memory.SharedMemory(name=self.shared_data)
+      #self.data_array = np.ndarray((len(self.list_IDs), 3, 128, 128), dtype=np.float32, buffer=existing_shm.buf)
 
   def __len__(self):
     return len(self.list_IDs)
 
   def __getitem__(self, index):
     image_f = self.list_IDs[index]
-    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-   
-    img = np.transpose(img, [2, 0, 1])
-
+    if self.RAM:
+      # bayer_quad, redblue_bayer, green_grgb, target = self.data_array[index]
+      img = self.data_array[index]
+    elif self.lazyRAM:
+      if self.data_array[index] is None:
+        img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+        img = np.transpose(img, [2, 0, 1])
+        self.data_array[index] = img
+      else:
+        img = self.data_array[index]
+    else:
+      img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+      img = np.transpose(img, [2, 0, 1])
+    """
+    elif self.shared_data:
+      #existing_shm = shared_memory.SharedMemory(name=self.shared_data)
+      data_array = np.ndarray((len(self.list_IDs), 3, 128, 128), dtype=np.float32, buffer=self.existing_shm.buf)
+      img = data_array[index] 
+    """
     mosaic = bayer(img)
     mosaic = np.sum(mosaic, axis=0, keepdims=True)
 
@@ -586,10 +290,80 @@ class FullPredictionQuadDataset(data.Dataset):
 
     target = img
 
+    bayer_quad = torch.Tensor(bayer_quad)
+    redblue_bayer = torch.Tensor(redblue_bayer)
+    green_grgb = torch.Tensor(green_grgb)
+    target = torch.Tensor(target)
+
     input = (bayer_quad, redblue_bayer, green_grgb)
 
     if self.return_index:
-      return (image_f, input, target)
+      return (index, input, target)
+
+    return (input, target) 
+ 
+
+"""
+provides bayer quad, red and blue from bayer, gr and gb from bayer
+as inputs and the full RGB image as the target
+"""
+class FullPredictionProcessedDataset(data.Dataset):
+  def __init__(self, data_file=None, RAM=False, return_index=False):
+    self.list_IDs = ids_from_file(data_file) # patch filenames
+    self.return_index = return_index
+    self.RAM = RAM
+
+    if RAM: 
+      self.data_array = [None for i in range(len(self.list_IDs))]
+      for i, image_datadir in enumerate(self.list_IDs):
+        target_f = os.path.join(image_datadir, "rgb_target")
+        target = np.fromfile(target_f, dtype=np.float32).reshape(3, 128, 128)
+    
+        bayer_f = os.path.join(image_datadir, "bayer")
+        bayer_quad = np.fromfile(bayer_f, dtype=np.float32).reshape(4, 64, 64)
+
+        redblue_bayer_f = os.path.join(image_datadir, "redblue_bayer")
+        redblue_bayer = np.fromfile(redblue_bayer_f, dtype=np.float32).reshape(2, 64, 64)
+
+        green_grgb_f = os.path.join(image_datadir, "green_grgb")
+        green_grgb = np.fromfile(green_grgb_f, dtype=np.float32).reshape(2, 64, 64)
+
+        image_data = [bayer_quad, redblue_bayer, green_grgb, target]
+        image_data = [torch.Tensor(x) for x in image_data]
+
+        self.data_array[i] = image_data
+
+
+  def __len__(self):
+    return len(self.list_IDs)
+
+  def __getitem__(self, index):
+    image_datadir = self.list_IDs[index]
+
+    if self.RAM:
+      bayer_quad, redblue_bayer, green_grgb, target = self.data_array[index]
+
+    else:
+      target_f = os.path.join(image_datadir, "rgb_target")
+      target = np.fromfile(target_f, dtype=np.float32).reshape(3, 128, 128)
+      target = torch.Tensor(target)
+
+      bayer_f = os.path.join(image_datadir, "bayer")
+      bayer_quad = np.fromfile(bayer_f, dtype=np.float32).reshape(4, 64, 64)
+      bayer_quad = torch.Tensor(bayer_quad)
+
+      redblue_bayer_f = os.path.join(image_datadir, "redblue_bayer")
+      redblue_bayer = np.fromfile(redblue_bayer_f, dtype=np.float32).reshape(2, 64, 64)
+      redblue_bayer = torch.Tensor(redblue_bayer)
+
+      green_grgb_f = os.path.join(image_datadir, "green_grgb")
+      green_grgb = np.fromfile(green_grgb_f, dtype=np.float32).reshape(2, 64, 64)
+      green_grgb = torch.Tensor(green_grgb)  
+
+    input = (bayer_quad, redblue_bayer, green_grgb)
+
+    if self.return_index:
+      return (image_datadir, input, target)
 
     return (input, target) 
  
@@ -666,14 +440,44 @@ class GreenQuadDataset(data.Dataset):
     bayer_quad[2,:,:] = mosaic[0,1::2,0::2]
     bayer_quad[3,:,:] = mosaic[0,1::2,1::2]
 
+    bayer_quad = torch.Tensor(bayer_quad)
     input = bayer_quad
-
+  
     target = np.expand_dims(img[1,...], axis=0)
+    target = torch.Tensor(target)
 
     if self.return_index:
       return (index, input, target)
   
     return (input, target) 
+
+
+def sort_ids(ids):
+  sorted_ids = sorted(ids, key = lambda x: x.split("/")[-1].replace('.png', ''))
+  return sorted_ids
  
 
- 
+class GreenProcessedQuadDataset(data.Dataset):
+  def __init__(self, data_file=None, return_index=False):
+    self.list_IDs = ids_from_file(data_file) # patch filenames
+    self.return_index = return_index
+
+  def __len__(self):
+    return len(self.list_IDs)
+
+  def __getitem__(self, index):
+    image_datadir = self.list_IDs[index]
+
+    target_f = os.path.join(image_datadir, "green_target")
+    target = np.fromfile(target_f, dtype=np.float32).reshape(1, 128, 128)
+
+    bayer_f = os.path.join(image_datadir, "bayer")
+    bayer_quad = np.fromfile(bayer_f, dtype=np.float32).reshape(4, 64, 64)
+
+    input = bayer_quad
+
+    if self.return_index:
+      return (index, input, target)
+
+    return (input, target) 
+

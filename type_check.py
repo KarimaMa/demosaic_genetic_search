@@ -123,6 +123,39 @@ def shrink_channels(node, max_c, out_c=None):
 
 
 """
+returns none if resolution is invalid
+"""
+def compute_resolution(tree):
+  if isinstance(tree, Input):
+    return tree.resolution
+  elif isinstance(tree, LearnedDownsample) or isinstance(tree, Pack):
+    child_resolution = compute_resolution(tree.child)
+    tree.resolution = child_resolution / tree.factor 
+  elif isinstance(tree, Upsample) or isinstance(tree, LearnedUpsample) or isinstance(tree, Unpack):
+    child_resolution = compute_resolution(tree.child)
+    tree.resolution = child_resolution * tree.factor
+  else:
+    if tree.num_children == 3:
+      res1 = compute_resolution(tree.child1)
+      res2 = compute_resolution(tree.child2)
+      res3 = compute_resolution(tree.child3)
+      if res1 != res2 or res1 != res3:
+        return None
+      tree.resolution = res1
+    elif tree.num_children == 2:
+      lres = compute_resolution(tree.lchild)
+      rres = compute_resolution(tree.rchild)
+      if lres != rres:
+        return None
+      tree.resolution = lres
+    elif tree.num_children == 1:
+      child_res = compute_resolution(tree.child)
+      tree.resolution = child_res
+  
+  return tree.resolution
+
+
+"""
 returns the spatial resolution of a subtree
 """
 def spatial_resolution(subtree):
@@ -197,11 +230,14 @@ def check_channel_count(node):
     child_c = check_channel_count(node.child)
     return child_c
   elif isinstance(node, UnopIJ):
+    assert((node.in_c % node.groups == 0) and (node.out_c % node.groups == 0))
     check_channel_count(node.child)
     return node.out_c
   elif isinstance(node, UnopIIdiv):
-    assert(node.in_c % node.out_c == 0 and node.in_c >= node.out_c )
+    assert((node.in_c % node.out_c == 0) and (node.in_c >= node.out_c))
     return node.out_c
+  elif isinstance(node, UnopIJFixed):
+    assert( (node.in_c / node.factor**2) == node.out_c and (node.in_c % node.groups == 0) and (node.out_c % node.groups == 0) ) 
   elif isinstance(node, Const):
     return node.out_c
 
@@ -342,7 +378,23 @@ def fix_channel_count_downwards(root, parent, out_c, fixed_nodes=None):
         fixed = fix_channel_count_downwards(root.child, root, in_c, fixed_nodes)
         if fixed:
           root.in_c = in_c
-          root.out_c = out_c 
+          root.out_c = out_c
+    elif isinstance(root, UnopIJFixed):
+      # cannot change output channels, can only change input channels
+      if root.out_c == out_c:
+        fixed = True
+      else:
+        in_c = out_c * (root.factor**2)
+        fixed = fix_channel_count_downwards(root.child, root, in_c, fixed_nodes)
+        if fixed:
+          root.in_c = in_c 
+          root.out_c = out_c
+          # may need to change grouping due to new input channels  
+          in_c_factors = get_factors(root.in_c)
+          out_c_factors = get_factors(root.out_c)
+          factors = in_c_factors.intersection(out_c_factors)
+          closest_factor = get_closest_factor(factors, root.groups)
+          root.groups = closest_factor
     elif isinstance(root, TernaryHcIcJcKc) \
       or isinstance(root, BinopIcJcKc) \
       or isinstance(root, UnopIcJc) \
@@ -451,18 +503,27 @@ def fix_channel_count_upwards_helper(subtree, parent, in_c, fixed_nodes=None):
 
     fixed = True
   elif isinstance(parent, UnopIIdiv): # want parent to have in_c input channels 
-    if in_c % parent.out_c == 0:
+    if in_c % parent.out_c == 0 and in_c >= parent.out_c:
       parent.in_c = in_c 
       fixed = True
     else:
       # find closest factor of in_c to current out_c of parent 
       in_c_factors = get_factors(in_c)
-      if len(in_c_factors) == 0: # input channels is prime, cannot be grouped
-        fixed = False
       closest_factor = get_closest_factor(in_c_factors, parent.out_c)
       fixed = fix_channel_count_upwards(parent, closest_factor, fixed_nodes)
       if fixed:
         parent.out_c = closest_factor
+        parent.in_c = in_c
+  elif isinstance(parent, UnopIJFixed): # want parent to have in_c input channels
+    if in_c == parent.in_c:
+      fixed = True
+    elif in_c % (parent.factor**2) != 0:
+      fixed = False # not possible to produce integer output channels with this scale factor
+    else:
+      out_c = in_c * (parent.factor**2)
+      fixed = fix_channel_count_upwards(parent, out_c, fixed_nodes)
+      if fixed:
+        parent.out_c = out_c 
         parent.in_c = in_c
   elif isinstance(parent, BinopIcJcKc):
     if cur_node is parent.lchild:

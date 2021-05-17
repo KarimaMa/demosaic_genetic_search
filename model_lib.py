@@ -367,384 +367,6 @@ def full_model_greenInput():
   return rgb 
 
 
-def red_gr_diff_model():
-  # Red at Gr
-  print("GR diff model")
-  gr_bayer = Input(1, "Bayer")
-  green = Input(1, "Green")
-  diff = Sub(gr_bayer, green)
-  gr_convd = Conv2D(diff, 16)
-  gr_relu1 = Relu(gr_convd)
-  gr_fc1 = Conv1x1(gr_relu1, 16)
-  gr_relu2 = Relu(gr_fc1)
-  gr_fc2 = Conv1x1(gr_relu2, 16)
-  gr_softmax = Softmax(gr_fc2)
-
-  # filter model
-  gr_bayer = Input(1, "Bayer")
-  gr_convf = Conv2D(gr_bayer, 16)
-
-  gr_mul = Mul(gr_convf, gr_softmax)
-  R_at_Gr_diff = SumR(gr_mul)
-
-  R_at_Gr = Add(R_at_Gr_diff, green)
-
-  red = RGrExtractor(R_at_Gr)
-  red.assign_parents()
-  red.compute_input_output_channels()
-
-  return red
-
-def red_gb_diff_model():
-  # Red at Gr
-  print("GB diff model")
-  gb_bayer = Input(1, "Bayer")
-  green = Input(1, "Green")
-  diff = Sub(gb_bayer, green)
-  gb_convd = Conv2D(diff, 16)
-  gb_relu1 = Relu(gb_convd)
-  gb_fc1 = Conv1x1(gb_relu1, 16)
-  gb_relu2 = Relu(gb_fc1)
-  gb_fc2 = Conv1x1(gb_relu2, 16)
-  gb_softmax = Softmax(gb_fc2)
-
-  # filter model
-  gb_bayer = Input(1, "Bayer")
-  gb_convf = Conv2D(gb_bayer, 16)
-
-  gb_mul = Mul(gb_convf, gb_softmax)
-  R_at_Gb_diff = SumR(gb_mul)
-
-  R_at_Gb = Add(R_at_Gb_diff, green)
-
-  red = RGbExtractor(R_at_Gb)
-  red.assign_parents()
-  red.compute_input_output_channels()
-
-  return red
-
-def red_b_diff_model():
-  # Red at B
-  print("B diff model")
-  b_bayer = Input(1, "Bayer")
-  green = Input(1, "Green")
-  diff = Sub(b_bayer, green)
-  b_convd = Conv2D(diff, 16)
-  b_relu1 = Relu(b_convd)
-  b_fc1 = Conv1x1(b_relu1, 16)
-  b_relu2 = Relu(b_fc1)
-  b_fc2 = Conv1x1(b_relu2, 16)
-  b_softmax = Softmax(b_fc2)
-
-  # filter model
-  b_bayer = Input(1, "Bayer")
-  b_convf = Conv2D(b_bayer, 16)
-
-  b_mul = Mul(b_convf, b_softmax)
-  R_at_B_diff = SumR(b_mul)
-
-  R_at_B = Add(R_at_B_diff, green)
-
-  red = RBExtractor(R_at_B)
-  red.assign_parents()
-  red.compute_input_output_channels()
-
-  return red
-
-
-def red_gr_simple_model():
-  # Red at Gr
-  gr_bayer = Input(1, "Bayer")
-  gr_convd = Conv2D(gr_bayer, 16)
-  gr_relu1 = Relu(gr_convd)
-  gr_fc1 = Conv1x1(gr_relu1, 16)
-  gr_relu2 = Relu(gr_fc1)
-  gr_fc2 = Conv1x1(gr_relu2, 16)
-  gr_softmax = Softmax(gr_fc2)
-
-  # filter model
-  gr_bayer = Input(1, "Bayer")
-  gr_convf = Conv2D(gr_bayer, 16)
-
-  gr_mul = Mul(gr_convf, gr_softmax)
-  R_at_Gr = SumR(gr_mul)
-
-  red = RGrExtractor(R_at_Gr)
-  red.assign_parents()
-  red.compute_input_output_channels()
-
-  return red
-
-
-def red_gb_simple_model():
-  # Red at Gb
-  gb_bayer = Input(1, "Bayer")
-  gb_convd = Conv2D(gb_bayer, 16)
-  gb_relu1 = Relu(gb_convd)
-  gb_fc1 = Conv1x1(gb_relu1, 16)
-  gb_relu2 = Relu(gb_fc1)
-  gb_fc2 = Conv1x1(gb_relu2, 16)
-  gb_softmax = Softmax(gb_fc2)
-
-  # filter model
-  gb_bayer = Input(1, "Bayer")
-  gb_convf = Conv2D(gb_bayer, 16)
-
-  gb_mul = Mul(gb_convf, gb_softmax)
-  R_at_Gb = SumR(gb_mul)
-
-  red = RGbExtractor(R_at_Gb)
-  red.assign_parents()
-  red.compute_input_output_channels()
-
-  return red
-
-
-def red_b_simple_model():
-  # Red at B
-  b_bayer = Input(1, "Bayer")
-  b_convd = Conv2D(b_bayer, 16)
-  b_relu1 = Relu(b_convd)
-  b_fc1 = Conv1x1(b_relu1, 16)
-  b_relu2 = Relu(b_fc1)
-  b_fc2 = Conv1x1(b_relu2, 16)
-  b_softmax = Softmax(b_fc2)
-
-  # filter model
-  b_bayer = Input(1, "Bayer")
-  b_convf = Conv2D(b_bayer, 16)
-
-  b_mul = Mul(b_convf, b_softmax)
-  R_at_B = SumR(b_mul)
-
-  red = RBExtractor(R_at_B)
-  red.assign_parents()
-  red.compute_input_output_channels()
-
-  return red
-
-def blue_gr_diff_model():
-  # Red at Gr
-  print("GR diff model")
-  gr_bayer = Input(1, "Bayer")
-  green = Input(1, "Green")
-  diff = Sub(gr_bayer, green)
-  gr_convd = Conv2D(diff, 16)
-  gr_relu1 = Relu(gr_convd)
-  gr_fc1 = Conv1x1(gr_relu1, 16)
-  gr_relu2 = Relu(gr_fc1)
-  gr_fc2 = Conv1x1(gr_relu2, 16)
-  gr_softmax = Softmax(gr_fc2)
-
-  # filter model
-  gr_bayer = Input(1, "Bayer")
-  gr_convf = Conv2D(gr_bayer, 16)
-
-  gr_mul = Mul(gr_convf, gr_softmax)
-  B_at_Gr_diff = SumR(gr_mul)
-
-  B_at_Gr = Add(B_at_Gr_diff, green)
-
-  blue = BGrExtractor(B_at_Gr)
-  blue.assign_parents()
-  blue.compute_input_output_channels()
-
-  return blue
-
-def blue_gb_diff_model():
-  # Red at Gr
-  print("GB diff model")
-  gb_bayer = Input(1, "Bayer")
-  green = Input(1, "Green")
-  diff = Sub(gb_bayer, green)
-  gb_convd = Conv2D(diff, 16)
-  gb_relu1 = Relu(gb_convd)
-  gb_fc1 = Conv1x1(gb_relu1, 16)
-  gb_relu2 = Relu(gb_fc1)
-  gb_fc2 = Conv1x1(gb_relu2, 16)
-  gb_softmax = Softmax(gb_fc2)
-
-  # filter model
-  gb_bayer = Input(1, "Bayer")
-  gb_convf = Conv2D(gb_bayer, 16)
-
-  gb_mul = Mul(gb_convf, gb_softmax)
-  B_at_Gb_diff = SumR(gb_mul)
-
-  B_at_Gb = Add(B_at_Gb_diff, green)
-
-  blue = BGbExtractor(B_at_Gb)
-  blue.assign_parents()
-  blue.compute_input_output_channels()
-
-  return blue
-
-def blue_r_diff_model():
-  # Red at B
-  print("R diff model")
-  r_bayer = Input(1, "Bayer")
-  green = Input(1, "Green")
-  diff = Sub(r_bayer, green)
-  r_convd = Conv2D(diff, 16)
-  r_relu1 = Relu(r_convd)
-  r_fc1 = Conv1x1(r_relu1, 16)
-  r_relu2 = Relu(r_fc1)
-  r_fc2 = Conv1x1(r_relu2, 16)
-  r_softmax = Softmax(r_fc2)
-
-  # filter model
-  r_bayer = Input(1, "Bayer")
-  r_convf = Conv2D(r_bayer, 16)
-
-  r_mul = Mul(r_convf, r_softmax)
-  B_at_R_diff = SumR(r_mul)
-
-  B_at_R = Add(B_at_R_diff, green)
-
-  blue = BRExtractor(B_at_R)
-  blue.assign_parents()
-  blue.compute_input_output_channels()
-
-  return blue
-
-
-def red_quad_diff_model():
-  # Red at B
-  print("Red Quad diff model")
-  bayer = Input(4, "BayerQuad") # quad Bayer
-  green = Input(4, "GreenQuad") # quad Green
-
-  diff = Sub(bayer, green)
-  conv1 = Conv2D(diff, 32, kwidth=3)
-  relu1 = Relu(conv1)
-  conv2 = Conv2D(relu1, 32, kwidth=3)
-  relu2 = Relu(conv2)
-  conv3 = Conv1x1(relu2, 32)
-  relu3 = Relu(conv3)
-  chroma_diff = Conv1x1(relu3, 4)
-
-  chroma = Add(chroma_diff, green)
-
-  out = ChromaExtractor(chroma, bayer)
-  out.assign_parents()
-  out.compute_input_output_channels()
-
-  return out
-
-
-def redblue_quad_diff_model():
-  # Red at B
-  print("Red Blue Quad diff model")
-  bayer = QuadInput(4, "Bayer") # quad Bayer
-  green = QuadInput(4, "Green") # quad Green
-
-  diff = Sub(bayer, green)
-  conv1 = Conv2D(diff, 32, kwidth=3)
-  relu1 = Relu(conv1)
-  conv2 = Conv2D(relu1, 32, kwidth=3)
-  relu2 = Relu(conv2)
-  conv3 = Conv1x1(relu2, 32)
-  relu3 = Relu(conv3)
-  chroma_diff = Conv1x1(relu3, 8)
-
-  green = QuadInput(4, "Green") # quad Green
-  chroma = Add(chroma_diff, green)
-
-  out = RBQuadExtractor(chroma, bayer)
-  out.assign_parents()
-  out.compute_input_output_channels()
-
-  return out
-
-
-def rgb_quad_diff_model():
-  # Red at B
-  c = 16
-  print("Red Green Blue Quad diff model")
-  bayer = QuadInput(4, "Bayer") # quad Bayer
-  green = QuadInput(4, "Green") # quad Green
-
-  diff = Sub(bayer, green)
-  conv1 = Conv2D(diff, c, kwidth=3)
-  relu1 = Relu(conv1)
-  conv2 = Conv2D(relu1, c, kwidth=3)
-  relu2 = Relu(conv2)
-  conv3 = Conv2D(relu2, c, kwidth=3)
-  relu3 = Relu(conv3)
-  chroma_diff = Conv1x1(relu3, 8)
-
-  green = QuadInput(4, "Green") # quad Green
-  chroma = Add(chroma_diff, green)
-
-  green = QuadInput(4, "Green") # quad Green
-  out = RGBQuadExtractor(chroma, bayer, green)
-  out.assign_parents()
-  out.compute_input_output_channels()
-
-  return out
-
-
-def rgb2_quad_diff_model():
-  # Red at B
-  print("Red Green Blue Quad diff model")
-  bayer = QuadInput(4, "Bayer") # quad Bayer
-  green = QuadInput(4, "Green") # quad Green
-
-  diff = Sub(bayer, green)
-  conv1 = Conv2D(diff, 47, kwidth=3)
-  relu1 = Relu(conv1)
-  conv2 = Conv2D(relu1, 47, kwidth=3)
-  relu2 = Relu(conv2)
-  conv3 = Conv1x1(relu2, 47)
-  relu3 = Relu(conv3)
-  chroma_diff = Conv1x1(relu3, 12)
-
-  green = QuadInput(4, "Green") # quad Green
-  chroma = Add(chroma_diff, green)
-
-  bayer = QuadInput(4, "Bayer") # quad Bayer
-  out = RGB2QuadExtractor(chroma, bayer)
-  out.assign_parents()
-  out.compute_input_output_channels()
-
-  return out
-
-
-def rgb_mul_quad_diff_model():
-  # Red at B
-  print("RGB MUL Quad diff model")
-  bayer = QuadInput(4, "Bayer") # quad Bayer
-  green = QuadInput(4, "Green") # quad Green
-
-  diff = Sub(bayer, green)
-  conv1 = Conv2D(diff, 24, kwidth=3)
-  relu1 = Relu(conv1)
-  conv2 = Conv2D(relu1, 24, kwidth=3)
-  relu2 = Relu(conv2)
-  interp = Conv1x1(relu2, 24)
- 
-  w_conv1 = Conv2D(bayer, 24, kwidth=3)
-  w_relu1 = Relu(w_conv1)
-  w_conv2 = Conv2D(w_relu1, 24, kwidth=3)
-  w_relu2 = Relu(w_conv2)
-  w_conv3 = Conv1x1(w_relu2, 24)
-  weights = Softmax(w_conv3)
-
-  mul = Mul(weights, interp)
-  chroma_diff = Conv1x1(mul, 12)
-  green = QuadInput(4, "Green") # quad Green
-  chroma = Add(chroma_diff, green)
-
-  green = QuadInput(4, "Green") # quad Green
-  bayer = QuadInput(4, "Bayer") # quad Bayer
-  out = RGBQuadExtractor(chroma, bayer, green)
-
-  out.assign_parents()
-  out.compute_input_output_channels()
-
-  return out
-
-
 def mini_demosaicnet():
   # fullres model
   bayer = Input(1, "Bayer")
@@ -832,7 +454,81 @@ def MultiresQuadGreenModel(depth, width):
 
   return green 
 
+
+"""
+same as MultiresQuadGreenModel but for Xtrans
+"""
+def XtransMultiresQuadGreenModel(depth, width):
+  mosaic = Input(36, "Mosaic") # quad Bayer
+  downsampled_mosaic = Downsample(mosaic)
+
+  # lowres interp
+  for i in range(depth):
+    if isinstance(width, list):
+      w = width[i]
+    else:
+      w = width
+    if i == 0:
+      lowres_conv = Conv2D(downsampled_mosaic, w, kwidth=1)
+    else:
+      lowres_conv = Conv2D(lowres_relu, w, kwidth=1)
+    if i != depth - 1:
+      lowres_relu = Relu(lowres_conv)
+
+  lowres_interp = Upsample(lowres_conv)
+  lowres_interp.compute_input_output_channels()
+
+  downsampled_mosaic.partner_set = set( [(lowres_interp, id(lowres_interp))] )
+  lowres_interp.partner_set = set( [(downsampled_mosaic, id(downsampled_mosaic))] )
+
+  # fullres interp
+  for i in range(depth):
+    if isinstance(width, list):
+      w = width[i]
+    else:
+      w = width
+    if i == 0:
+      fullres_interp = Conv2D(mosaic, w, kwidth=1)
+    else:
+      fullres_interp = Conv2D(fullres_relu, w, kwidth=1)
+    if i != depth - 1:
+      fullres_relu = Relu(fullres_interp)
+
+  downsampled_mosaic = Downsample(mosaic)
+  # lowres weights
+  for i in range(depth):
+    if isinstance(width, list):
+      w = width[i]
+    else:
+      w = width
+    if i == 0:
+      weight_conv = Conv2D(downsampled_mosaic, w, kwidth=1)
+    else:
+      weight_conv = Conv2D(weight_relu, w, kwidth=1)
+    if i != depth - 1:
+      weight_relu = Relu(weight_conv)
  
+  upsampled_weights = Upsample(weight_conv)
+  weights = Softmax(upsampled_weights)
+  weights.compute_input_output_channels()
+  
+  downsampled_mosaic.partner_set = set( [(upsampled_weights, id(upsampled_weights))] )
+  upsampled_weights.partner_set = set( [(downsampled_mosaic, id(downsampled_mosaic))] )
+
+  lowres_mul = Mul(weights, lowres_interp)
+  fullres_mul = Mul(weights, fullres_interp)
+
+  lowres_sum = GroupedSum(lowres_mul, 16)
+  fullres_sum = GroupedSum(fullres_mul, 16)
+
+  missing_green = Add(lowres_sum, fullres_sum)
+  green = XGreenExtractor(mosaic, missing_green)
+  green.assign_parents()
+  green.compute_input_output_channels()
+
+  return green 
+
+
 def GreenDemosaicknet(depth, width):
   bayer = Input(4, "Bayer")
   for i in range(depth):
@@ -856,6 +552,55 @@ def GreenDemosaicknet(depth, width):
   green.compute_input_output_channels()
 
   return green
+
+
+def XGreenDemosaicknet(depth, width):
+  mosaic = Input(36, "Mosaic")
+  for i in range(depth):
+    if i == 0:
+      conv = Conv1x1(mosaic, width)
+    else:
+      conv = Conv1x1(relu, width)
+    relu = Relu(conv)
+
+  residual_prediction = Conv1x1(relu, 16)
+
+  stacked = Stack(mosaic, residual_prediction) 
+
+  post_conv = Conv1x1(stacked, width)
+  post_relu = Relu(post_conv)
+  missing_green = Conv1x1(post_relu, 16)
+
+  mosaic = Input(36, "Mosaic")
+  green = XGreenExtractor(mosaic, missing_green)
+  green.assign_parents()
+  green.compute_input_output_channels()
+
+  return green
+
+
+def XFlatGreenDemosaicknet(depth, width):
+  mosaic = Input(3, "Mosaic")
+  for i in range(depth):
+    if i == 0:
+      conv = Conv2D(mosaic, width, kwidth=3)
+    else:
+      conv = Conv2D(relu, width, kwidth=3)
+    relu = Relu(conv)
+
+  stacked = Stack(mosaic, relu) 
+
+  post_conv = Conv2D(stacked, width, kwidth=3)
+  post_relu = Relu(post_conv)
+  missing_green = Conv2D(post_relu, 1, kwidth=3)
+
+  mosaic = Input(3, "Mosaic")
+  green = XFlatGreenExtractor(mosaic, missing_green)
+  green.assign_parents()
+  green.compute_input_output_channels()
+
+  return green
+
 
 
 def GradientHalideModel(width, k):

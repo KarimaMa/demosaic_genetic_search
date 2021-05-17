@@ -11,7 +11,6 @@ import random
 import numpy as np
 from orderedset import OrderedSet
 import torch
-import torch.backends.cudnn as cudnn
 import sys
 sys.path.append(sys.path[0].split("/")[0])
 from tree import has_loop
@@ -29,17 +28,18 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import ctypes
 import datetime
-from job_queue import ProcessQueue
 import mysql_db
-from dataset import bayer
-from imageio import imread
-from multiprocessing import shared_memory
+# from dataset import bayer
+# from imageio import imread
+#from multiprocessing import shared_memory
+from queue import Empty
+import psutil
 
 
 def build_model_database(args):
   fields = ["model_id", "id_str", "hash", "structural_hash", "generation", "occurrences", "best_init"]
   field_types = [int, str, int, int, int, int, int]
-  for model_init in range(args.model_initializations):
+  for model_init in range(args.keep_initializations):
     fields += [f"psnr_{model_init}"]
     field_types += [float]
   fields += ["compute_cost", "parent_id", "failed_births", "failed_mutations",\
@@ -58,6 +58,14 @@ def build_failure_database(args):
   failure_database = Database("FailureDatabase", fields, field_types, args.failure_database_dir)
   failure_database.cntr = 0
   return failure_database
+
+def build_perf_database(args):
+  fields = ["model_id", "cost", "train_time"]
+  field_types = [int, float, int]
+  perf_database = Database("PerformanceDatabase", fields, field_types, args.performance_database_dir)
+  perf_database.cntr = 0
+  return perf_database
+
 
 def model_database_entry(model_id, id_str, model_ast, shash, generation, \
                         compute_cost, parent_id, mutation_stats):
@@ -84,97 +92,31 @@ def model_database_entry(model_id, id_str, model_ast, shash, generation, \
   return data
 
 
-def run_train(task_id, train_args, gpu_ids, model_id, pytorch_models, model_dir, valid_psnrs, \
-            train_data, val_data, log_format, task_logger):
-  inits = train_args.model_initializations
-  gpu_id = gpu_ids[task_id]
-  try:
-    for m in pytorch_models:
-      m._initialize_parameters()
-  except RuntimeError:
-    task_logger.info(f"Failed to initialize model {model_id}")
-    # print(f"Failed to initialize model {model_id}")
-  else:
-    util.create_dir(model_dir)
-    train_logger = util.create_logger(f'model_{model_id}_train_logger', logging.INFO, log_format, \
-                                         os.path.join(model_dir, f'model_{model_id}_training_log'))
-    
-    # print('Task ', task_id, ' launched on GPU ', gpu_id, ' model id ', model_id)
-    task_logger.info(f"Task {task_id} launched on GPU {gpu_id}  model id {model_id}")
-    model_val_psnrs = train_model(train_args, gpu_id, model_id, pytorch_models, model_dir, train_logger, train_data, val_data)
-    for i in range(train_args.model_initializations):
-      index = train_args.model_initializations * task_id + i 
-      task_logger.info(f"Task {task_id} updating psnr at {index} from initialization {i}")
-      valid_psnrs[index] = model_val_psnrs[i]
-
- 
-def init_process(task_id, fn, train_args, gpu_ids, model_id, models, model_dir,\
-                valid_psnrs, train_data, val_data, log_format, task_logger, backend='nccl'):
-  """ Initialize the distributed environment. """
-  #os.environ['MASTER_ADDR'] = '127.0.0.1'
-  #os.environ['MASTER_PORT'] = '29500'
-
-  #dist.init_process_group(backend, rank=task_id, world_size=num_tasks)
-
-  fn(task_id, train_args, gpu_ids, model_id, models, model_dir, \
-    valid_psnrs, train_data, val_data, log_format, task_logger)
-
 
 """
 loads dataset into RAM
 """
-def preload_dataset(data_file):
-  image_files = util.ids_from_file(data_file) # patch filenames
-  dataset = [None for i in range(len(image_files))]
-  imsize = 128*128*3
-  num_images = len(image_files)
-  nfloats = imsize * num_images
+# def preload_dataset(data_file):
+#   image_files = util.ids_from_file(data_file) # patch filenames
+#   dataset = [None for i in range(len(image_files))]
+#   imsize = 128*128*3
+#   num_images = len(image_files)
+#   nfloats = imsize * num_images
 
-  shm = shared_memory.SharedMemory(create=True, size=(nfloats * 4))
-  dataset = np.ndarray((num_images, 3, 128, 128), dtype=np.float32, buffer=shm.buf)
+#   shm = shared_memory.SharedMemory(create=True, size=(nfloats * 4))
+#   dataset = np.ndarray((num_images, 3, 128, 128), dtype=np.float32, buffer=shm.buf)
 
-  for i, image_f in enumerate(image_files):
-    if i % 1000 == 0:
-      print(i)
-    img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
-    img = np.transpose(img, [2, 0, 1])
-    if i == 0:
-      print(img[:,0:3,0:3])
+#   for i, image_f in enumerate(image_files):
+#     if i % 1000 == 0:
+#       print(i)
+#     img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
+#     img = np.transpose(img, [2, 0, 1])
+#     if i == 0:
+#       print(img[:,0:3,0:3])
     
-    dataset[i] = img
+#     dataset[i] = img
 
-    """
-    mosaic = bayer(img)
-    mosaic = np.sum(mosaic, axis=0, keepdims=True)
-
-    image_size = list(img.shape)
-    quad_h = image_size[1] // 2
-    quad_w = image_size[2] // 2
-
-    redblue_bayer = np.zeros((2, quad_h, quad_w))
-    bayer_quad = np.zeros((4, quad_h, quad_w))
-    green_grgb = np.zeros((2, quad_h, quad_w))
-
-    bayer_quad[0,:,:] = mosaic[0,0::2,0::2]
-    bayer_quad[1,:,:] = mosaic[0,0::2,1::2]
-    bayer_quad[2,:,:] = mosaic[0,1::2,0::2]
-    bayer_quad[3,:,:] = mosaic[0,1::2,1::2]
-
-    redblue_bayer[0,:,:] = bayer_quad[1,:,:]
-    redblue_bayer[1,:,:] = bayer_quad[2,:,:]
-
-    green_grgb[0,:,:] = bayer_quad[0,:,:]
-    green_grgb[1,:,:] = bayer_quad[3,:,:]
-
-    target = img
-
-    bayer_quad = torch.Tensor(bayer_quad).share_memory_()
-    redblue_bayer = torch.Tensor(redblue_bayer).share_memory_()
-    green_grgb = torch.Tensor(green_grgb).share_memory_()
-    target = torch.Tensor(target).share_memory_()
-    image_data = [bayer_quad, redblue_bayer, green_grgb, target]
-    """
-  return shm.name
+#   return shm.name
 
 
 class GenerationStats():
@@ -226,6 +168,63 @@ class MutationBatchInfo:
     self.validation_psnrs[model_id] = validation_psnr
 
 
+"""
+ worker subprocess function that runs training
+ gpu_id: the gpu assigned to this worker
+"""
+def run_train(work_q, worker_id, pending_start_times, pending_tasks, pending_l, finished_tasks, \
+              gpu_id, args, validation_psnrs, log_format, logger):
+  # keep pulling from work queue
+  while True:
+    try:
+      train_task_info = work_q.get(block=False)
+      if train_task_info is None:
+        return
+
+      model_id = train_task_info["model_id"]
+      task_id = train_task_info["task_id"]
+      model_dir = train_task_info["model_dir"]
+      models = train_task_info["models"]
+
+      pending_l.acquire()
+      pending_start_times[worker_id] = time.time()
+      pending_tasks[worker_id] = task_id
+      pending_l.release()
+
+      logger.info(f'---worker on gpu {gpu_id} running task {task_id} model {model_id} ---')
+      print(f'--- worker on gpu {gpu_id} running model {model_id} with {len([p for p in models[0].parameters()])} params ---')
+    
+      for m in models:
+        m._initialize_parameters()
+     
+      util.create_dir(model_dir)
+      train_logger = util.create_logger(f'model_{model_id}_train_logger', logging.INFO, log_format, \
+                                  os.path.join(model_dir, f'model_{model_id}_training_log'))
+
+      model_val_psnrs = train_model(args, gpu_id, model_id, models, model_dir, train_logger)
+      
+      logger.info(f"worker on gpu {gpu_id} with task {task_id} writing to validation psnrs")
+
+      for i in range(args.keep_initializations):
+        index = args.keep_initializations * task_id + i 
+        validation_psnrs[index] = model_val_psnrs[i]
+        print(f"worker on gpu {gpu_id} task {task_id} psnr {model_val_psnrs[i]}")
+
+      pending_l.acquire()
+      start_time = pending_start_times[worker_id]
+      pending_start_times[worker_id] = -1
+      pending_tasks[worker_id] = -1
+      pending_l.release()
+      #work_q.task_done()
+
+      print(f"task {task_id} took {time.time() - start_time}")
+      finished_tasks[task_id] = time.time() - start_time # store time task took
+
+    except Empty:
+      time.sleep(10)
+
+
+
 class Searcher():
   def __init__(self, args):
     # build loggers
@@ -241,8 +240,8 @@ class Searcher():
                                   os.path.join(args.save, 'mysql_log'))
     self.monitor_logger = util.create_logger('monitor_logger', logging.INFO, self.log_format, \
                                   os.path.join(args.save, 'monitor_log'))
-    self.task_logger = util.create_logger('task_logger', logging.INFO, self.log_format, \
-                                  os.path.join(args.save, 'task_log'))
+    self.work_manager_logger = util.create_logger('work_manager_logger', logging.INFO, self.log_format, \
+                                  os.path.join(args.save, 'work_manager_log'))
     self.search_logger.info("args = %s", args)
 
     self.args = args  
@@ -252,6 +251,7 @@ class Searcher():
 
     self.model_database = build_model_database(self.args)
     self.failure_database = build_failure_database(self.args)
+    self.perf_database = build_perf_database(self.args)
 
     # build monitors
     self.load_monitor = Monitor("Load Monitor", args.load_timeout, self.monitor_logger)
@@ -259,11 +259,16 @@ class Searcher():
     self.lowering_monitor = Monitor("Lowering Monitor", args.lowering_timeout, self.monitor_logger)
     self.train_monitor = Monitor("Train Monitor", args.train_timeout, self.monitor_logger)
     self.save_monitor = Monitor("Save Monitor", args.save_timeout, self.monitor_logger)
-
-    self.mutation_batch_size = args.num_gpus
-    self.mutation_batches_per_generation = int(math.ceil(args.mutations_per_generation / self.mutation_batch_size))
-
+    
     mp.set_start_method("spawn", force=True)
+
+    self.num_workers = self.args.num_gpus
+    self.models_per_gen = self.args.mutations_per_generation * self.args.keep_initializations * len(args.cost_tiers)
+    self.work_queue = mp.Queue(self.models_per_gen + self.num_workers)
+    self.pending_locks = [mp.Lock() for w in range(self.num_workers)]
+    self.work_loggers = [util.create_logger('work_logger', logging.INFO, self.log_format, \
+                        os.path.join(args.save, f'work_log_{i}')) for i in range(self.num_workers)]
+
 
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '29500'
@@ -284,7 +289,7 @@ class Searcher():
       self.failure_database.cntr += 1
 
   def update_model_database(self, mutation_task_info, validation_psnrs):
-    model_inits = self.args.model_initializations
+    model_inits = self.args.keep_initializations
     new_model_id = mutation_task_info.model_id 
 
     best_psnr = max(validation_psnrs)
@@ -296,6 +301,10 @@ class Searcher():
       new_model_entry[f"psnr_{model_init}"] = validation_psnrs[model_init]
 
     self.model_database.add(new_model_id, new_model_entry)
+
+  def update_perf_database(self, model_id, cost, train_time):
+    entry = {"model_id": model_id, "cost": cost, "train_time": train_time}
+    self.perf_database.add(model_id, entry)
 
 
   def load_model(self, model_id):
@@ -430,112 +439,83 @@ class Searcher():
         return new_models
 
 
-  def create_train_process(self, mutation_task_info, gpu_ids, validation_psnrs, train_data, val_data):
-    model_id = mutation_task_info.model_id
-    task_id = mutation_task_info.task_id
-    #gpu_id = mutation_task_info.gpu_mapping
-    model_dir = mutation_task_info.model_dir 
-    models = mutation_task_info.models
+  def create_worker(self, worker_id, validation_psnrs):
+    gpu_id = worker_id
+    worker = mp.Process(target=run_train, args=(self.work_queue, worker_id, self.pending_start_times, self.pending_tasks, self.pending_locks[worker_id], \
+                                              self.finished_tasks, gpu_id, self.args, validation_psnrs, self.log_format, self.work_loggers[worker_id]))
+    return worker
 
-    p = mp.Process(target=init_process, args=(task_id, run_train, self.args, gpu_ids, model_id, models, model_dir, \
-                                              validation_psnrs, train_data, val_data, self.log_format, self.task_logger))
-    return p
 
-  def run_training_tasks(self, gpu_ids, process_queue, validation_psnrs, train_data, val_data):
+  def monitor_training_tasks(self, validation_psnrs):
     timeout = self.args.train_timeout
     if self.args.ram:
-      bootup_time = 1200
+      bootup_time = 300
     else:
       bootup_time = 30
-    available_gpus = set([i for i in range(self.args.num_gpus)])
-    running_processes = {}
-    start_times = {}
-    restarted = set()
-    failed = set()
+    
+    alive = set()
+    failed_tasks = []
+    for wid, worker in enumerate(self.workers):
+      worker.start()
+      alive.add(wid)
 
+    tick = 0
     while True:
-      if process_queue.is_empty() and len(running_processes) == 0:
-        self.task_logger.info("No more processes to run, stopping training task")
+      if tick % 6 == 0:
+        self.work_manager_logger.info(f"alive workers: {alive}")
+        print(f"work queue size {self.work_queue.qsize()}")
+
+      if self.work_queue.empty():
+        self.work_manager_logger.info("No more models in work queue, waiting for all tasks to complete")
+
+      for wid, worker in enumerate(self.workers): 
+        if not worker.is_alive() and (wid in alive):
+          worker.join()
+          alive.remove(wid)
+          self.work_manager_logger.info(f"worker {wid} is dead with exit code {worker.exitcode}")
+
+          pending_task = self.pending_tasks[wid]
+          failed_tasks.append(pending_task)
+
+        else: # check if worker has run out of time on current task
+          self.pending_locks[wid].acquire()
+          start_time = self.pending_start_times[wid]
+          task_id = self.pending_tasks[wid]
+
+          if start_time >= 0 and task_id >= 0:
+            curr_time = time.time()
+
+            terminated = False 
+            if curr_time - start_time > bootup_time:
+              if not os.path.exists(f"{self.training_tasks[task_id].model_dir}/v0_train_log"):
+                self.work_manager_logger.info(f"worker {wid} running task {task_id} has no 'v0_train_log', terminating")
+                worker.terminate()
+                worker.join()
+                terminated = True
+
+            if curr_time - start_time > timeout:
+              self.work_manager_logger.info(f"worker {wid} timed out, killing at {datetime.datetime.now()}")
+              worker.terminate()
+              worker.join()
+              terminated = True
+
+            if terminated:
+              failed_tasks.append(task_id)
+              new_worker = self.create_worker(wid, validation_psnrs)
+              new_worker.start()
+              self.workers[wid] = new_worker
+          
+          self.pending_locks[wid].release()
+      
+      if len(alive) == 0:
+        assert self.work_queue.empty(), "all workers are dead with work left in the queue"
+        self.work_manager_logger.info("All tasks are done")
         break
 
-      # check for finished tasks and kill any that have exceeded timemout
-      running_tasks = [tid for tid in running_processes.keys()]
-      self.task_logger.info(f"running tasks {running_tasks}")
-      for task_id in running_tasks:
-        task, task_info = running_processes[task_id]
+      time.sleep(10)
+      tick += 1
 
-        # check if process is done
-        if not task.is_alive():
-          self.task_logger.info(f"task {task_id} model_id {task_info.model_id} process name {task.name} is finished on time")
-          self.task_logger.info(f"tasks still in queue {[tid for tid, t in process_queue.queue]}, joining task {task_id}")
-          task.join()
-          # mark the GPU it used as free
-          self.task_logger.info(
-              f"joined completed task {task_id}, freeing up gpu {gpu_ids[task_id]}")
-          available_gpus.add(gpu_ids[task_id])
-          del running_processes[task_id]
-
-        else: # task is still alive, check if it timed out
-          curr_time = time.time()
-          start_time = start_times[task_id]
-          if curr_time - start_time > timeout:
-            self.task_logger.info(f"task {task_id} model_id {task_info.model_id} process name {task.name} timed out, killing at {datetime.datetime.now()}")
-            task.terminate()
-            self.task_logger.info(f"joining after termination of task {task_id}")
-            task.join()
-            # mark the GPU it used as free
-            self.task_logger.info(
-                f"joined after killing task {task_id}, freeing up gpu {gpu_ids[task_id]}")
-            available_gpus.add(gpu_ids[task_id])
-            del running_processes[task_id]
-      
-          # check if task ran into issues starting up and needs to be restarted
-          if curr_time - start_time > bootup_time:
-            if not os.path.exists(f"{task_info.model_dir}/v0_train_log"):
-              self.task_logger.info(
-                  f"task {task_id} has no 'v0_train_log', terminating")
-              task.terminate()
-              self.task_logger.info(f"joining after termination of task {task_id}")
-              task.join()
-              self.task_logger.info(
-                  f"joined after killing task {task_id}")
-              if not task_id in restarted:
-                self.task_logger.info(f"task {task_id} model_id {task_info.model_id} process name {task.name} " +
-                                      f"unresponsive, restarting on gpu {gpu_ids[task_id]}...")
-                new_task = self.create_train_process(task_info, gpu_ids, validation_psnrs, train_data, val_data)
-                new_task.start()
-                start_times[task_id] = time.time()
-                restarted.add(task_id)
-              else: # we've already failed to restart this task, give up 
-                self.task_logger.info(
-                    f"task {task_id} failed to restart, deleting process")
-                failed.add(task_id)
-                available_gpus.add(gpu_ids[task_id])
-                del running_processes[task_id]
-      
-      self.task_logger.info(f"available_gpus {available_gpus}")
-
-      # fill up any available gpus
-      available_gpu_list = [g for g in available_gpus]
-      for available_gpu in available_gpu_list:
-        if process_queue.is_empty():
-          self.task_logger.info("process queue is empty, no job to start")
-          break
-        self.task_logger.info("taking task from queue")
-        task, task_info = process_queue.take()
-        task_id = task_info.task_id
-        self.task_logger.info(f"took task {task_id}")
-        gpu_ids[task_id] = available_gpu
-        self.task_logger.info(f"starting task {task_id} model_id {task_info.model_id} on gpu {available_gpu}")
-        task.start()
-        running_processes[task_id] = (task, task_info)
-        start_times[task_id] = time.time()
-        available_gpus.remove(available_gpu)
-        self.task_logger.info(f"added new task {task_id}, available_gpus: {available_gpus}")
-
-      time.sleep(30)
-
-    return failed 
+    return failed_tasks
 
 
   def save_model_ast(self, model_ast, model_id, model_dir):
@@ -639,7 +619,7 @@ class Searcher():
       end_generation = self.args.generations 
 
     self.search_logger.info(f"--- STARTING SEARCH AT GENERATION {start_generation} AND ENDING AT {end_generation} ---")
-
+      
     for generation in range(start_generation, end_generation):
       generational_tier_sizes = [len(tier.items()) for tier in cost_tiers.tiers]
       if self.args.restart_generation and (generation == self.args.restart_generation):
@@ -654,7 +634,16 @@ class Searcher():
 
       generation_stats = GenerationStats()
     
-      new_cost_tiers = copy.deepcopy(cost_tiers) 
+      new_cost_tiers = copy.deepcopy(cost_tiers)
+
+      task_id = 0
+      self.training_tasks = {}
+      validation_psnrs = mp.Array(ctypes.c_double, [-1]*self.models_per_gen)
+      self.finished_tasks = mp.Array(ctypes.c_double, [-1]*self.models_per_gen)
+      self.pending_start_times = mp.Array(ctypes.c_double, [-1]*self.num_workers)
+      self.pending_tasks = mp.Array(ctypes.c_double, [-1]*self.num_workers)
+
+      self.workers = [self.create_worker(worker_id, validation_psnrs) for worker_id in range(self.num_workers)]
 
       for tid, tier in enumerate(cost_tiers.tiers):
         if self.args.restart_generation and (generation == self.args.restart_generation) and (tid < self.args.restart_tier):
@@ -668,22 +657,14 @@ class Searcher():
           tier_sampler = cost.Sampler(tier)
 
         self.search_logger.info(f"\n--- sampling tier {tid} size: {len(tier)} min psnr: {tier_sampler.min} max psnr: {tier_sampler.max} ---")
-        
-        process_queue = ProcessQueue()
 
         # importance sample which models from each tier to mutate based on PSNR
         model_ids = [tier_sampler.sample() for mutation in range(self.args.mutations_per_generation)]
         mutation_batch_info = MutationBatchInfo() # we'll store results from this mutation batch here          
-        training_tasks = []
-
-        size = len(model_ids) * self.args.model_initializations
-        valid_psnrs = mp.Array(ctypes.c_double, [-1]*size)
-        gpu_ids = mp.Array(ctypes.c_int, [-1]*len(model_ids))
-        train_data = preload_dataset(self.args.training_file)
-        val_data = preload_dataset(self.args.validation_file)
-
-        for task_id, model_id in enumerate(model_ids):
+       
+        for model_id in model_ids:
           self.search_logger.info(f"loading model {model_id}")
+
           model_ast = self.load_model(model_id)
           if model_ast is None:
             continue
@@ -704,18 +685,13 @@ class Searcher():
           if new_model_ast is None:
             continue
 
-          """
-          HACK: print new asts to check mutation is deterministic
-          """
-          print(f"model {new_model_id} hash: {hash(new_model_ast)}")
-          print("------------------")
+          print(f"model {new_model_id} hash: {hash(new_model_ast)}\n------------------")
 
           if self.args.full_model:
             self.insert_green_model(new_model_ast)
 
           pytorch_models = self.lower_model(new_model_id, new_model_ast)
-          if pytorch_models is None:
-            continue
+          print(sys.getsizeof(pytorch_models[0])/1000)
 
           # green model must be inserted before computing cost if we're running full model search
           compute_cost = self.evaluator.compute_cost(new_model_ast)
@@ -726,10 +702,13 @@ class Searcher():
           new_model_dir = self.model_manager.model_dir(new_model_id)
           new_model_entry = model_database_entry(new_model_id, new_model_ast.id_string(), new_model_ast, \
                                                 shash, generation, compute_cost, model_id, mutation_stats)
-
+          
           task_info = MutationTaskInfo(task_id, new_model_entry, new_model_dir, pytorch_models, new_model_id)
+          subproc_task_info = {"task_id":task_id, "model_dir":new_model_dir, "models":pytorch_models, "model_id":new_model_id}
 
-          # consult mysql db for seen models on other machines
+          util.create_dir(task_info.model_dir)
+          self.save_model_ast(new_model_ast, task_info.model_id, task_info.model_dir)
+
           """
           seen_psnrs = mysql_db.find(self.args.mysql_auth, self.args.tablename, hash(new_model_ast), \
                                       new_model_ast.id_string(), self.args.experiment_name, self.mysql_logger)
@@ -738,63 +717,56 @@ class Searcher():
           if not seen_psnrs is None: # model seen on other machine, skip training and use the given psnrs
             self.search_logger.info(f"model {new_model_id} already seen on another machine")
             self.update_model_database(task_info, seen_psnrs)
-
-            util.create_dir(task_info.model_dir)
-            self.save_model_ast(new_model_ast, task_info.model_id, task_info.model_dir)
-
             best_psnr = max(seen_psnrs)
             if math.isnan(best_psnr) or best_psnr < 0:
               continue # don't add model to tier
             compute_cost = task_info.database_entry["compute_cost"]
             new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
           else:
-            training_tasks.append((new_model_ast, task_info))
+            print(f"PUTTING TASK {task_id}")
+            self.work_queue.put(subproc_task_info)
+            self.training_tasks[task_id] = task_info
+            task_id += 1
+        
+      for w in range(self.num_workers):
+        self.work_queue.put(None) # place sentinels telling workers to exit
 
-        # hack for now remove later
-        for new_model_ast, task_info in training_tasks:
-          util.create_dir(task_info.model_dir)
-          self.save_model_ast(new_model_ast, task_info.model_id, task_info.model_dir)
+      failed_tasks = self.monitor_training_tasks(validation_psnrs)
 
-        for ast, task_info in training_tasks:
-          task = self.create_train_process(task_info, gpu_ids, valid_psnrs, train_data, val_data)
-          process_queue.add((task, task_info))
+      print("finished tasks")
+      # update model database 
+      for task_id, task_time in enumerate(self.finished_tasks):
+        if task_time < 0: 
+          continue # this task was not run
+        task_info = self.training_tasks[task_id]
+        task_id = task_info.task_id 
+        print(f"task_id {task_id} task id in task info: {task_info.task_id} model id {task_info.model_id}")
 
-        failed_tasks = self.run_training_tasks(gpu_ids, process_queue, valid_psnrs, train_data, val_data)
+        index = task_id * self.args.keep_initializations
+        model_psnrs = validation_psnrs[index:(index+self.args.keep_initializations)]
+ 
+        if self.args.deterministic:
+          model_psnrs = [random.uniform(0,1) * (33 - 28) + 28 for i in range(args.keep_initializations)]
 
-        # update model database 
-        for new_model_ast, task_info in training_tasks:
-          model_inits = self.args.model_initializations
-          task_id = task_info.task_id 
-          index = task_id * model_inits
+        # add model to cost tiers
+        best_psnr = max(model_psnrs)
+        if math.isnan(best_psnr) or best_psnr < 0:
+          continue # don't add model to tier 
 
-          model_psnrs = valid_psnrs[index:(index+model_inits)]
+        self.search_logger.info(f"adding model {task_info.model_id} with psnrs {model_psnrs} to db")
 
-          if self.args.deterministic:
-            model_psnrs = [random.uniform(0,1) * (33 - 28) + 28 for i in range(args.model_initializations)]
-          print(f"model {task_info.model_id} psnrs {model_psnrs}")
+        compute_cost = task_info.database_entry["compute_cost"]
+        new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
+        
+        self.update_model_database(task_info, model_psnrs)
+        self.update_perf_database(task_info.model_id, compute_cost, task_time)
+        """
+        mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
+                              self.args.save, self.args.experiment_name, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
+        """
 
-          self.update_model_database(task_info, model_psnrs)
-
-          # training subprocess handles saving the model weights - save the ast here in the master process
-          success = self.save_model_ast(new_model_ast, task_info.model_id, task_info.model_dir)
-          if not success:
-            continue
-
-          # if model weights and ast were successfully saved, add model to cost tiers
-          best_psnr = max(model_psnrs)
-          if math.isnan(best_psnr) or best_psnr < 0:
-            continue # don't add model to tier 
-
-          self.search_logger.info(f"adding model {task_info.model_id} with psnrs {model_psnrs} to db")
-
-          compute_cost = task_info.database_entry["compute_cost"]
-          new_cost_tiers.add(task_info.model_id, compute_cost, best_psnr)
-          """
-          mysql_db.mysql_insert(self.args.mysql_auth, self.args.tablename, task_info.model_id, self.args.machine, \
-                                self.args.save, self.args.experiment_name, hash(new_model_ast), new_model_ast.id_string(), model_psnrs, self.mysql_logger)
-          """
-        self.model_database.save()
-        new_cost_tiers.save_snapshot(generation, tid)
+      self.model_database.save()
+      new_cost_tiers.save_snapshot(generation, tid)
         
       if self.args.pareto_sampling:
         new_cost_tiers.pareto_keep_topk(tier_size)
@@ -812,7 +784,7 @@ class Searcher():
       print(f"number of killed mutations {generation_stats.generational_killed} caused by:")
       print(f"seen_rejections {generation_stats.seen_rejections} prune_rejections {generation_stats.pruned_mutations}" 
             + f" structural_rejections {generation_stats.structural_rejections} failed_mutations {generation_stats.failed_mutations}")
-
+  
     print(f"downsample\ntries: {self.mutator.binop_tries} loc select fails {self.mutator.binop_loc_selection_failures} \
         insert fail {self.mutator.binop_insertion_failures} reject {self.mutator.binop_rejects} success {self.mutator.binop_success} seen {self.mutator.binop_seen}")
 
@@ -853,7 +825,9 @@ if __name__ == "__main__":
   parser.add_argument('--model_path', type=str, default='models', help='path to save the models')
   parser.add_argument('--model_database_dir', type=str, default='model_database', help='path to save model statistics')
   parser.add_argument('--failure_database_dir', type=str, default='failure_database', help='path to save mutation failure statistics')
+  parser.add_argument('--performance_database_dir', type=str, default='performance_database', help='path to save system training time performance')
   parser.add_argument('--tier_database_dir', type=str, default='cost_tier_database', help='path to save cost tier snapshot')
+
   parser.add_argument('--restart_generation', type=int, help='generation to start search from if restarting a prior run')
   parser.add_argument('--restart_tier', type=int, help='tier to start search from if restarting a prior run')
   parser.add_argument('--tier_snapshot', type=str, help='saved cost tiers to restart from')
@@ -865,6 +839,7 @@ if __name__ == "__main__":
   parser.add_argument('--seed', type=int, default=1, help='random seed')
   parser.add_argument('--deterministic', action='store_true', help="set model psnrs to be deterministic")
   parser.add_argument('--ram', action='store_true')
+  parser.add_argument('--lazyram', action='store_true')
 
   # seed models 
   parser.add_argument('--green_seed_model_files', type=str, help='file with list of filenames of green seed model asts')
@@ -895,13 +870,14 @@ if __name__ == "__main__":
   parser.add_argument('--load_timeout', type=int, default=10)
   parser.add_argument('--mutate_timeout', type=int, default=60)
   parser.add_argument('--lowering_timeout', type=int, default=10)
-  parser.add_argument('--train_timeout', type=int, default=2400)
+  parser.add_argument('--train_timeout', type=int, default=600)
   parser.add_argument('--save_timeout', type=int, default=10)
 
   # training parameters
   parser.add_argument('--num_gpus', type=int, default=4, help='number of available GPUs') # change this to use all available GPUs
   parser.add_argument('--batch_size', type=int, default=64, help='batch size')
   parser.add_argument('--learning_rate', type=float, default=0.01, help='initial learning rate')
+  parser.add_argument('--lrsearch', action='store_true', help='whether or not to use lr search')
   parser.add_argument('--lr_search_steps', type=int, default=1, help='how many line search iters for finding learning rate')
   parser.add_argument('--variance_min', type=float, default=0.003, help='minimum validation psnr variance')
   parser.add_argument('--variance_max', type=float, default=0.02, help='maximum validation psnr variance')
@@ -909,7 +885,9 @@ if __name__ == "__main__":
   parser.add_argument('--report_freq', type=float, default=200, help='training report frequency')
   parser.add_argument('--save_freq', type=float, default=2000, help='trained weights save frequency')
   parser.add_argument('--epochs', type=int, default=3, help='num of training epochs')
-  parser.add_argument('--model_initializations', type=int, default=3, help='number of weight initializations to train per model')
+  parser.add_argument('--model_initializations', type=int, default=3, help='number of initializations to train per model for the first epoch')
+  parser.add_argument('--keep_initializations', type=int, default=1, help='how many initializations to keep per model after the first epoch')
+
   parser.add_argument('--train_portion', type=int, default=1e5, help='portion of training data to use')
   parser.add_argument('--training_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of training data image files')
   parser.add_argument('--validation_file', type=str, default="/home/karima/cnn-data/sample_files.txt", help='filename of file with list of validation data image files')
@@ -931,18 +909,13 @@ if __name__ == "__main__":
 
   args = parser.parse_args()
 
-  if not torch.cuda.is_available():
-    print("CUDA not found, aborting job.")
-    sys.exit(1)
+  # if not torch.cuda.is_available():
+  #   print("CUDA not found, aborting job.")
+  #   sys.exit(1)
 
   random.seed(args.seed)
   np.random.seed(args.seed)
-  cudnn.benchmark = False
   torch.manual_seed(args.seed)
-
-  cudnn.enabled=True
-  # cudnn.deterministic=True
-  torch.cuda.manual_seed(args.seed)
 
   if args.full_model:
     args.seed_model_files = args.chroma_seed_model_files

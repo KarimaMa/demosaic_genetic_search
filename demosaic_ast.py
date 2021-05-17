@@ -1,4 +1,4 @@
-"""
+f"""
 TODO:
   ADD GREEN AND CHROMA EXTRACTORS
 """
@@ -7,7 +7,8 @@ from tree import Node, has_loop, hash_combine
 import copy
 import sys
 import pickle
-
+from orderedset import OrderedSet
+from inspect import signature
 
 # from a github gist by victorlei
 def extclass(cls):
@@ -86,6 +87,10 @@ class UnopIIdiv(Unop):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
 
+class UnopIJFixed(Unop):
+  def __init__(self):
+    assert False, "Do not try to instantiate abstract expressions"
+
 class Const(ABC):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
@@ -102,11 +107,21 @@ class Special(ABC):
   def __init__(self):
     assert False, "Do not try to instantiate abstract expressions"
 
+"""----------------------------------------------------------------------"""
+
+class Upsample(Unop, Special, Node):
+  def __init__(self):
+    assert False, "Do not try to instantiate abstract expressions"
+
+class Downsample(Unop, Special, Node):
+  def __init__(self):
+    assert False, "Do not try to instantiate abstract expressions"
+
 
 """----------------------------------------------------------------------"""
 
 class Input(Const, Special, Node):
-  def __init__(self, out_c, name=None, node=None, no_grad=None, green_model_id=None):
+  def __init__(self, out_c, resolution=None, name=None, node=None, no_grad=None, green_model_id=None):
     if node:
       if name is None:
         name = node.name
@@ -121,11 +136,12 @@ class Input(Const, Special, Node):
       self.no_grad = no_grad
 
     Node.__init__(self, "Input({})".format(name), 0)
+    self.resolution = resolution
     self.in_c = out_c
     self.out_c = out_c 
 
 class Add(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "Add"
     Node.__init__(self, name, 2)
@@ -133,9 +149,10 @@ class Add(BinopIII, Special, Node):
     self.rchild = rchild
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Sub(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "Sub"
     Node.__init__(self, name, 2)
@@ -143,9 +160,10 @@ class Sub(BinopIII, Special, Node):
     self.rchild = rchild
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Mul(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "Mul"
     Node.__init__(self, name, 2)
@@ -153,9 +171,10 @@ class Mul(BinopIII, Special, Node):
     self.rchild = rchild
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class LogSub(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "LogSub"
     Node.__init__(self, name, 2)
@@ -163,9 +182,10 @@ class LogSub(BinopIII, Special, Node):
     self.rchild = rchild
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class AddExp(BinopIII, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "AddExp"
     Node.__init__(self, name, 2)
@@ -173,9 +193,10 @@ class AddExp(BinopIII, Special, Node):
     self.rchild = rchild
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Stack(BinopIJK, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "Stack"
     Node.__init__(self, name, 2)
@@ -183,13 +204,14 @@ class Stack(BinopIJK, Special, Node):
     self.rchild = rchild
     self.out_c = None
     self.in_c = None 
+    self.resolution = resolution
     
 
 # Takes FullGreenQuad predction, RedBlueQuad from Bayer, and 
 # 6 channel chroma quad prection: R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
 # spits out full RGB Image at full resolution
 class RGBExtractor(TernaryHcIcJcKc, Special, Node):
-  def __init__(self, child1, child2, child3, name=None):
+  def __init__(self, child1, child2, child3, resolution=None, name=None):
     if name is None:
       name = "RGBExtractor"
     Node.__init__(self, name, 3)
@@ -198,6 +220,7 @@ class RGBExtractor(TernaryHcIcJcKc, Special, Node):
     self.child3 = child3
     self.in_c = (4, 2, 6) # fullgreen, redbluebayer, missing chroma
     self.out_c = 3
+    self.resolution = resolution
 
   def Hc(self):
     return 4 # fullgreen
@@ -209,10 +232,74 @@ class RGBExtractor(TernaryHcIcJcKc, Special, Node):
     return 3 # full rgb image
 
 
+class XRGBExtractor(TernaryHcIcJcKc, Special, Node):
+  def __init__(self, child1, child2, child3, resolution=None, name=None):
+    if name is None:
+      name = "XRGBExtractor"
+    Node.__init__(self, name, 3)
+    self.child1 = child1
+    self.child2 = child2
+    self.child3 = child3
+    self.in_c = (36, 36, 56) # fullgreen, redbluebayer, missing chroma
+    self.out_c = 3
+    self.resolution = resolution
+
+  def Hc(self):
+    return 36 # fullgreen
+  def Ic(self):
+    return 36 #  xtrans
+  def Jc(self):
+    return 56 # missing chroma
+  def Kc(self): 
+    return 3 # full rgb image
+
+class XFlatRGBExtractor(TernaryHcIcJcKc, Special, Node):
+  def __init__(self, child1, child2, child3, resolution=None, name=None):
+    if name is None:
+      name = "XFlatRGBExtractor"
+    Node.__init__(self, name, 3)
+    self.child1 = child1
+    self.child2 = child2
+    self.child3 = child3
+    self.in_c = (1, 3, 2) # flat green, xtrans 3 channel, chroma pred 
+    self.out_c = 3
+    self.resolution = resolution
+
+  def Hc(self):
+    return 1 # fullgreen
+  def Ic(self):
+    return 3 #  xtrans
+  def Jc(self):
+    return 2 # missing chroma
+  def Kc(self): 
+    return 3 # full rgb image
+
+
+class RGBSuperResExtractor(BinopIcJcKc, Special, Node):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
+    if name is None:
+      name = "RGBSuperResExtractor"
+    Node.__init__(self, name, 2)
+    self.lchild = lchild
+    self.rchild = rchild
+    self.in_c = (1, 2) # green, red and blue
+    self.out_c = 3
+    self.resolution = resolution
+
+  def Ic(self):
+    return 1 # superres green
+  def Jc(self):
+    return 2 # missing chroma
+  def Kc(self): 
+    return 3 # full rgb image
+
+
+
+
 # Takes bayer quad, 8 channel predction
 # spits out full RGB Image at full resolution
 class RGB8ChanExtractor(BinopIcJcKc, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "RGB8ChanExtractor"
     Node.__init__(self, name, 2)
@@ -220,6 +307,7 @@ class RGB8ChanExtractor(BinopIcJcKc, Special, Node):
     self.rchild = rchild
     self.in_c = (4, 8) # bayer quad, 8 channel prediction
     self.out_c = 3
+    self.resolution = resolution
 
   def Ic(self):
     return 4 
@@ -234,7 +322,7 @@ Takes BayerQuad and 2 channel green prediction
 Spits out full Green image at full resolution  
 """
 class GreenExtractor(BinopIcJcKc, Special, Node):
-  def __init__(self, lchild, rchild, name=None):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
     if name is None:
       name = "GreenExtractor"
     Node.__init__(self, name, 2)
@@ -242,6 +330,8 @@ class GreenExtractor(BinopIcJcKc, Special, Node):
     self.rchild = rchild
     self.in_c = (4, 2) # bayer, missing green
     self.out_c = 1 # output G channel
+    self.resolution = resolution
+  
   def Ic(self):
     return 4
   def Jc(self):
@@ -250,85 +340,224 @@ class GreenExtractor(BinopIcJcKc, Special, Node):
     return 1
 
 
+"""
+Xtrans extractor for green channel 
+16 missing green values per 36 mosaic values
+"""
+class XGreenExtractor(BinopIcJcKc, Special, Node):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
+    if name is None:
+      name = "XGreenExtractor"
+    Node.__init__(self, name, 2)
+    self.lchild = lchild
+    self.rchild = rchild
+    self.in_c = (36, 16) # bayer, missing green
+    self.out_c = 1
+    self.resolution = resolution
+ 
+  def Ic(self):
+    return 36
+  def Jc(self):
+    return 16
+  def Kc(self):
+    return 1
+
+
+class XFlatGreenExtractor(BinopIcJcKc, Special, Node):
+  def __init__(self, lchild, rchild, resolution=None, name=None):
+    if name is None:
+      name = "XFlatGreenExtractor"
+    Node.__init__(self, name, 2)
+    self.lchild = lchild
+    self.rchild = rchild
+    self.in_c = (3, 1) # bayer, missing green
+    self.out_c = 1
+    self.resolution = resolution
+  
+  def Ic(self):
+    return 3
+  def Jc(self):
+    return 1
+  def Kc(self):
+    return 1
+
+
 class Flat2Quad(UnopIcJc, Special, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "Flat2Quad"
     Node.__init__(self, name, 1)
     self.child = child
     self.in_c = 1
     self.out_c = 4 
+    self.resolution = resolution
+  
   def Ic(self):
     return 1
   def Jc(self):
     return 4
 
 class GreenRBExtractor(UnopIcJc, Special, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "GreenRBExtractorOp"
     Node.__init__(self, name, 1)
     self.child = child
     self.in_c = 1
     self.out_c = 2
+    self.resolution = resolution
+  
   def Ic(self):
     return 1
   def Jc(self):
     return 2
+
+class XGreenRBExtractor(UnopIcJc, Special, Node):
+  def __init__(self, child, resolution=None, name=None):
+    if name is None:
+      name = "XGreenRBExtractorOp"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.in_c = 1
+    self.out_c = 16
+    self.resolution = resolution
+  
+  def Ic(self):
+    return 1
+  def Jc(self):
+    return 16
+ 
  
 class Softmax(UnopII, NonLinear, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "Softmax"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Relu(UnopII, NonLinear, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "Relu"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Log(UnopII, NonLinear, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "Log"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Exp(UnopII, NonLinear, Node):
-  def __init__(self, child, name=None):
+  def __init__(self, child, resolution=None, name=None):
     if name is None:
       name = "Exp"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
-class Downsample(UnopII, Special, Node):
-  def __init__(self, child, name=None):
+class LearnedDownsample(UnopIJ, Downsample):
+  def __init__(self, child, out_c:int, factor=None, groups=1, resolution=None, name=None):
     if name is None:
-      name = "Downsample"
+      name = "LearnedDownsample"
     Node.__init__(self, name, 1)
     self.child = child
-    self.out_c = None
+    self.factor = factor
+    self.out_c = out_c
     self.in_c = None
+    self.groups = groups
+    self.resolution = resolution
 
-class Upsample(UnopII, Special, Node):
-  def __init__(self, child, name=None):
+
+class PeriodicConv(UnopIJFixed, Special, Node):
+  def __init__(self, child, out_c:int, period=None, kwidth=3, resolution=None, name=None):
     if name is None:
-      name = "Upsample"
+      name = "PeriodicConv"
     Node.__init__(self, name, 1)
     self.child = child
+    self.period = period
+    self.kwidth = kwidth
+    self.out_c = out_c
+    self.in_c = None  
+    self.resolution = resolution
+
+
+class Pack(UnopIJFixed, Downsample):
+  def __init__(self, child, factor=None, resolution=None, name=None):
+    if name is None:
+      name = "Pack"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.factor = factor
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
+
+class LearnedPack(UnopIJFixed, Special, Node):
+  def __init__(self, child, factor=None, resolution=None, name=None):
+    if name is None:
+      name = "LearnedPack"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.factor = factor
+    self.out_c = None
+    self.in_c = None
+    self.resolution = resolution
+
+class Unpack(UnopIJFixed, Upsample):
+  def __init__(self, child, factor=None, resolution=None, name=None):
+    if name is None:
+      name = "Unpack"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.factor = factor
+    self.out_c = None
+    self.in_c = None
+    self.resolution = resolution
+
+"""
+Fixed Upsample op, no learned parameters
+"""
+class BilinearUpsample(UnopII, Upsample):
+  def __init__(self, child, factor=None, resolution=None, name=None):
+    if name is None:
+      name = "BilinearUpsample"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.factor = factor
+    self.out_c = None
+    self.in_c = None
+    self.resolution = resolution
+
+"""
+Scale factor cannot be mutated, thus the output channels is 
+a fixed function of the input channels, specifically, 
+out_c = in_c / factor^2
+Grouping can be changed since this is implemented with a transposed conv
+"""
+class LearnedUpsample(UnopIJ, Upsample):
+  def __init__(self, child, out_c: int, factor=None, groups=1, resolution=None, name=None):
+    if name is None:
+      name = "LearnedUpsample"
+    Node.__init__(self, name, 1)
+    self.child = child
+    self.factor = factor
+    self.groups = groups 
+    self.out_c = out_c
+    self.in_c = None
+    self.resolution = resolution
 
 class FastUpsample(UnopII, Special, Node):
   def __init__(self, child, name=None):
@@ -338,9 +567,10 @@ class FastUpsample(UnopII, Special, Node):
     self.child = child
     self.out_c = None
     self.in_c = None
+    self.resolution = resolution
 
 class Conv1x1(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int, groups=1, name=None):
+  def __init__(self, child, out_c: int, groups=1, resolution=None, name=None):
     if name is None:
       name = "Conv1x1"
     Node.__init__(self, name, 1)
@@ -348,9 +578,10 @@ class Conv1x1(UnopIJ, Linear, Node):
     self.out_c = out_c
     self.in_c = None
     self.groups = groups
+    self.resolution = resolution
 
 class Conv1D(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int, groups=1, name=None, kwidth=3):
+  def __init__(self, child, out_c: int, groups=1, kwidth=3, resolution=None, name=None):
     if name is None:
       name = "Conv1D"
     Node.__init__(self, name, 1)
@@ -359,9 +590,10 @@ class Conv1D(UnopIJ, Linear, Node):
     self.kwidth = kwidth
     self.in_c = None
     self.groups = groups
+    self.resolution = resolution
 
 class Conv2D(UnopIJ, Linear, Node):
-  def __init__(self, child, out_c: int, groups=1, name=None, kwidth=3):
+  def __init__(self, child, out_c: int, groups=1, kwidth=3, resolution=None, name=None):
     if name is None:
       name = "Conv2D"
     Node.__init__(self, name, 1)
@@ -370,24 +602,27 @@ class Conv2D(UnopIJ, Linear, Node):
     self.kwidth = kwidth
     self.in_c = None
     self.groups = groups
+    self.resolution = resolution
 
 class InterleavedSum(UnopIIdiv, Special, Node):
-  def __init__(self, child, out_c: int, name=None):
+  def __init__(self, child, out_c: int, resolution=None, name=None):
     if name is None:
       name = "InterleavedSum"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = out_c
     self.in_c = None
+    self.resolution = resolution
 
 class GroupedSum(UnopIIdiv, Special, Node):
-  def __init__(self, child, out_c: int, name=None):
+  def __init__(self, child, out_c: int, resolution=None, name=None):
     if name is None:
       name = "GroupedSum"
     Node.__init__(self, name, 1)
     self.child = child
     self.out_c = out_c
     self.in_c = None
+    self.resolution = resolution
 
 
 @extclass(Input)
@@ -449,6 +684,26 @@ def compute_input_output_channels(self):
   self.child3.compute_input_output_channels()
   return self.in_c, self.out_c
 
+@extclass(XRGBExtractor)
+def compute_input_output_channels(self):
+  self.child1.compute_input_output_channels()
+  self.child2.compute_input_output_channels()
+  self.child3.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(XFlatRGBExtractor)
+def compute_input_output_channels(self):
+  self.child1.compute_input_output_channels()
+  self.child2.compute_input_output_channels()
+  self.child3.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(RGBSuperResExtractor)
+def compute_input_output_channels(self):
+  self.lchild.compute_input_output_channels()
+  self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
 @extclass(RGB8ChanExtractor)
 def compute_input_output_channels(self):
   self.lchild.compute_input_output_channels()
@@ -461,12 +716,29 @@ def compute_input_output_channels(self):
   self.rchild.compute_input_output_channels()
   return self.in_c, self.out_c
 
+@extclass(XGreenExtractor)
+def compute_input_output_channels(self):
+  self.lchild.compute_input_output_channels()
+  self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(XFlatGreenExtractor)
+def compute_input_output_channels(self):
+  self.lchild.compute_input_output_channels()
+  self.rchild.compute_input_output_channels()
+  return self.in_c, self.out_c
+
 @extclass(Flat2Quad)
 def compute_input_output_channels(self):
   self.child.compute_input_output_channels()
   return self.in_c, self.out_c
 
 @extclass(GreenRBExtractor)
+def compute_input_output_channels(self):
+  self.child.compute_input_output_channels()
+  return self.in_c, self.out_c
+
+@extclass(XGreenRBExtractor)
 def compute_input_output_channels(self):
   self.child.compute_input_output_channels()
   return self.in_c, self.out_c
@@ -499,11 +771,37 @@ def compute_input_output_channels(self):
   self.out_c = lout_c
   return self.in_c, self.out_c
 
-@extclass(Downsample)
+@extclass(LearnedDownsample)
+def compute_input_output_channels(self):
+  child_in_c, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
+  return self.in_c, self.out_c
+
+@extclass(PeriodicConv)
+def compute_input_output_channels(self):
+  _, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
+  return self.in_c, self.out_c
+
+@extclass(Pack)
 def compute_input_output_channels(self):
   _, lout_c = self.child.compute_input_output_channels()
   self.in_c = lout_c
-  self.out_c = lout_c
+  self.out_c = lout_c * self.factor**2
+  return self.in_c, self.out_c
+
+@extclass(LearnedPack)
+def compute_input_output_channels(self):
+  child_in_c, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
+  self.out_c = self.in_c * self.factor**2
+  return self.in_c, self.out_c
+
+@extclass(Unpack)
+def compute_input_output_channels(self):
+  _, lout_c = self.child.compute_input_output_channels()
+  self.in_c = lout_c
+  self.out_c = lout_c // self.factor**2
   return self.in_c, self.out_c
 
 @extclass(Upsample)
@@ -511,6 +809,12 @@ def compute_input_output_channels(self):
   _, lout_c = self.child.compute_input_output_channels()
   self.in_c = lout_c
   self.out_c = lout_c
+  return self.in_c, self.out_c
+
+@extclass(LearnedUpsample)
+def compute_input_output_channels(self):
+  child_in_c, child_out_c = self.child.compute_input_output_channels()
+  self.in_c = child_out_c
   return self.in_c, self.out_c
 
 @extclass(FastUpsample)
@@ -576,7 +880,7 @@ def structure_to_array(self):
       node_info["partner_set"] = partner_ids
 
     parents = []
-    seen_parents = set()
+    seen_parents = OrderedSet()
     if type(n.parent) is tuple:
       for node_parent in n.parent:
         for j in range(0, len(preorder)):
@@ -636,6 +940,12 @@ def structure_to_array(self):
     if hasattr(n, 'groups'):
       node_info["groups"] = n.groups
 
+    if hasattr(n, 'factor'):
+      node_info['factor'] = n.factor
+
+    if hasattr(n, 'resolution'):
+      node_info['resolution'] = n.factor
+
     if hasattr(n, 'node'):
       if hasattr(n, 'green_model_id'):
         node_info['green_model_id'] = n.green_model_id # only has meaning given the current search run's choice of green models
@@ -683,17 +993,18 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None, shared_i
         child_node = build_tree_from_data(children_ids[i], preorder_nodes, shared_children, shared_input_models)
       child_nodes.append(child_node)
 
-    if issubclass(node_class, UnopIJ) or issubclass(node_class, UnopIIdiv):
-      extra_kwargs = {}
-      if "kwidth" in node_info:
-        extra_kwargs["kwidth"] = node_info["kwidth"]
-      if "groups" in node_info:
-        extra_kwargs["groups"] = node_info["groups"]
-        
-      if len(extra_kwargs) > 0:
-        new_node = node_class(*child_nodes, node_info["out_c"], name=node_name, **extra_kwargs)
-      else:
-        new_node = node_class(*child_nodes, node_info["out_c"], name=node_name)
+    extra_kwargs = {}
+    if "kwidth" in node_info:
+      extra_kwargs["kwidth"] = node_info["kwidth"]
+    if "groups" in node_info:
+      extra_kwargs["groups"] = node_info["groups"]
+    if "factor" in node_info:
+      extra_kwargs["factor"] = node_info["factor"]
+    if "out_c" in node_info and "out_c" in signature(node_class).parameters: #(issubclass(node_class, UnopIJ) or issubclass(node_class, UnopIIdiv)):
+      extra_kwargs["out_c"] = node_info["out_c"]
+
+    if len(extra_kwargs) > 0:
+      new_node = node_class(*child_nodes, name=node_name, **extra_kwargs)
     else:
       new_node = node_class(*child_nodes, name=node_name)
 
@@ -714,6 +1025,9 @@ def build_tree_from_data(node_id, preorder_nodes, shared_children=None, shared_i
         extra_kwargs["node"] = input_ast
       if "no_grad" in node_info:
         extra_kwargs["no_grad"] = node_info["no_grad"]
+      if "resolution" in node_info:
+        extra_kwargs["resolution"] = node_info["resolution"]
+
     if len(extra_kwargs) > 0:
       new_node = node_class(node_info["in_c"], name=node_name, **extra_kwargs)
     else:
@@ -727,7 +1041,7 @@ def link_partners_in_reconstructed_tree(tree, preorder_node_info):
   for i, node_info in enumerate(preorder_node_info):
     if "partner_set" in node_info:
       partner_ids = node_info["partner_set"] # list of preorder ids of partners
-      partner_set = set([ (preorder[pid], id(preorder[pid])) for pid in partner_ids])
+      partner_set = OrderedSet([ (preorder[pid], id(preorder[pid])) for pid in partner_ids])
       preorder[i].partner_set = partner_set
 
 def load_ast(filename):
@@ -797,10 +1111,10 @@ def structural_hash(tree):
       h += 1 << i
 
   op_list = [Conv1x1, Conv1D, Conv2D, Softmax, Relu, Mul, Add, Sub, \
-            AddExp, LogSub, Stack, Upsample, Downsample, InterleavedSum, \
+            AddExp, LogSub, Stack, Upsample, LearnedDownsample, InterleavedSum, \
             GroupedSum, RGBExtractor, RGB8ChanExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input]
 
-  ops_used = set([type(n) for n in nodes])
+  ops_used = OrderedSet([type(n) for n in nodes])
   op_coverage = 0
   for i,o in enumerate(op_list):
     if o in ops_used:
@@ -876,14 +1190,14 @@ def redirect_to_new_partners(old_tree, new_tree):
   new_tree_preorder = new_tree.preorder()
   old_tree_ids = [id(n) for n in old_tree_preorder]
 
-  done = set()
+  done = OrderedSet()
   for new_node in new_tree_preorder:
     if id(new_node) in done:
       continue
     done.add(id(new_node))
     if hasattr(new_node, "partner_set"):
       found = False
-      new_node_partner_set = set()
+      new_node_partner_set = OrderedSet()
       for p in new_node.partner_set:
         if not p[1] in old_tree_ids: # partner of new node is not within the copied subtree -it's in the shared parent tree
           pass
@@ -892,7 +1206,7 @@ def redirect_to_new_partners(old_tree, new_tree):
           # new_node_partner = p
 
           # # remove all connections between partner node and old nodes 
-          # partners_of_new_node_partner = set()
+          # partners_of_new_node_partner = OrderedSet()
           # for item in new_node_partner[0].partner_set: 
           #   # nodes may have been modified since insertion into partner set
           #   # so we need to reproduce the set by rehashing the nodes
@@ -1020,9 +1334,9 @@ given opclasses.
 """
 def find_closest_parents(node, OpClasses):
   if any([issubclass(type(node), oc) for oc in OpClasses]):
-      return set( [ (node, id(node)) ] )
+      return OrderedSet( [ (node, id(node)) ] )
   if node.parent is None:
-    return set()
+    return OrderedSet()
   parent_type = type(node.parent)
   if parent_type is tuple:
     found_set1 = find_closest_parents(node.parent[0], OpClasses)
@@ -1038,7 +1352,7 @@ such a child, return the closest found in each branch
 """
 def find_closest_children(node, OpClasses):
   if any([issubclass(type(node), oc) for oc in OpClasses]):
-    return set( [(node, id(node))] )
+    return OrderedSet( [(node, id(node))] )
   if node.num_children == 3:
     found1 = find_closest_children(node.child1, OpClasses)
     found2 = find_closest_children(node.child2, OpClasses)
@@ -1050,42 +1364,46 @@ def find_closest_children(node, OpClasses):
     return lfound.union(rfound)
   elif node.num_children == 1:
     return find_closest_children(node.child, OpClasses)
-  return set()
+  return OrderedSet()
+
+
+"""
+returns whether ast has any learnable parameters
+"""
+@extclass(Node)
+def has_parameters(self):
+  learnables = [Conv1x1, Conv1D, Conv2D]
+  preorder = self.preorder()
+  for n in preorder:
+    if type(n) in learnables:
+      return True
+  return False
 
 
 # ops to choose from for insertion
-linear_insert_ops = set((Conv1x1, Conv1D, Conv2D))
-nonlinear_insert_ops = set((Relu,)) # only allow Softmax to be used with Mul insertion 
-#special_insert_ops = set((Mul, Add, Sub, Stack, Downsample, SumR, LogSub))
-special_insert_ops = set((Mul, Add, Sub, Stack, Downsample, InterleavedSum, GroupedSum))
+linear_insert_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
+nonlinear_insert_ops = OrderedSet((Relu,)) # only allow Softmax to be used with Mul insertion 
+special_insert_ops = OrderedSet((Mul, Add, Sub, Stack, InterleavedSum, GroupedSum))
 
-nl_sp_insert_ops = nonlinear_insert_ops.union(special_insert_ops)
-l_sp_insert_ops = linear_insert_ops.union(special_insert_ops)
-all_insert_ops = nl_sp_insert_ops.union(l_sp_insert_ops)
+downsample_ops = OrderedSet((LearnedDownsample, Pack))
+upsample_ops = OrderedSet((LearnedUpsample, BilinearUpsample, Unpack))
 
+all_insert_ops = linear_insert_ops | nonlinear_insert_ops | special_insert_ops
 
-linear_ops = set((Conv1x1, Conv1D, Conv2D))
-nonlinear_ops = set((Softmax, Relu)) 
-special_ops = set((Mul, Add, Sub, Stack, Upsample, Downsample, InterleavedSum, GroupedSum))
+linear_ops = OrderedSet((Conv1x1, Conv1D, Conv2D))
 
-"""
-special_ops = set((Mul, Add, Sub, AddExp, LogSub, Stack, Upsample, Downsample, SumR))
-sandwich_ops = set((LogSub, AddExp, Downsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
-sandwich_pairs = {
-  LogSub: AddExp,
-  Downsample: Upsample
-}
-"""
-sandwich_ops = set((Downsample, Upsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
+ops_with_changeable_channels = OrderedSet((LearnedDownsample, LearnedUpsample)) | linear_ops
+
+special_linear_ops = OrderedSet((LearnedUpsample, LearnedDownsample))
+nonlinear_ops = OrderedSet((Softmax, Relu)) 
+
+sandwich_ops = OrderedSet((LearnedDownsample, Upsample, Pack, Unpack, LearnedUpsample)) # ops that must be used with their counterparts (Exp, AddExp, Upsample)
 
 sandwich_pairs = {
-  Downsample: Upsample
+  LearnedDownsample: Upsample
 }
 
-border_ops = set((RGBExtractor, RGB8ChanExtractor, GreenExtractor, GreenRBExtractor, Flat2Quad, Input))
-nl_and_sp = nonlinear_ops.union(special_ops)
-l_and_sp = linear_ops.union(special_ops)
-all_ops = nl_and_sp.union(l_and_sp)
+border_ops = OrderedSet((RGBExtractor, XRGBExtractor, XFlatRGBExtractor, RGB8ChanExtractor, GreenExtractor, XGreenExtractor, XFlatGreenExtractor, GreenRBExtractor, XGreenRBExtractor, Flat2Quad, Input))
 
-demosaicnet_ops = set((Conv1x1, Conv2D, Relu))
+demosaicnet_ops = OrderedSet((Conv1x1, Conv2D, Relu))
 

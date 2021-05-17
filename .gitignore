@@ -10,3 +10,11 @@ log/*
 !log/.gitkeep
 log
 seed_model_files
+*.log
+*.json
+OLD_DATADUMP/*
+OLD_MODEL_SEARCHES/*
+MODEL_EXPERIMENTS/*
+*.tar
+*.sh
+ahd/*
