@@ -957,7 +957,9 @@ if __name__ == "__main__":
   parser.add_argument('--xtrans_green', action="store_true")  
   parser.add_argument('--superres_green', action="store_true")
   parser.add_argument('--superres_rgb', action="store_true")
-
+  parser.add_argument('--superres_only_green', action="store_true")
+  parser.add_argument('--superres_only_rgb', action="store_true")
+  
   parser.add_argument('--nas', action='store_true')
   parser.add_argument('--rgb8chan', action="store_true")
   parser.add_argument('--binop_change', action="store_true")
@@ -980,19 +982,15 @@ if __name__ == "__main__":
     args.seed_model_psnrs = args.chroma_seed_model_psnrs
     args.green_model_ast_files = [l.strip() for l in open(args.green_model_asts)]
     args.green_model_weight_files = [l.strip() for l in open(args.green_model_weights)]
-    args.task_out_c = 3
   elif args.rgb8chan:
     args.seed_model_files = args.rgb8chan_seed_model_files
     args.seed_model_psnrs = args.rgb8chan_seed_model_psnrs
-    args.task_out_c = 3
   elif args.nas:
     args.seed_model_files = args.nas_seed_model_files
     args.seed_model_psnrs = args.nas_seed_model_psnrs
-    args.task_out_c = 3
   else:
     args.seed_model_files = args.green_seed_model_files
     args.seed_model_psnrs = args.green_seed_model_psnrs
-    args.task_out_c = 1
 
   args.cost_tiers = parse_cost_tiers(args.cost_tiers)
   args.resolution_change_factors = [int(f) for f in args.resolution_change_factors.split(",")]
