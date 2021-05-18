@@ -236,7 +236,6 @@ if __name__ == "__main__":
   parser.add_argument('--superres_green', action="store_true")
   parser.add_argument('--superres_rgb', action="store_true")
   parser.add_argument('--superres_only', action="store_true")
-
   parser.add_argument('--gridsearch', action='store_true')
   parser.add_argument('--nas', action='store_true')
   parser.add_argument('--rgb8chan', action="store_true")

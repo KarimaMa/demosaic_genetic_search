@@ -6,67 +6,74 @@ import stat
 import htcondor
 
 VALID_MACHINES_V10 = [
-    "ilcomp4a",
     "ilcomp4c",
     "ilcomp4e",
+    "ilcomp5k",
     "ilcomp6a",
     "ilcomp6e",
-    "ilcomp6f",
     "ilcomp6r",
     "ilcomp6w",
     "ilcomp6x",
+    "ilcomp21",
     "ilcomp22",
     "ilcomp23",
     "ilcomp24",
     "ilcomp25",
+    "ilcomp27",
+    "ilcomp28",
+    "ilcomp36",
     "ilcomp39",
+    "ilcomp41",
+    "ilcomp42",
+    "ilcomp43",
     "ilcomp44",
+    "ilcomp46",
     "ilcomp49",
     "ilcomp64",
+    "ilcomp65",
 ]
-# BUGGY
-    # "ilcomp45",
-    # "ilcomp6m",
+# not v14
 
 # not v10
+    # "ilcomp26",
     # "ilcomp60",
     # "ilcomp4d",
     # "ilcomp6l",
 
+# not v10: driver mismatch
+    # "ilcomp56",
+    # "ilcomp54",
+    # "ilcomp50",
+
 # not tested
-    # "ilcomp21",
-    # "ilcomp27",
-    # "ilcomp28",
-    # "ilcomp29",
-    # "ilcomp31",
-    # "ilcomp36",
-    # "ilcomp41",
-    # "ilcomp42",
-    # "ilcomp43",
-    # "ilcomp46",
-    # "ilcomp65",
     # "ilcomp6y",
 
-# not v14
-    # "ilcomp26",
-    # "ilcomp5k",
-    # "ilcomp5l",
-    # "ilcomp5z",
+# BUGGY
+    # "ilcomp45",
+    # "ilcomp6m",
 
-#buggy: gather device 3
-# Error from slot4@ilcomp57.ilcomp: Error running docker job: linux runtime spec devices: error gathering device information while adding custom device '/dev/nvidia3': lstat /dev/nvidia3: no such file or directory
     # "ilcomp57",
     # "ilcomp6h",
+        # gather device 3
+        # Error from slot4@ilcomp57.ilcomp: Error running docker job: linux runtime spec devices: error gathering device information while adding custom device '/dev/nvidia3': lstat /dev/nvidia3: no such file or directory
 
-
-# 024 (12116473.013.000) 05/13 01:11:20 Job reconnection failed
-#     Job not found at execution machine
-#         Can not reconnect to slot4@ilcomp5y.ilcomp, rescheduling job
     # "ilcomp5y",
+        # 024 (12116473.013.000) 05/13 01:11:20 Job reconnection failed
+        #     Job not found at execution machine
+        #         Can not reconnect to slot4@ilcomp5y.ilcomp, rescheduling job
 
-
-    # Failed to open log
     # "ilcomp6n",
+    # "ilcomp5l",
+        # Failed to open log on "/mnt/ilcompf9d1/user/mgharbi"
+
+    # slot1@"ilcomp29",
+    # slot1@"ilcomp31",
+    # slot1@"ilcomp4a",
+    # slot3@"ilcomp5z",
+        # 007 (12116865.000.000) 05/17 16:47:23 Shadow exception!
+        # Error from slot3@ilcomp5z.ilcomp: Cannot start container: invalid image name: docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v10
+        # 0  -  Run Bytes Sent By Job
+        # 0  -  Run Bytes Received By Job
 
 VALID_MACHINES_V14 = [
     "ilcomp6b",

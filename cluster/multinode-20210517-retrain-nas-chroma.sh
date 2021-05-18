@@ -5,7 +5,7 @@ ROOT=/mnt/ilcompf9d1/user/mgharbi/code/karima
 CODE=$ROOT/demosaic_genetic_search
 
 RETRAIN_DATA=$ROOT/retrain_data/chroma-pareto-models/nas-05-13/
-RETRAIN_LIST=$RETRAIN_DATA/chroma-pareto-models/nas-05-13/model_ids.txt
+RETRAIN_LIST=$RETRAIN_DATA/model_ids.txt
 RETRAIN_LOGS=$ROOT/retrain_logs/nas-05-13
 
 let lineno=$1+1
