@@ -237,6 +237,7 @@ if __name__ == "__main__":
   parser.add_argument('--superres_rgb', action="store_true")
   parser.add_argument('--superres_only_green', action="store_true")
   parser.add_argument('--superres_only_rgb', action="store_true")
+  parser.add_argument('--superres_only', action="store_true")  # NOTE(mgharbi): 2021-05-18 added this for retrain job crashint in train.py:46
   parser.add_argument('--gridsearch', action='store_true')
   parser.add_argument('--nas', action='store_true')
   parser.add_argument('--rgb8chan', action="store_true")
