@@ -236,7 +236,7 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
   best_val_psnrs = [-1 for i in range(args.keep_initializations)]
 
   timed_out = False
-  start_time = time.time()
+  train_start_time = time.time()
 
   if model_id % 2 == 0:
     time.sleep(10)
@@ -248,11 +248,12 @@ def train_model(args, gpu_id, model_id, models, model_dir, experiment_logger, tr
         experiment_logger.info(f"after first epoch, validation psnrs {val_psnrs} keeping best model {model_index}")
     
     start_time = time.time()
-    train_losses, timed_out = train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, \
-                              valid_queue, validation_loggers, epoch, start_time)
-   
-    if timed_out:
-      experiment_logger.info(f"epoch {epoch} timed out")
+    train_losses = train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, \
+                              valid_queue, validation_loggers, epoch)
+    # check for timeout  
+    if time.time() - train_start_time > args.train_timeout:
+      timed_out = True
+      experiment_logger.info(f"timed out, returning from epoch {epoch}")
 
     end_time = time.time()
     experiment_logger.info(f"time to finish epoch {epoch} : {end_time-start_time}")
@@ -363,7 +364,7 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
 
 
 def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, \
-              train_loggers, validation_queue, validation_loggers, epoch, start_time):
+              train_loggers, validation_queue, validation_loggers, epoch):
   loss_trackers = [util.AvgrageMeter() for m in models]
 
   for m in models:
@@ -444,11 +445,6 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
 
       if step % args.report_freq == 0 or step == len(train_queue)-1:
         train_loggers[i].info(f"train step {epoch*len(train_queue)+step} loss {loss.item():.5f}")
-      
-      # check for timeout  
-      if step % args.report_freq == 0 and time.time() - start_time > args.train_timeout:
-        train_loggers[i].info(f"timed out, returning from epoch {epoch}")
-        return [loss_tracker.avg for loss_tracker in loss_trackers], True
 
     if step % args.save_freq == 0 or step == len(train_queue)-1:
       if len(models) == 1: 
@@ -459,7 +455,7 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
         for i in range(len(models)):
           torch.save(models[i].state_dict(), model_pytorch_files[i])
 
-  return [loss_tracker.avg for loss_tracker in loss_trackers], False #, [psnr_tracker.avg for psnr_tracker in psnr_trackers]
+  return [loss_tracker.avg for loss_tracker in loss_trackers] #, [psnr_tracker.avg for psnr_tracker in psnr_trackers]
 
 
 def infer(args, gpu_id, valid_queue, models, criterion):
