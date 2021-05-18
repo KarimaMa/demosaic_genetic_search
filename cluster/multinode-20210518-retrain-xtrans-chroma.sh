@@ -120,7 +120,8 @@ python $CODE_LOCAL/multinode_sys_run/retrain_one_model.py \
     --xtrans_chroma \
     --full_model \
     --green_model_asts=$CODE_LOCAL/PARETO_GREEN_MODELS/PARETO_XTRANS_GREEN_AZURE-05-10/ast_files.txt \
-    --green_model_weights=$CODE_LOCAL/PARETO_GREEN_MODELS/PARETO_XTRANS_GREEN_AZURE-05-10/weight_files.txt
+    --green_model_weights=$CODE_LOCAL/PARETO_GREEN_MODELS/PARETO_XTRANS_GREEN_AZURE-05-10/weight_files.txt \
+    --train_timeout=25200
 
 if [ $? -eq 0 ]
 then
