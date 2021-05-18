@@ -121,7 +121,7 @@ python $CODE_LOCAL/multinode_sys_run/retrain_one_model.py \
     --green_model_asts=$CODE_LOCAL/PARETO_GREEN_MODELS/PARETO_BAYER_GREEN_05-14/ast_files.txt \
     --green_model_weights=$CODE_LOCAL/PARETO_GREEN_MODELS/PARETO_BAYER_GREEN_05-14/weight_files.txt \
     --full_model \
-    --train_timeout=21600
+    --train_timeout=25200
 
 if [ $? -eq 0 ]
 then
