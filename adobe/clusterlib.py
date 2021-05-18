@@ -1,28 +1,26 @@
-#!/usr/bin/env python3
-"""Submit a job to Condor."""
-import argparse
 import os
 import stat
 import htcondor
 
+NO_ENOUGHSPACE_VALID_MACHINES_V10 = [
+    "ilcomp23",
+    "ilcomp6x",
+    "ilcomp39",
+]
+
 VALID_MACHINES_V10 = [
     "ilcomp4c",
-    "ilcomp4e",
     "ilcomp5k",
     "ilcomp6a",
     "ilcomp6e",
-    "ilcomp6r",
     "ilcomp6w",
-    "ilcomp6x",
     "ilcomp21",
     "ilcomp22",
-    "ilcomp23",
     "ilcomp24",
     "ilcomp25",
     "ilcomp27",
     "ilcomp28",
     "ilcomp36",
-    "ilcomp39",
     "ilcomp41",
     "ilcomp42",
     "ilcomp43",
@@ -30,7 +28,6 @@ VALID_MACHINES_V10 = [
     "ilcomp46",
     "ilcomp49",
     "ilcomp64",
-    "ilcomp65",
 ]
 # not v14
 
@@ -44,6 +41,7 @@ VALID_MACHINES_V10 = [
     # "ilcomp56",
     # "ilcomp54",
     # "ilcomp50",
+    # "ilcomp65",
 
 # not tested
     # "ilcomp6y",
@@ -69,28 +67,33 @@ VALID_MACHINES_V10 = [
     # slot1@"ilcomp29",
     # slot1@"ilcomp31",
     # slot1@"ilcomp4a",
+    # slot1@"ilcomp4e",
     # slot3@"ilcomp5z",
+    # slot2@"ilcomp6r",
         # 007 (12116865.000.000) 05/17 16:47:23 Shadow exception!
         # Error from slot3@ilcomp5z.ilcomp: Cannot start container: invalid image name: docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v10
         # 0  -  Run Bytes Sent By Job
         # 0  -  Run Bytes Received By Job
 
-VALID_MACHINES_V14 = [
-    "ilcomp6b",
-    "ilcomp6c",
-    "ilcomp6d",
-    "ilcomp6g",
-    "ilcomp6k",
-    "ilcomp6v",
-    "ilcomp6t",
+NO_ENOUGHSPACE_VALID_MACHINES_V14 = [
     "ilcomp5a",
     "ilcomp5b",
     "ilcomp5c",
     "ilcomp5d",
+    "ilcomp5n",
+    "ilcomp6v",
+    "ilcomp6k",
+    "ilcomp6t",
+    "ilcomp6b",
+    "ilcomp6d",
+]
+
+VALID_MACHINES_V14 = [
+    "ilcomp6c",
+    "ilcomp6g",
     "ilcomp5g",
     "ilcomp5i",
     "ilcomp5f",
-    "ilcomp5n",
     "ilcomp5p",
     "ilcomp5q",
     "ilcomp5r",
@@ -108,7 +111,8 @@ VALID_MACHINES_V14 = [
 
 DOCKER_IMAGE = "docker-arcluster-dev.dr.corp.adobe.com/mgharbi/karima_genetic:v%d"
 
-def main(args):
+
+def submit(args):
     os.makedirs("log", exist_ok=True)
 
     if args.machine:
@@ -176,14 +180,32 @@ def main(args):
         print("Submitted {} jobs".format(args.job_size))
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("scripts", nargs="+", help="path to the scripts to run.")
-    parser.add_argument("--job_size", default=1, type=int, help="number of instances to launch")
-    parser.add_argument("--gpus", default=1, type=int, help="number of gpus to launch")
-    parser.add_argument("--docker_image", type=int, default=14, choices=[10, 14])  # 10 has older nvidia drivers
-    parser.add_argument("--machine")
-    parser.add_argument("--name")
-    parser.add_argument("--extra_args", nargs="*", default=[])
-    args = parser.parse_args()
-    main(args)
+class SubmitArgs:
+    def __init__(self,
+                 scripts=None,
+                 job_size=1,
+                 docker_image=None,
+                 machine=None,
+                 name=None,
+                 gpus=1,
+                 extra_args=[]):
+        self.scripts = scripts
+        self.job_size = job_size
+        self.docker_image = docker_image
+        self.machine = machine
+        self.name = name
+        self.gpus = gpus
+        self.extra_args = extra_args
+
+    @staticmethod
+    def from_cli(args):
+        obj = SubmitArgs(
+            scripts = args.scripts,
+            job_size = args.job_size,
+            docker_image = args.docker_image,
+            machine = args.machine,
+            name = args.name,
+            gpus = args.gpus,
+            extra_args = args.extra_args,
+        )
+        return obj

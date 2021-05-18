@@ -1,14 +1,24 @@
 #!/bin/bash
 # Retrain one model on one GPU
+if [ "$#" -ne 3 ]; then
+    echo "Script requries 3 inputs"
+fi
+
+JOB_NAME=bayer-high-cost-chroma-05-14
+
+# Start_idx enables starting from other models than index 0
+WORKER_ID=$1
+START_IDX=$2
+let TASK_ID=$WORKER_ID+$START_IDX
 
 ROOT=/mnt/ilcompf9d1/user/mgharbi/code/karima
 CODE=$ROOT/demosaic_genetic_search
 
-RETRAIN_DATA=$ROOT/retrain_data/chroma-pareto-models/bayer-high-cost-chroma-05-14
+RETRAIN_DATA=$ROOT/retrain_data/chroma-pareto-models/$JOB_NAME
 RETRAIN_LIST=$RETRAIN_DATA/model_ids.txt
-RETRAIN_LOGS=$ROOT/retrain_logs/bayer-high-cost-chroma-05-14
+RETRAIN_LOGS=$ROOT/retrain_logs/$JOB_NAME
 
-let lineno=$1+1
+let lineno=$WORKER_ID+1
 MODEL_ID=$(sed -n $(printf $lineno)p $RETRAIN_LIST)
 
 echo model $MODEL_ID at line $lineno of file $RETRAIN_LIST
@@ -18,7 +28,7 @@ FINISHED=$RETRAIN_LOGS/finished
 mkdir -p $CRASHED
 mkdir -p $FINISHED
 
-echo "Starting worker $1 for model $MODEL_ID"
+echo "Starting worker $WORKER_ID for model $MODEL_ID"
 
 echo "GPU info"
 cat /proc/driver/nvidia/gpus/*/information
@@ -35,9 +45,9 @@ fi
 
 echo "Testing GPU configuration..."
 if ! nvidia-smi; then
-    echo $(hostname) "job $1 nvidia-smi failed, aborting."
+    echo $(hostname) "job $WORKER_ID nvidia-smi failed, aborting."
     echo $(date) >> $CRASHED/$MODEL_ID
-    echo $(hostname) job $1  >> $CRASHED/$MODEL_ID
+    echo $(hostname) job $WORKER_ID  >> $CRASHED/$MODEL_ID
     echo "nvidia-smi failed" >>  $CRASHED/$MODEL_ID
     exit
 fi
@@ -45,9 +55,9 @@ echo $(hostname) "nvidia-smi works"
 
 echo "Testing PyTorch configuration..."
 if ! python -c "import torch as th; print(th.zeros(3, 3).cuda())" ; then
-    echo $(hostname) job $1  "PyTorch command failed, aborting"
+    echo $(hostname) job $WORKER_ID  "PyTorch command failed, aborting"
     echo $(date) >> $CRASHED/$MODEL_ID
-    echo $(hostname) job $1  >> $CRASHED/$MODEL_ID
+    echo $(hostname) job $WORKER_ID  >> $CRASHED/$MODEL_ID
     echo "PyTorch CUDA does not work" >>  $CRASHED/$MODEL_ID
     exit
 fi
@@ -68,34 +78,32 @@ df -h | grep shm
 DATA=/mnt/ilcompf8d1/data/demosaicnet
 DATA_LOCAL=$DATA
 # RuntimeError: Dataset filelist is invalid, coult not find /dev/shm/demosaic_genetic_search/train/moire/009/091892.png
-# mkdir -p /mnt/ssd/tmp/mgharbi
-# DATA_LOCAL=/mnt/ssd/tmp/mgharbi/demosaicnet
+mkdir -p /mnt/ssd/tmp/mgharbi
+DATA_LOCAL=/mnt/ssd/tmp/mgharbi/demosaicnet
 # DATA_LOCAL=/dev/shm/data
 # rsync -av $DATA /dev/shm
 
-# if [ -d $DATA_LOCAL ]
-# then
-#     echo "Dataset already exist at $DATA_LOCAL"
-#     echo "rsyncing in case files are missing"
-#     rsync -av $DATA /mnt/ssd/tmp/mgharbi
-#     echo "done rsyncing data"
-# else
-#     freespace=$(df | grep ssd | awk '{print $4}')
-#     echo "Disk space" $freespace
-#     if (( $freespace < 90000000 )); then
-#         echo $(hostname)  job $1 "not enough space to copy data, aborting"
-#         echo $(date) >> $CRASHED/$MODEL_ID
-#         echo $(hostname)  job $1 >> $CRASHED/$MODEL_ID
-#         echo "no space to copy data" >>  $CRASHED/$MODEL_ID
-#
-#         # TODO: try shm 
-#         exit
-#     fi
-#     echo "Sufficient free space for data" $freespace
-#     echo "Copying dataset $DATA to $DATA_LOCAL"
-#     rsync -av $DATA /mnt/ssd/tmp/mgharbi
-#     echo "done copying data"
-# fi
+if [ -d $DATA_LOCAL ]
+then
+    echo "Dataset already exist at $DATA_LOCAL"
+    echo "rsyncing in case files are missing"
+    rsync -av $DATA /mnt/ssd/tmp/mgharbi
+    echo "done rsyncing data"
+else
+    freespace=$(df | grep ssd | awk '{print $4}')
+    echo "Disk space" $freespace
+    if (( $freespace < 90000000 )); then
+        echo $(hostname)  job $WORKER_ID "not enough space to copy data, aborting"
+        echo $(date) >> $CRASHED/$MODEL_ID
+        echo $(hostname)  job $WORKER_ID >> $CRASHED/$MODEL_ID
+        echo "no space to copy data" >>  $CRASHED/$MODEL_ID
+        exit
+    fi
+    echo "Sufficient free space for data" $freespace
+    echo "Copying dataset $DATA to $DATA_LOCAL"
+    rsync -av $DATA /mnt/ssd/tmp/mgharbi
+    echo "done copying data"
+fi
 
 echo "Copying code to local memory drive"
 CODE_LOCAL=/dev/shm/demosaic_genetic_search
@@ -107,7 +115,7 @@ echo "Installing python modules"
 export PYTHONPATH=.:$PYTHONPATH
 pip install -r $CODE_LOCAL/requirements.txt
 
-echo "Running $1, training model $MODEL_ID"
+echo "Running $WORKER_ID, training model $MODEL_ID"
 python $CODE_LOCAL/multinode_sys_run/retrain_one_model.py \
     --task_id=$1 \
     --gpu_id=0 \
@@ -127,11 +135,11 @@ if [ $? -eq 0 ]
 then
     echo $(hostname) "job completed successfully"
     echo $(date) >> $FINISHED/$MODEL_ID
-    echo $(hostname) job $1 >> $FINISHED/$MODEL_ID
+    echo $(hostname) job $TASK_ID >> $FINISHED/$MODEL_ID
     echo "python completed successfully" >>  $FINISHED/$MODEL_ID
 else
-    echo $(hostname)  job $1 "crashed with an error"
+    echo $(hostname)  job $WORKER_ID "crashed with an error"
     echo $(date) >> $CRASHED/$MODEL_ID
-    echo $(hostname) job $1 >> $CRASHED/$MODEL_ID
+    echo $(hostname) job $TASK_ID >> $CRASHED/$MODEL_ID
     echo "python script return and error" >>  $CRASHED/$MODEL_ID
 fi
