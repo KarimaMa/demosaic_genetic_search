@@ -131,22 +131,23 @@ class Trainer():
 
     best_val_psnrs = [-1 for i in range(self.args.keep_initializations)]
 
+    train_start_time = time.time()
+
     for epoch in range(self.args.epochs):
       if args.keep_initializations < self.args.model_initializations:
         if epoch == 1:
           models, train_loggers, validation_loggers, optimizers, model_index = keep_best_model(models, val_psnrs, train_loggers, validation_loggers, optimizers)
           experiment_logger.info(f"after first epoch, validation psnrs {val_psnrs} keeping best model {model_index}")
       
-      start_time = time.time()
-      train_losses = train_epoch(self.args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, \
-                                valid_queue, validation_loggers, epoch, start_time)
+      train_losses, timed_out = train_epoch(self.args, gpu_id, train_queue, models, model_dir, criterion, optimizers, train_loggers, \
+                                valid_queue, validation_loggers, epoch, train_start_time)
 
       model_pytorch_files = [util.get_model_pytorch_file(model_dir, model_version, epoch) for model_version in range(len(models))]
       for i in range(len(models)):
         torch.save(models[i].state_dict(), model_pytorch_files[i])
 
       end_time = time.time()
-      experiment_logger.info(f"time to finish epoch {epoch} : {end_time-start_time}")
+      experiment_logger.info(f"time to finish epoch {epoch} : {end_time-train_start_time}")
       val_losses, val_psnrs = infer(self.args, gpu_id, valid_queue, models, criterion)
       if epoch >= 1:
         best_val_psnrs = [max(best_p, new_p) for (best_p, new_p) in zip(best_val_psnrs, val_psnrs)]
@@ -156,6 +157,11 @@ class Trainer():
         validation_loggers[i].info('validation epoch %03d %e %2.3f', epoch, val_losses[i], val_psnrs[i])
       end_time = time.time()
       experiment_logger.info(f"time to validate after epoch {epoch} : {end_time - start_time}")
+
+      if timed_out:
+        experiment_logger.info(f"epoch {epoch} timed out")
+        break
+
     return best_val_psnrs
 
 

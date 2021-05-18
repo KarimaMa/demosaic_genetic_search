@@ -117,7 +117,8 @@ python $CODE_LOCAL/multinode_sys_run/retrain_one_model.py \
     --learning_rate=0.004 \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
-    --nas
+    --nas \
+    --train_timeout=21600
 
 if [ $? -eq 0 ]
 then
