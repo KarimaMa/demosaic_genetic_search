@@ -378,7 +378,7 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
       if args.xtrans_chroma:
         packed_mosaic, mosaic3chan, flat_mosaic, rb = input 
       elif args.superres_rgb:
-        image = input 
+        bayer, redblue_bayer = input 
       else:
         bayer, redblue_bayer, green_grgb = input
     elif args.nas:
