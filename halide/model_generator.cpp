@@ -12,7 +12,7 @@ namespace {
 
 using namespace Halide;
 
-Var x{"x"}, y{"y"}, n{"n"}, ci{"ci"}, co{"co"};
+Var x{"x"}, y{"y"}, n{"n"}, ci{"ci"}, co{"co"}, xo{"xo"}, yo{"yo"}, xi{"xi"}, yi{"yi"};
 
 struct Op {
     // Fields populated by parse()
@@ -22,6 +22,7 @@ struct Op {
     int in_channels[3] = {};
     int groups = 0;
     int inputs[3] = {};
+    int scale_factor = 0;
 
     int weight0_shape[4] = {};
     string weight0_b64;
@@ -36,6 +37,7 @@ struct Op {
     bool must_inline = false;
     bool unroll_channels = false;
     vector<int> outputs;
+    bool non_power_of_two = false;
 
     // Fields set by schedule()
     Func compute_at;
@@ -51,6 +53,7 @@ struct Op {
                >> inputs[0]
                >> inputs[1]
                >> inputs[2]
+               >> scale_factor
                >> weight0_shape[0]
                >> weight0_shape[1]
                >> weight0_shape[2]
@@ -75,7 +78,17 @@ struct Op {
         return cast<float>(e);
     }
 
-    void define(vector<Op> &ops, const GeneratorInput<Buffer<float>> &raw) {
+    void unroll_in_space(Func f, int factor) {
+        Var xu, yu;
+        f.align_bounds(x, factor)
+            .align_bounds(y, factor)
+            .tile(x, y, xu, yu, factor, factor, TailStrategy::RoundUp)
+            .unroll(xu)
+            .unroll(yu);
+
+    }
+
+    void define(vector<Op> &ops, const GeneratorInput<Buffer<float>> &raw, LoopLevel tiles) {
         func = Func(name + "_" + std::to_string(id));
 
         Func in_1, in_2, in_3;
@@ -189,6 +202,11 @@ struct Op {
             pointwise = false;
             may_inline = false;
 
+            Var yu;
+            func.split(y, y, yu, 4, TailStrategy::RoundUp)
+                .reorder(yu, x, y, co)
+                .unroll(yu);
+
         } else if (name == "LearnedDownsample") {
             weights0 = decode_buffer(weight0_shape, name + "." + std::to_string(id) + ".weights", weight0_b64);
 
@@ -196,33 +214,68 @@ struct Op {
             int out_group_size = out_channels / groups;
             Expr group = co / out_group_size;
 
-            assert(weights0.dim(0).extent() == 4);
-            assert(weights0.dim(1).extent() == 4);
+            int kernel_size = weights0.dim(0).extent();
+            int factor = kernel_size / 2;
+            // For a factor of two, we have 4x4 kernels, and want to start at -1.
+            // For a factor of 3, we have 7x7 kernels, and we want to start at -2.
+            int margin = (kernel_size - factor) / 2;
+
+            assert(weights0.dim(0).extent() == weights0.dim(1).extent());
             assert(weights0.dim(2).extent() * groups == in_channels[0]);
             assert(weights0.dim(3).extent() == out_channels);
 
-            Func interleave{"interleave"};
-            Var u, v;
-            interleave(x, y, u, co) = in_1(2*x + u, y, co);
+            if (true) {
+                Func interleave{"interleave"};
+                Var u, v;
+                interleave(x, y, u, co) = in_1(factor*x + u, y, co);
 
-            Expr e = 0.0f;
-            RDom r(0, 4, 0, 4);
-            for (int ci = 0; ci < in_group_size; ci++) {
-                e += weights0(r.x, r.y, ci, co) *
-                    interleave(x + (r.x - 1)/2, 2*y + r.y - 1, (r.x - 1) % 2, ci + group * in_group_size);
+                Expr e = 0.0f;
+                RDom r(0, kernel_size, 0, kernel_size);
+                Func inner_sum("LearnedDownsample_sum");
+                for (int ci = 0; ci < in_group_size; ci++) {
+                    e += weights0(r.x, r.y, ci, co) *
+                        interleave(x + (r.x - margin)/factor,
+                                   factor*y + r.y - margin,
+                                   (r.x - margin) % factor,
+                                   ci + group * in_group_size);
+                }
+                inner_sum(x, y, co) += e;
+
+                func(x, y, co) = inner_sum(x, y, co);
+
+                interleave
+                    .compute_at(tiles)
+                    .store_in(MemoryType::Stack)
+                    .align_storage(x, 8)
+                    .reorder(u, co, x, y)
+                    .unroll(u)
+                    .unroll(co)
+                    .vectorize(x, 8, TailStrategy::RoundUp);
+                /*
+                inner_sum.compute_at(func, co)
+                    .reorder(x, y, co)
+                    .unroll(y)
+                    .vectorize(x)
+                    .unroll(co)
+                    .update()
+                    .reorder(x, y, co, r.x, r.y)
+                    .unroll(y)
+                    .vectorize(x)
+                    .unroll(co);
+                */
+            } else {
+                non_power_of_two = true;
+
+                Expr e = 0.0f;
+                RDom r(0, kernel_size, 0, kernel_size);
+                for (int ci = 0; ci < in_group_size; ci++) {
+                    e += (weights0(r.x, r.y, ci, co) *
+                          in_1(factor*x + r.x - margin,
+                               factor*y + r.y - margin,
+                               ci + group * in_group_size));
+                }
+                func(x, y, co) = sum(e, "LearnedDownsample_sum");
             }
-            func(x, y, co) = sum(e, "LearnedDownsample_sum");
-
-            interleave
-                .compute_at(func, Var::outermost())
-                .store_in(MemoryType::Stack)
-                .align_storage(x, 8)
-                .reorder(u, co, x, y)
-                .unroll(u)
-                .unroll(co)
-                .vectorize(x, 16);
-
-            may_inline = false; // Just so we can schedule the interleave somewhere good
             pointwise = false;
         } else if (name == "Flat2Quad") {
             func(x, y, co) = mux(co, {in_1(2*x, 2*y, 0),
@@ -348,14 +401,18 @@ struct Op {
                 }
             }
             func(x, y, co) = mux((x % factor) * factor + (y % factor), values);
+            //unroll_in_space(func, factor);
             pointwise = false;
             unroll_channels = true;
             may_inline = false;
         } else if (name == "Relu") {
             func(x, y, co) = max(0.0f, in_1(x, y, co));
-        } else if (name == "Id") {
+        } else if (name == "Id" || name == "SGreenExtractor") {
             func(x, y, co) = in_1(x, y, co);
-            must_inline = true;
+        } else if (name == "SRGBExtractor") {
+            assert(in_channels[0] == 1 && in_channels[1] == 2);
+            func(x, y, co) = mux(co, {in_2(x, y, 0), in_1(x, y, 0), in_2(x, y, 1)});
+            unroll_channels = true;
         } else if (name == "RGBExtractor") {
             // Args are, 4 greens, 2 red/blue from the bayer, 6 predicted chroma
             /*
@@ -425,36 +482,56 @@ struct Op {
             }
         } else if (name == "BilinearUpsample") {
             // Bilinear
-            Expr x_near = (x / 2) + (x % 2);
-            Expr x_far = (x / 2) + 1 - (x % 2);
-            Expr y_near = (y / 2) + (y % 2);
-            Expr y_far = (y / 2) + 1 - (y % 2);
-            func(x, y, co) =
-                (9 * in_1(x_near, y_near, co) +
-                 3 * (in_1(x_near, y_far, co) + in_1(x_far, y_near, co)) +
-                 in_1(x_far, y_far, co)) * (1.0f / 16);
+            if (scale_factor == 2) {
+                Expr x_near = (x / 2) + (x % 2);
+                Expr x_far = (x / 2) + 1 - (x % 2);
+                Expr y_near = (y / 2) + (y % 2);
+                Expr y_far = (y / 2) + 1 - (y % 2);
+                func(x, y, co) =
+                    (9 * in_1(x_near, y_near, co) +
+                     3 * (in_1(x_near, y_far, co) + in_1(x_far, y_near, co)) +
+                     in_1(x_far, y_far, co)) * (1.0f / 16);
+            } else {
+                Expr w_x = ((x % scale_factor)*2 + 1) / cast<float>(scale_factor * 2);
+                Expr w_y = ((y % scale_factor)*2 + 1) / cast<float>(scale_factor * 2);
+                Expr xi = x/scale_factor;
+                Expr yi = y/scale_factor;
+                func(x, y, co) =
+                    lerp(
+                         lerp(in_1(xi, yi, co),
+                              in_1(xi + 1, yi, co),
+                              w_x),
+                         lerp(in_1(xi, yi + 1, co),
+                              in_1(xi + 1, yi + 1, co),
+                              w_x),
+                         w_y);
+            }
+            unroll_in_space(func, scale_factor);
             pointwise = false;
             may_inline = false;
         } else if (name == "LearnedUpsample") {
 
             weights0 = decode_buffer(weight0_shape, name + "." + std::to_string(id) + ".weights", weight0_b64);
 
-            assert(weights0.dim(0).extent() == 2);
-            assert(weights0.dim(1).extent() == 2);
-            assert(weights0.dim(2).extent() == in_channels[0] / groups);
-            assert(weights0.dim(3).extent() == out_channels);
+            int factor = weights0.dim(0).extent();
+
+            assert(weights0.dim(0).extent() == factor);
+            assert(weights0.dim(1).extent() == factor);
+            assert(weights0.dim(2).extent() == out_channels / groups);
+            assert(weights0.dim(3).extent() == in_channels[0]);
 
             Expr e = 0.0f;
             int in_group_size = in_channels[0] / groups;
             int out_group_size = out_channels / groups;
             Expr group = co / out_group_size;
             for (int ci = 0; ci < in_group_size; ci++) {
-                e += weights0(x % 2, y % 2, ci, co) * in_1(x / 2, y / 2, ci + group * in_group_size);
+                e += (weights0(x % factor, y % factor, co % out_group_size, ci + group * in_group_size) *
+                      in_1(x / factor, y / factor, ci + group * in_group_size));
             }
             func(x, y, co) = e;
             pointwise = false;
             may_inline = false;
-
+            unroll_in_space(func, factor);
         } else {
             std::cerr << "Unknown op: " << name << "\n";
             assert(false);
@@ -472,6 +549,7 @@ struct Op {
                   << inputs[0] << " "
                   << inputs[1] << " "
                   << inputs[2] << " "
+                  << scale_factor << " "
                   << weight0_shape[0] << " "
                   << weight0_shape[1] << " "
                   << weight0_shape[2] << " "
@@ -502,9 +580,11 @@ public:
             op.parse(f);
             if (f.good()) {
                 ops.push_back(op);
-            } else {
-                assert(f.eof());
+            } else if (f.eof()) {
                 break;
+            } else {
+                std::cerr << "Failed to parse\n";
+                assert(false);
             }
         }
         f.close();
@@ -537,27 +617,27 @@ public:
                 }
             }
         }
-
     }
 
     void generate() {
         parse_model_file(model_file);
+        LoopLevel tiles;
         for (Op &op: ops) {
-            op.define(ops, raw);
+            op.define(ops, raw, tiles);
         }
         output = ops.back().func;
+        tiles.set(LoopLevel{output, xo});
 
-        Var xo, yo, xi, yi;
         output
             .align_bounds(x, 16)
             .align_bounds(y, 16)
-            .tile(x, y, xo, yo, x, y, 256, 128)
-            .split(y, y, yi, 2)
-            .reorder(co, yi, x, y, xo, yo)
-            .vectorize(x, 32)
-            .unroll(co)
-            .unroll(yi);
+            .tile(x, y, xo, yo, x, y, 256 * 3, 240, TailStrategy::RoundUp)
+            .reorder(co, x, y, xo, yo)
+            .vectorize(x, 32, TailStrategy::RoundUp)
+            .unroll(co);
 
+        output.dim(0).set_min(0);
+        output.dim(1).set_min(0);
         output.dim(2).set_bounds(0, 3);
 
         for (size_t i = 0; i < ops.size() - 1; i++)  {
@@ -568,28 +648,29 @@ public:
             should_schedule |= !ops[i].may_inline;
             should_schedule &= !ops[i].must_inline;
             if (should_schedule) {
-                ops[i].func
-                    .store_in(MemoryType::Stack)
-                    .align_storage(x, 8)
-                    .compute_at(output, xo)
-                    .vectorize(x, 32, TailStrategy::RoundUp)
-                    .split(y, y, yi, 2)
-                    .reorder(yi, co, x, y)
-                    .unroll(yi);
-
+                if (ops[i].non_power_of_two) {
+                    ops[i].func
+                        .store_in(MemoryType::Stack)
+                        .compute_at(output, xo)
+                        .reorder(co, x, y);
+                } else {
+                    ops[i].func
+                        .store_in(MemoryType::Stack)
+                        .align_storage(x, 8)
+                        .compute_at(output, xo)
+                        .vectorize(x, 32, TailStrategy::RoundUp)
+                        .reorder(co, x, y);
+                }
                 if (ops[i].unroll_channels) {
                     ops[i].func.unroll(co);
                 }
 
                 // Not strictly necessary, but useful for debugging the definitions
-                if (ops[i].id != 34) {
-                    ops[i].func.bound(co, 0, ops[i].out_channels);
-                }
+                ops[i].func.bound(co, 0, ops[i].out_channels);
             } else {
-                if (ops[i].unroll_channels) {
-                    for (int o : ops[i].outputs) {
-                        ops[o].unroll_channels = true;
-                    }
+                for (int o : ops[i].outputs) {
+                    ops[o].unroll_channels |= ops[i].unroll_channels;
+                    ops[o].pointwise &= ops[i].pointwise;
                 }
             }
         }
