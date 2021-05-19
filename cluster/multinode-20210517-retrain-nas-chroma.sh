@@ -28,7 +28,7 @@ FINISHED=$RETRAIN_LOGS/finished
 mkdir -p $CRASHED
 mkdir -p $FINISHED
 
-echo "Starting worker $WORKER_ID for model $MODEL_ID"
+echo Task $TASK_ID, GPU $GPU, worker $WORKER_ID: model $MODEL_ID at line $lineno of $RETRAIN_LIST
 
 echo "GPU info"
 cat /proc/driver/nvidia/gpus/*/information

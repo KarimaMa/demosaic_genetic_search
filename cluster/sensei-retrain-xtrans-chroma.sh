@@ -23,14 +23,12 @@ RETRAIN_LOGS=$ROOT/retrain_logs/$JOB_NAME
 let lineno=$TASK_ID+1
 MODEL_ID=$(sed -n $(printf $lineno)p $RETRAIN_LIST)
 
-echo Task $TASK_ID, GPU $GPU: model $MODEL_ID at line $lineno of $RETRAIN_LIST
+echo Task $TASK_ID, GPU $GPU, worker $WORKER_ID: model $MODEL_ID at line $lineno of $RETRAIN_LIST
 
 CRASHED=$RETRAIN_LOGS/crashed
 FINISHED=$RETRAIN_LOGS/finished
 mkdir -p $CRASHED
 mkdir -p $FINISHED
-
-echo "Starting worker $WORKER_ID for model $MODEL_ID"
 
 # Check if done already
 if [[ -f $FINISHED/$MODEL_ID ]]
@@ -40,6 +38,8 @@ then
 fi
 
 DATA_LOCAL=/dev/shm/demosaicnet
+
+exit
 
 python $CODE/multinode_sys_run/retrain_one_model.py \
     --task_id=$TASK_ID \
