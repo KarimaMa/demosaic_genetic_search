@@ -39,8 +39,6 @@ fi
 
 DATA_LOCAL=/dev/shm/demosaicnet
 
-exit
-
 python $CODE/multinode_sys_run/retrain_one_model.py \
     --task_id=$TASK_ID \
     --gpu_id=$GPU \
