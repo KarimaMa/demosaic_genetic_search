@@ -117,7 +117,7 @@ export PYTHONPATH=.:$PYTHONPATH
 pip install -r $CODE_LOCAL/requirements.txt
 
 echo "Running $WORKER_ID, training model $MODEL_ID"
-    --task_id=$1 \
+    --task_id=$TASK_ID \
     --gpu_id=0 \
     --model_info_dir=$RETRAIN_DATA/models \
     --save=$ROOT/results/RETRAINED-SR-CHROMA-05-13 \

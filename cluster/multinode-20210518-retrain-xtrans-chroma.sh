@@ -117,7 +117,7 @@ pip install -r $CODE_LOCAL/requirements.txt
 
 echo "Running $WORKER_ID for task $TASK_ID, training model $MODEL_ID"
 python $CODE_LOCAL/multinode_sys_run/retrain_one_model.py \
-    --task_id=$1 \
+    --task_id=$TASK_ID \
     --gpu_id=0 \
     --model_info_dir=$RETRAIN_DATA/models \
     --save=$ROOT/results/RETRAINED-XTRANS-CHROMA-05-15 \
