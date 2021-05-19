@@ -1,7 +1,8 @@
 #!/bin/bash
 # Retrain one model on one GPU
-if [ "$#" -ne 3 ]; then
-    echo "Script requries 3 inputs"
+if [ "$#" -ne 2 ]; then
+    echo "Script requries 2 inputs"
+    exit
 fi
 
 JOB_NAME=xtrans-chroma-05-15
@@ -21,14 +22,13 @@ RETRAIN_LOGS=$ROOT/retrain_logs/$JOB_NAME
 let lineno=$TASK_ID+1
 MODEL_ID=$(sed -n $(printf $lineno)p $RETRAIN_LIST)
 
-echo model $MODEL_ID at line $lineno of file $RETRAIN_LIST
 
 CRASHED=$RETRAIN_LOGS/crashed
 FINISHED=$RETRAIN_LOGS/finished
 mkdir -p $CRASHED
 mkdir -p $FINISHED
 
-echo "Starting worker $WORKER_ID for model $MODEL_ID"
+echo Task $TASK_ID, GPU $GPU, worker $WORKER_ID: model $MODEL_ID at line $lineno of $RETRAIN_LIST
 
 echo "GPU info"
 cat /proc/driver/nvidia/gpus/*/information

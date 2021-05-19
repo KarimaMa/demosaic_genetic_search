@@ -1,7 +1,8 @@
 #!/bin/bash
 # Retrain one model on one GPU
-if [ "$#" -ne 3 ]; then
-    echo "Script requries 3 inputs"
+if [ "$#" -ne 2 ]; then
+    echo "Script requries 2 inputs"
+    exit
 fi
 
 JOB_NAME=bayer-chroma-05-14
