@@ -83,6 +83,7 @@ if __name__ == '__main__':
         print("Failed to load weights. Oh well.")
 
     # Run the model on a test pattern to give us a unit test
+    """
     circle = numpy.array(imread("circle.png")).astype(numpy.float32) / (2**8 - 1)
     bayer = numpy.zeros((1, 4, 64, 64))
     bayer[0,0,:,:] = circle[0::2, 0::2]
@@ -102,6 +103,7 @@ if __name__ == '__main__':
     output = output.astype(numpy.uint8)
     output = output.transpose(1, 2, 0)
     imsave(os.path.join(os.path.dirname(sys.argv[4]), "circle_out_ref.png"), output)
+    """
     
     # Assign weights to the AST nodes
     def assign_weights(node):
@@ -128,6 +130,10 @@ if __name__ == '__main__':
     with open(sys.argv[4], 'w') as f:
         ops = linearize_ast(ast, {})
         for (i, n, a, b, c) in ops:
+
+            if (n.name == "BilinearUpsample"):
+                print(dir(n))
+                
             if hasattr(n, 'out_c'):
                 out_c = n.out_c
             else:
@@ -151,6 +157,11 @@ if __name__ == '__main__':
             else:
                 groups = 0
 
+            if hasattr(n, 'factor'):
+                factor = int(n.factor)
+            else:
+                factor = 0
+                
             weights0 = "0 0 0 0 None"
             weights1 = "0 0 0 0 None"
             if n.weights[0] is not None:
@@ -163,7 +174,8 @@ if __name__ == '__main__':
                 weights1 = ' '.join(map(str, n.weights[1].shape))
                 weights1 += ' ' + base64.b64encode(n.weights[1]).decode('utf-8')
 
-            print(i, n.name, out_c, in_c, groups, a, b, c, weights0, weights1, file=f)
+            print(i, n.name, out_c, in_c, groups, a, b, c, factor, weights0, weights1, file=f)
 
 
 
+            

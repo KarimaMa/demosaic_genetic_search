@@ -2,10 +2,21 @@ HALIDE_DIR=$(shell echo ~/projects/Halide/distrib)
 RTPROCESS_DIR=$(shell echo ~/projects/librtprocess/install)
 HL_TARGET=x86-64-linux-avx2-disable_llvm_loop_opt
 
-# This is the combined contents of the two chroma model search folders
-MODEL_DIR ?= chroma-pareto-models/bayer-chroma-05-14/models
-# The pareto green models have been dumped in the location indicated by the paths in this text file
-GREEN_MODELS ?= PARETO_GREEN_MODELS/PARETO_BAYER_GREEN_05-14/ast_files.txt
+# All bayer
+#MODEL_DIR ?= MULTINODE-BAYER-CHROMA-05-14-COMBINED/models
+#GREEN_MODELS ?= PARETO_GREEN_MODELS/PARETO_BAYER_GREEN_05-14/ast_files.txt
+
+# Bayer
+#MODEL_DIR ?= BAYER-CHROMA-05-14-ASTS
+#GREEN_MODELS ?= PARETO_GREEN_MODELS/PARETO_BAYER_GREEN_05-14/ast_files.txt
+
+# Xtrans
+#MODEL_DIR ?= XCHROMA-05-15-ASTS
+#GREEN_MODELS ?= PARETO_GREEN_MODELS/PARETO_XTRANS_GREEN_AZURE-05-10/ast_files.txt
+
+# Superres
+MODEL_DIR ?= SUPERRES-CHROMA-05-13-ASTS
+GREEN_MODELS ?= PARETO_GREEN_MODELS/PARETO_SUPERRES_GREEN_05-14/ast_files.txt
 
 CXX=g++ -std=c++14
 
@@ -17,10 +28,11 @@ bin/model_generator: model_generator.cpp
 	mkdir -p bin
 	$(CXX) -g -Wall $^ $(HALIDE_DIR)/tools/GenGen.cpp -I $(HALIDE_DIR)/include -L $(HALIDE_DIR)/lib -lHalide -Wl,-rpath,$(HALIDE_DIR)/lib -lpthread -ldl -lz -o $@
 
+#python3 export_ast_to_halide.py $(GREEN_MODELS) $(MODEL_DIR)/$*/model_ast $(shell ls $(MODEL_DIR)/$*/model_*_pytorch | head -n1) $@ > bin/$*/export_log.txt
+
 .PRECIOUS: bin/%/exported.txt
 bin/%/exported.txt: export_ast_to_halide.py
 	mkdir -p $(@D)
-	#python3 export_ast_to_halide.py $(GREEN_MODELS) $(MODEL_DIR)/$*/model_ast $(shell ls $(MODEL_DIR)/$*/model_*_pytorch | head -n1) $@ > bin/$*/export_log.txt
 	python3 export_ast_to_halide.py $(GREEN_MODELS) $(MODEL_DIR)/$*/model_ast NoWeights $@ > bin/$*/export_log.txt
 
 .PRECIOUS: bin/%/halide_model.a
@@ -46,7 +58,7 @@ bin/%/circle_out.png: bin/%/circle_out.tmp
 	ImageStack -load $^ -transpose c t -clamp -save $@
 
 bin/%/bench.txt: bin/%/run_model
-	$^ --benchmarks=all --benchmark_min_time=1 --parsable_output --output_extents=[4096,4096] raw=random:0:[4096,4096] >$@
+	$^ --benchmarks=all --benchmark_min_time=1 --parsable_output --output_extents=[3840,3840] raw=random:0:[3840,3840] >$@
 
 # Don't forget to set OMP_NUM_THREADS=1 for running this to get a fair
 # comparison to the above (or add parallelism to the Halide schedules,
