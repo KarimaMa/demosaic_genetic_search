@@ -18,7 +18,7 @@ RETRAIN_DATA=$ROOT/retrain_data/chroma-pareto-models/$JOB_NAME
 RETRAIN_LIST=$RETRAIN_DATA/model_ids.txt
 RETRAIN_LOGS=$ROOT/retrain_logs/$JOB_NAME
 
-let lineno=$WORKER_ID+1
+let lineno=$TASK_ID+1
 MODEL_ID=$(sed -n $(printf $lineno)p $RETRAIN_LIST)
 
 echo model $MODEL_ID at line $lineno of file $RETRAIN_LIST
@@ -115,7 +115,7 @@ echo "Installing python modules"
 export PYTHONPATH=.:$PYTHONPATH
 pip install -r $CODE_LOCAL/requirements.txt
 
-echo "Running $WORKER_ID, training model $MODEL_ID"
+echo "Running $WORKER_ID for task $TASK_ID, training model $MODEL_ID"
 python $CODE_LOCAL/multinode_sys_run/retrain_one_model.py \
     --task_id=$1 \
     --gpu_id=0 \

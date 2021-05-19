@@ -19,7 +19,7 @@ RETRAIN_DATA=$ROOT/retrain_data/chroma-pareto-models/$JOB_NAME
 RETRAIN_LIST=$RETRAIN_DATA/model_ids.txt
 RETRAIN_LOGS=$ROOT/retrain_logs/$JOB_NAME
 
-let lineno=$WORKER_ID+1
+let lineno=$TASK_ID+1
 MODEL_ID=$(sed -n $(printf $lineno)p $RETRAIN_LIST)
 
 echo model $MODEL_ID at line $lineno of file $RETRAIN_LIST

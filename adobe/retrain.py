@@ -69,11 +69,11 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("scripts", nargs="+", help="path to the scripts to run.")
-    parser.add_argument("--batch_size", default=10, type=int, help="")
-    parser.add_argument("--queue_size", default=30, type=int, help="condor MAX_JOBS_PER_OWNER")
+    parser.add_argument("--batch_size", default=10, type=int, help="number of jobs submitted together")
+    parser.add_argument("--queue_size", default=200, type=int, help="condor MAX_JOBS_PER_OWNER")
     # parser.add_argument("--gpus", default=1, type=int, help="number of gpus to launch")
     parser.add_argument("--docker_image", type=int, default=14, choices=[10, 14])  # 10 has older nvidia drivers
-    parser.add_argument("--sleep", default=1, type=int, help="sleep time in seconds")
+    parser.add_argument("--sleep", default=60, type=int, help="sleep time in seconds")
     parser.add_argument("--num_models", default=100, type=int, help="number of models to retrain.")
     parser.add_argument("--start_idx", default=0, type=int, help="index of the first model to retrain (0-based)")
     # parser.add_argument("--extra_args", nargs="*", default=[])

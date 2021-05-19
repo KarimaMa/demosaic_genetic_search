@@ -18,7 +18,7 @@ RETRAIN_DATA=$ROOT/retrain_data/chroma-pareto-models/$JOB_NAME
 RETRAIN_LIST=$RETRAIN_DATA/model_ids.txt
 RETRAIN_LOGS=$ROOT/retrain_logs/$JOB_NAME
 
-let lineno=$WORKER_ID+1
+let lineno=$TASK_ID+1
 MODEL_ID=$(sed -n $(printf $lineno)p $RETRAIN_LIST)
 
 echo model $MODEL_ID at line $lineno of file $RETRAIN_LIST
@@ -72,11 +72,8 @@ df -h | grep ssd
 echo "SHM space"
 df -h | grep shm
 
-# TODO: check if job is done already
 
-# DATA=$ROOT/data
 DATA=/mnt/ilcompf8d1/data/demosaicnet
-# RuntimeError: Dataset filelist is invalid, coult not find /dev/shm/demosaic_genetic_search/train/moire/009/091892.png
 mkdir -p /mnt/ssd/tmp/mgharbi
 DATA_LOCAL=/mnt/ssd/tmp/mgharbi/demosaicnet
 
@@ -104,6 +101,8 @@ fi
 
 echo "Copying code to local memory drive"
 CODE_LOCAL=/dev/shm/demosaic_genetic_search
+# Make sure copy is fresh
+rm -rf $CODE_LOCAL
 rsync -av $CODE /dev/shm
 
 cd $CODE_LOCAL
@@ -112,7 +111,7 @@ echo "Installing python modules"
 export PYTHONPATH=.:$PYTHONPATH
 pip install -r $CODE_LOCAL/requirements.txt
 
-echo "Running $WORKER_ID, training model $MODEL_ID"
+echo "Running $WORKER_ID for task $TASK_ID, training model $MODEL_ID"
 python $CODE_LOCAL/multinode_sys_run/retrain_one_model.py \
     --task_id=$TASK_ID \
     --gpu_id=0 \
