@@ -22,9 +22,7 @@ export PYTHONPATH=.:$PYTHONPATH
 pip install -r $CODE_LOCAL/requirements.txt
 
 echo "Copying data to local memory drive"
-DATA=$ROOT/data
-DATA_LOCAL=/dev/shm/data
-rsync -av $DATA /dev/shm
+DATA_LOCAL=/mnt/ssd/tmp/mgharbi/demosaicnet
 
 STARTID=0
 RUN=0
