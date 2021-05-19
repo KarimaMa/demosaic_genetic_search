@@ -322,8 +322,8 @@ class ModelEvaluator():
       cost += root.in_c * LOGEXP_COST 
       cost += self.compute_cost_helper(root.child, seen)
     elif isinstance(root, LearnedDownsample):
-      downsample_k = root.factor * 2
-      cost += root.in_c * root.out_c * downsample_k**2 * MUL_COST
+      downsample_k = root.factor * 2 + (root.factor % 2) # use odd kernel width for odd sampling factors 
+      cost += root.groups * ((root.in_c // root.groups)) * (root.out_c // root.groups) * downsample_k**2 * MUL_COST
       cost += (root.factor**2) * self.compute_cost_helper(root.child, seen) 
     elif isinstance(root, Pack):
       cost += (root.factor**2) * self.compute_cost_helper(root.child, seen) 
