@@ -11,7 +11,7 @@ GPU=$(($2-1))
 START_IDX=0
 let TASK_ID=$WORKER_ID+$START_IDX
 
-JOB_NAME=xtrans-chroma-05-15
+JOB_NAME=sr-chroma-05-13
 
 ROOT=/home/code-base/scratch_space/karima
 CODE=/home/mgharbi/demosaic_genetic_search
@@ -39,20 +39,21 @@ fi
 
 DATA_LOCAL=/dev/shm/demosaicnet
 
+echo "Running $WORKER_ID, training model $MODEL_ID"
 python $CODE/multinode_sys_run/retrain_one_model.py \
     --task_id=$TASK_ID \
     --gpu_id=$GPU \
     --model_info_dir=$RETRAIN_DATA/models \
-    --save=$ROOT/results/RETRAINED-XTRANS-CHROMA-05-15 \
+    --save=$ROOT/results/RETRAINED-SR-CHROMA-05-13 \
     --model_retrain_list=$RETRAIN_LIST \
     --epochs=5 \
     --learning_rate=0.004 \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
-    --xtrans_chroma \
+    --superres_rgb \
     --full_model \
-    --green_model_asts=$CODE/PARETO_GREEN_MODELS/PARETO_XTRANS_GREEN_AZURE-05-10/ast_files.txt \
-    --green_model_weights=$CODE/PARETO_GREEN_MODELS/PARETO_XTRANS_GREEN_AZURE-05-10/weight_files.txt \
+    --green_model_asts=$CODE/PARETO_GREEN_MODELS/PARETO_SUPERRES_GREEN_05-14/ast_files.txt \
+    --green_model_weights=$CODE/PARETO_GREEN_MODELS/PARETO_SUPERRES_GREEN_05-14/weight_files.txt \
     --train_timeout=25200 \
     --early_model_drop=5000
 
