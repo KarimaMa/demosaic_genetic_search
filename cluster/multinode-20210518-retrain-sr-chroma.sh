@@ -130,7 +130,8 @@ echo "Running $WORKER_ID, training model $MODEL_ID"
     --full_model \
     --green_model_asts=$CODE_LOCAL/PARETO_GREEN_MODELS/PARETO_SUPERRES_GREEN_05-14/ast_files.txt \
     --green_model_weights=$CODE_LOCAL/PARETO_GREEN_MODELS/PARETO_SUPERRES_GREEN_05-14/weight_files.txt \
-    --train_timeout=25200
+    --train_timeout=25200 \
+    --early_model_drop=5000
 
 if [ $? -eq 0 ]
 then
