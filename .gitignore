@@ -16,5 +16,6 @@ OLD_DATADUMP/*
 OLD_MODEL_SEARCHES/*
 MODEL_EXPERIMENTS/*
 *.tar
-*.sh
+# *.sh
 ahd/*
+local_output
