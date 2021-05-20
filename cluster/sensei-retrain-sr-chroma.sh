@@ -54,7 +54,8 @@ python $CODE/multinode_sys_run/retrain_one_model.py \
     --full_model \
     --green_model_asts=$CODE/PARETO_GREEN_MODELS/PARETO_SUPERRES_GREEN_05-14/ast_files.txt \
     --green_model_weights=$CODE/PARETO_GREEN_MODELS/PARETO_SUPERRES_GREEN_05-14/weight_files.txt \
-    --train_timeout=25200
+    --train_timeout=25200 \
+    --early_model_drop=5000
 
 if [ $? -eq 0 ]
 then
