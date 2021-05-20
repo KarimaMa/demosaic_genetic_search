@@ -299,15 +299,11 @@ class ModelEvaluator():
       cost *= ratio
     elif isinstance(root, XFlatGreenExtractor):
       cost += self.compute_cost_helper(root.lchild, seen)
-      cost += self.compute_cost_helper(root.rchild, seen)    
-      ratio = 16/36
-      cost *= ratio
+      cost += self.compute_cost_helper(root.rchild, seen)
     elif isinstance(root, XFlatRGBExtractor):
       cost += self.compute_cost_helper(root.child1, seen)
       cost += self.compute_cost_helper(root.child2, seen)
       cost += self.compute_cost_helper(root.child3, seen)
-      ratio = 28/36
-      cost *= ratio
     elif isinstance(root, GreenRBExtractor):
       cost += self.compute_cost_helper(root.child, seen)
     elif isinstance(root, XGreenRBExtractor):
@@ -329,9 +325,9 @@ class ModelEvaluator():
       cost += (root.factor**2) * self.compute_cost_helper(root.child, seen) 
     elif isinstance(root, BilinearUpsample):
       cost += root.in_c * BILINEAR_COST
-      cost += self.compute_cost_helper(root.child, seen) / (SCALE_FACTOR**2)
+      cost += self.compute_cost_helper(root.child, seen) / (root.factor**2)
     elif isinstance(root, LearnedUpsample):
-      cost += root.groups * ((root.in_c // root.groups)) * (root.out_c // root.groups) * root.factor**2
+      cost += root.groups * ((root.in_c // root.groups)) * (root.out_c // root.groups)
       cost += self.compute_cost_helper(root.child, seen) / (root.factor**2)
     elif isinstance(root, Unpack):
       cost += self.compute_cost_helper(root.child, seen) / (root.factor**2)
