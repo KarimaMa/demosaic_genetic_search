@@ -122,12 +122,12 @@ python $CODE_LOCAL/multinode_sys_run/retrain_one_model.py \
     --model_info_dir=$RETRAIN_DATA/models \
     --save=$ROOT/results/RETRAIN-MISSING-NAS-05-13 \
     --model_retrain_list=$RETRAIN_LIST \
-    --epochs=5 \
+    --epochs=4 \
     --learning_rate=0.004 \
     --training_file=$DATA_LOCAL/train.txt \
     --validation_file=$DATA_LOCAL/val.txt \
     --nas \
-    --train_timeout=11000 \
+    --train_timeout=10000 \
     --early_model_drop=5000
 
 if [ $? -eq 0 ]
