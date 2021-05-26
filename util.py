@@ -17,17 +17,6 @@ import logging
 def extclass(cls):
   return lambda f: (setattr(cls,f.__name__,f) or f)
 
-
-def ids_from_file(filename):
-  # Assume the list file has relative paths
-  root = os.path.dirname(os.path.abspath(filename))
-  # root = os.getcwd()
-  ids = [os.path.join(root, l.strip()) for l in open(filename, "r")]
-  if not os.path.exists(ids[0]):
-      raise RuntimeError(f"Dataset filelist is invalid, coult not find {ids[0]}")
-  return ids
-
-
 def get_csv_writer(filename):
   if os.path.exists(filename):
     os.remove(filename)
@@ -92,7 +81,7 @@ class PerfStatTracker():
     self.function_time_avgs[function] = self.function_time_sums[function]/self.function_call_counts[function]
 
 
-class AvgrageMeter(object):
+class AverageMeter(object):
 
   def __init__(self):
     self.reset()
