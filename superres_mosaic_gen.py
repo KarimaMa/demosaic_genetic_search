@@ -35,36 +35,38 @@ def compute_kernel(kwidth, scale_factor):
   return kernel
 
 
-# def bicubic_downsample(image, scale_factor):
-#   radius = scale_factor * 2 # for antialiasing 
- 
-#   # add two additional dimensions for input and output channels
-#   kernel = compute_kernel(radius, scale_factor)
-#   kernel_sum = np.sum(kernel)
-#   kernel_x = np.expand_dims(kernel, axis=0)
-#   kernel_y = np.expand_dims(kernel, axis=1)
+class BicubicDownsample:
+  def __init__(self, c=3):
+    self.c = c
+    self.factor = 2
+    radius = self.factor * 2 # for antialiasing 
+    # add two additional dimensions for input and output channels
+    kernel = compute_kernel(radius, self.factor)
+    self.kernel_sum = np.sum(kernel)
+    kernel_x = np.expand_dims(kernel, axis=0)
+    kernel_y = np.expand_dims(kernel, axis=1)
 
-#   # add channel dims 
-#   kernel_x = np.tile(kernel_x, (3,1,1,1))
-#   kernel_y = np.tile(kernel_y, (3,1,1,1))
+    # add channel dims 
+    kernel_x = np.tile(kernel_x, (c,1,1,1))
+    kernel_y = np.tile(kernel_y, (c,1,1,1))
 
-#   kernel_x = torch.Tensor(kernel_x)
-#   kernel_y = torch.Tensor(kernel_y)
+    kernel_x = torch.Tensor(kernel_x)
+    kernel_y = torch.Tensor(kernel_y)
 
-#   # blur in the x direction
+    self.kernel_x = kernel_x
+    self.kernel_y = kernel_y
 
-#   resized_x = torch.nn.functional.conv2d(image, kernel_x, groups=3, stride=(1,scale_factor), padding=(0,radius))
-#   # normalize resized_x
-#   normed_resized_x = resized_x / kernel_sum 
+  def __call__(self, img, pad):
+    resized_x = torch.nn.functional.conv2d(img, self.kernel_x, groups=self.c, stride=(1,self.factor), padding=(0,pad))
+    normed_resized_x = resized_x / self.kernel_sum 
 
-#   resized_y = torch.nn.functional.conv2d(normed_resized_x, kernel_y, groups=3, stride=(scale_factor,1), padding=(radius, 0)) 
-#   normed_resized_y = resized_y / kernel_sum
-#   return normed_resized_y
+    resized_y = torch.nn.functional.conv2d(normed_resized_x, self.kernel_y, groups=self.c, stride=(self.factor,1), padding=(pad,0)) 
+    normed_resized_y = resized_y / self.kernel_sum
+    return torch.clamp(normed_resized_y, 0, 1)
 
 
-def bicubic_downsample(image, factor=None, pad=0):
+def bicubic_downsample(image, factor=None, pad=0, c=3):
   radius = factor * 2 # for antialiasing 
- 
   # add two additional dimensions for input and output channels
   kernel = compute_kernel(radius, factor)
   kernel_sum = np.sum(kernel)
@@ -72,8 +74,8 @@ def bicubic_downsample(image, factor=None, pad=0):
   kernel_y = np.expand_dims(kernel, axis=1)
 
   # add channel dims 
-  kernel_x = np.tile(kernel_x, (3,1,1,1))
-  kernel_y = np.tile(kernel_y, (3,1,1,1))
+  kernel_x = np.tile(kernel_x, (c,1,1,1))
+  kernel_y = np.tile(kernel_y, (c,1,1,1))
 
   kernel_x = torch.Tensor(kernel_x)
   kernel_y = torch.Tensor(kernel_y)
@@ -81,12 +83,12 @@ def bicubic_downsample(image, factor=None, pad=0):
   # blur in the x direction
 
   #resized_x = torch.nn.functional.conv2d(image, kernel_x, groups=3, stride=(1,scale_factor))
-  resized_x = torch.nn.functional.conv2d(image, kernel_x, groups=3, stride=(1,factor), padding=(0,pad))
+  resized_x = torch.nn.functional.conv2d(image, kernel_x, groups=c, stride=(1,factor), padding=(0,pad))
 
   # normalize resized_x
   normed_resized_x = resized_x / kernel_sum 
 
-  resized_y = torch.nn.functional.conv2d(normed_resized_x, kernel_y, groups=3, stride=(factor,1), padding=(pad,0)) 
+  resized_y = torch.nn.functional.conv2d(normed_resized_x, kernel_y, groups=c, stride=(factor,1), padding=(pad,0)) 
   normed_resized_y = resized_y / kernel_sum
   return torch.clamp(normed_resized_y, 0, 1)
 
