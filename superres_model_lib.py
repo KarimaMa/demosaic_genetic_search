@@ -110,7 +110,7 @@ def ChromaDemosaicknet(depth, width, no_grad, green_model, green_model_id):
       conv = Conv2D(relu, width, kwidth=3)
     relu = Relu(conv)
 
-  # unpack the learned residual twice
+  # unpack the learned residual
   # with a conv in between to ease the growing pains
   fullres_residual = LearnedUpsample(relu, width//2, factor=2)
   conv_residual = Conv2D(fullres_residual, width//2, kwidth=3)
