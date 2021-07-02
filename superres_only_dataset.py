@@ -93,7 +93,7 @@ class SOnlyGreenQuadDataset(data.Dataset):
 
 
 class SDataset(data.Dataset):
-  def __init__(self, data_file=None, return_index=False):
+  def __init__(self, data_file=None, return_index=False, crop_file=None):
     
     if data_file:
         self.list_IDs = ids_from_file(data_file)
@@ -103,6 +103,7 @@ class SDataset(data.Dataset):
         self.target_IDs = ids_from_file(target_data_file)
 
     self.return_index = return_index
+    self.crop_file = crop_file
 
   def __len__(self):
     return len(self.list_IDs)
@@ -163,7 +164,7 @@ class SDataset(data.Dataset):
     new_h = get_cropped_img_size(h)
     new_w = get_cropped_img_size(w)
 
-    print(f"from inside dataset image {image_f}\ninput_h {h} cropped_h {new_h}\ninput_w {w} cropped_w {new_w}")
+    # print(f"from inside dataset image {image_f}\ninput_h {h} cropped_h {new_h}\ninput_w {w} cropped_w {new_w}")
     hcrop = h - new_h
     wcrop = w - new_w
 
@@ -176,9 +177,6 @@ class SDataset(data.Dataset):
     # add a batch dimension to the image to use torch convolutions for downsampling
     batched_img = torch.Tensor(img).unsqueeze(0)
     lowres_img = bicubic_downsample(batched_img, factor=2, pad=pad)[0]
-
-    # print(f"using pad {pad} for kernel radius {kw} and scale factor {SCALE}")
-    # print(f"computed downsampled size: {downsampled_size}  downsampled_size size before cropping : {lowres_img.shape}")
     
     # crop out the valid region of the lowres image
     lowres_img = lowres_img[:,hlowres_start:hlowres_end+1, wlowres_start:wlowres_end+1]
@@ -186,9 +184,18 @@ class SDataset(data.Dataset):
     target = img
     # crop out the valid region of the fullres image 
     target = target[:,hfullres_start:hfullres_end+1, wfullres_start:wfullres_end+1]
-
+    # print(f"h start {hfullres_start} h end {hfullres_end}\nw start {wfullres_start} w end {wfullres_end}")
     target = torch.Tensor(target)
 
+    # save cropping information 
+    if self.crop_file:
+        hlcrop = hcrop + hfullres_start
+        hrcrop = h - (target.shape[1] + hfullres_start + hcrop)
+        wtcrop = wcrop + wfullres_start
+        wbcrop = w - (target.shape[2] + wfullres_start + wcrop)
+        with open(self.crop_file, "a+") as cf:
+            cf.write(f"{image_f.split('/')[-1]},{hlcrop},{hrcrop},{wtcrop},{wbcrop}\n")
+            
     input = lowres_img
 
     if self.return_index:
@@ -220,7 +227,6 @@ class SBaselineDataset(data.Dataset):
   def __getitem__(self, index):
     lr_img_f = self.list_IDs[index]
     hr_img_f = lr_img_f.rstrip("LR.png") + "HR.png"
-    print(hr_img_f)
 
     lr_img = np.array(imread(lr_img_f)).astype(np.float32) / (2**8-1)
     hr_img = np.array(imread(hr_img_f)).astype(np.float32) / (2**8-1)
@@ -236,7 +242,7 @@ class SBaselineDataset(data.Dataset):
         h_crop = self.get_crop(lr_img.shape[0])
         w_crop = self.get_crop(lr_img.shape[1])
         if h_crop > 0:
-            print(f"cropped: h {lr_img.shape[1]} crop: {h_crop} ")
+            # print(f"cropped: h {lr_img.shape[1]} crop: {h_crop} ")
             lr_img = lr_img[h_crop:, :, :]
             hr_img = hr_img[h_crop*2:, :, :]
         if w_crop > 0:
