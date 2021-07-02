@@ -12,7 +12,8 @@ import time
 sys.path.append(sys.path[0].split("/")[0])
 sys.path.append(os.path.join(sys.path[0].split("/")[0], "train_eval_scripts"))
 
-from dataset import Dataset, FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, NASDataset, ids_from_file, FastDataLoader
+from dataset import Dataset, FullPredictionQuadDataset, GreenQuadDataset, RGB8ChanDataset, NASDataset
+from dataset_util import ids_from_file, FastDataLoader
 from xtrans_dataset import XGreenDataset, XRGBDataset
 from superres_dataset import SGreenQuadDataset, SRGBQuadDataset
 from superres_only_dataset import SDataset
@@ -300,7 +301,7 @@ def lr_search(args, gpu_id, models, model_id, model_dir, criterion, train_queue,
 
 def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_queue, train_loggers, validation_queue, validation_loggers):
   variance_tracker = VarianceTracker(len(models))
-  loss_trackers = [util.AvgrageMeter() for m in models]
+  loss_trackers = [util.AverageMeter() for m in models]
   for m in models:
     m.train()
 
@@ -370,7 +371,7 @@ def get_validation_variance(args, gpu_id, models, criterion, optimizers, train_q
 
 def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimizers, \
               train_loggers, validation_queue, validation_loggers, epoch):
-  loss_trackers = [util.AvgrageMeter() for m in models]
+  loss_trackers = [util.AverageMeter() for m in models]
 
   for m in models:
     m.train()
@@ -473,8 +474,8 @@ def train_epoch(args, gpu_id, train_queue, models, model_dir, criterion, optimiz
 
 
 def infer(args, gpu_id, valid_queue, models, criterion):
-  loss_trackers = [util.AvgrageMeter() for m in models]
-  psnr_trackers = [util.AvgrageMeter() for m in models]
+  loss_trackers = [util.AverageMeter() for m in models]
+  psnr_trackers = [util.AverageMeter() for m in models]
 
   for m in models:
     m.eval()
