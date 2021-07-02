@@ -6,38 +6,8 @@ import numpy as np
 from torch.utils import data
 from imageio import imread
 from config import IMG_H, IMG_W
-from util import ids_from_file
-from mosaic_gen import bayer, xtrans, xtrans_invariant, xtrans_cell
-from skimage import color
-
-# from multiprocessing import shared_memory
-
-
-class _RepeatSampler(object):
-  """ Sampler that repeats forever.
-  Args:
-  sampler (Sampler)
-  """
-  def __init__(self, sampler):
-    self.sampler = sampler
-
-  def __iter__(self):
-    while True:
-      yield from iter(self.sampler)
-
-
-class FastDataLoader(torch.utils.data.dataloader.DataLoader):
-  def __init__(self, *args, **kwargs):
-    super().__init__(*args, **kwargs)
-    object.__setattr__(self, 'batch_sampler', _RepeatSampler(self.batch_sampler))
-    self.iterator = super().__iter__()
-
-  def __len__(self):
-    return len(self.batch_sampler.sampler)
-
-  def __iter__(self):
-    for i in range(len(self)):
-      yield next(self.iterator)
+from dataset_util import ids_from_file
+from mosaic_gen import bayer
 
 
 class GreenSharedDataset(data.Dataset):
@@ -238,9 +208,6 @@ class FullPredictionQuadDataset(data.Dataset):
 
     if self.lazyRAM:
       self.data_array = [None for i in range(len(self.list_IDs))]
-    # elif self.shared_data:
-    #   self.existing_shm = shared_memory.SharedMemory(name=self.shared_data)
-      #self.data_array = np.ndarray((len(self.list_IDs), 3, 128, 128), dtype=np.float32, buffer=existing_shm.buf)
 
   def __len__(self):
     return len(self.list_IDs)
@@ -260,12 +227,7 @@ class FullPredictionQuadDataset(data.Dataset):
     else:
       img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
       img = np.transpose(img, [2, 0, 1])
-    """
-    elif self.shared_data:
-      #existing_shm = shared_memory.SharedMemory(name=self.shared_data)
-      data_array = np.ndarray((len(self.list_IDs), 3, 128, 128), dtype=np.float32, buffer=self.existing_shm.buf)
-      img = data_array[index] 
-    """
+
     mosaic = bayer(img)
     mosaic = np.sum(mosaic, axis=0, keepdims=True)
 
