@@ -415,6 +415,7 @@ class RGBExtractorOp(nn.Module):
     # chromapred: 6 channels R@Gr, B@R, R@B, R@Gb, B@Gr, B@Gb
     fullgreen_shape = list(fullgreen.shape)
     out_shape = [fullgreen_shape[0], 3, fullgreen_shape[2]*2, fullgreen_shape[3]*2]
+
     img = torch.empty(torch.Size(out_shape), device=fullgreen.device)
 
     # fill in reds
@@ -988,7 +989,7 @@ class GreenRBExtractorOp(nn.Module):
     flat_green_shape = list(flat_green.shape)
     N = flat_green_shape[0]
     quad_h = flat_green_shape[2] // 2
-    quad_w = quad_h
+    quad_w = flat_green_shape[3] // 2
     out_shape = [N, 2, quad_h, quad_w]
 
     green_quad = torch.empty(torch.Size(out_shape), device=flat_green.device)
@@ -1087,7 +1088,7 @@ class Flat2QuadOp(nn.Module):
     flat_shape = list(flat.shape)
     N = flat_shape[0]
     quad_h = flat_shape[2] // 2
-    quad_w = quad_h
+    quad_w = flat_shape[3] // 2
     out_shape = [N, 4, quad_h, quad_w]
 
     quad = torch.empty(torch.Size(out_shape), device=flat.device)
