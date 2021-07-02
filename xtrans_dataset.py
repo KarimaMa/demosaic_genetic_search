@@ -6,10 +6,9 @@ import numpy as np
 from torch.utils import data
 from imageio import imread
 from config import IMG_H, IMG_W
-from util import ids_from_file
+from dataset_util import ids_from_file, get_largest_multiple
 from mosaic_gen import bayer, xtrans, xtrans_3x3_invariant, xtrans_cell
 from skimage import color
-
 
 
 class XGreenDataset(data.Dataset):
@@ -64,7 +63,7 @@ class XRGBDataset(data.Dataset):
       self.precomputed = True
     else:
       self.precomputed = False
-      self.mask = xtrans_cell(h=120, w=120)
+      # self.mask = xtrans_cell(h=120, w=120)
 
     self.flat = flat
     self.return_index = return_index
@@ -76,9 +75,23 @@ class XRGBDataset(data.Dataset):
     image_f = self.list_IDs[index]
     img = np.array(imread(image_f)).astype(np.float32) / (2**8-1)
     img = np.transpose(img, [2, 0, 1])
-    img = img[:,4:-4,4:-4]
+    # img = img[:,4:-4,4:-4]
+    oldh = img.shape[-2]
+    oldw = img.shape[-1]
 
-    mosaic3chan = xtrans(img, mask=self.mask)
+    h = get_largest_multiple(oldh, 6)
+    w = get_largest_multiple(oldw, 6)
+    hc = (oldh - h)//2
+    wc = (oldw - w)//2
+
+    if hc != 0:
+      img = img[:,hc:-hc,:]
+    if wc != 0:
+      img = img[:,:,wc:-wc]
+
+    mask = xtrans_cell(h=img.shape[-2], w=img.shape[-1])
+    mosaic3chan = xtrans(img, mask=mask)
+
     flat_mosaic = np.sum(mosaic3chan, axis=0, keepdims=True)
     packed_mosaic = xtrans_3x3_invariant(flat_mosaic)
 
