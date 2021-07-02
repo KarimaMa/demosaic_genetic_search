@@ -108,7 +108,7 @@ def run(args, models, model_id, model_dir):
 
 
 def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers, model_pytorch_files, validation_queue, validation_loggers, epoch):
-  loss_trackers = [util.AvgrageMeter() for m in models]
+  loss_trackers = [util.AverageMeter() for m in models]
   np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
   for m in models:
@@ -197,8 +197,8 @@ def train_epoch(args, train_queue, models, criterion, optimizers, train_loggers,
 
 
 def infer(args, valid_queue, models, criterion, validation_loggers):
-  loss_trackers = [util.AvgrageMeter() for m in models]
-  psnr_trackers = [util.AvgrageMeter() for m in models]
+  loss_trackers = [util.AverageMeter() for m in models]
+  psnr_trackers = [util.AverageMeter() for m in models]
 
   for m in models:
     m.eval()

@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 import sys
 sys.path.append(sys.path[0].split("/")[0])
 
-from dataset import FastDataLoader
+from dataset_util import FastDataLoader
 
 
 
