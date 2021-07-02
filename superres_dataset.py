@@ -284,7 +284,6 @@ class SBaselineRGBQuadDataset(data.Dataset):
   def __getitem__(self, index):
     lr_img_f = self.list_IDs[index]
     hr_img_f = lr_img_f.rstrip("LR.png") + "HR.png"
-    print(hr_img_f)
 
     lr_img = np.array(imread(lr_img_f)).astype(np.float32) / (2**8-1)
     hr_img = np.array(imread(hr_img_f)).astype(np.float32) / (2**8-1)
