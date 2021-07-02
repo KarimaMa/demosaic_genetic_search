@@ -23,43 +23,23 @@ import sys
 import csv
 rootdir = '/'.join(sys.path[0].split("/")[0:-1])
 sys.path.append(rootdir)
-print(rootdir)
+
+sr_baseline_dir = os.path.join("/".join(sys.path[0].split("/")[0:3]), "sr-baselines")
+sys.path.append(sr_baseline_dir)
+from upsample import BicubicUpsample
+
 from dataset_util import ids_from_file, FastDataLoader
 from superres_only_dataset import SBaselineDataset, SDataset
 import util
 
 import demosaicnet
+from gradienthalide_models import GradientHalide
 
 import logging
 logger = logging.getLogger("PIL.PngImagePlugin")
 logger.setLevel("ERROR")
 
-
-class ESPCN(nn.Module):
-    def __init__(self, scale_factor):
-        super(ESPCN, self).__init__()
-
-        # Feature mapping
-        self.feature_maps = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=5, stride=1, padding=2),
-            nn.Tanh(),
-
-            nn.Conv2d(64, 32, kernel_size=3, stride=1, padding=1),
-            nn.Tanh()
-        )
-
-        # Sub-pixel convolution layer
-        self.sub_pixel = nn.Sequential(
-            nn.Conv2d(32, 1 * (scale_factor ** 2), kernel_size=3, stride=1, padding=1),
-            nn.PixelShuffle(scale_factor),
-            nn.Sigmoid()
-        )
-
-    def forward(self, inputs):
-        out = self.feature_maps(inputs)
-        out = self.sub_pixel(out)
-        return out
-
+from espcn import ESPCN
 
 
 def tensor2image(t, normalize=False, dtype=np.uint8):
@@ -114,13 +94,15 @@ def get_image_id(image_f):
     return subdir, image_id
 
 
-def run(datafile, chkpt, output, joint):
+def run(datafile, chkpt, output, joint, cheap_demosaicker):
     print(f"Prediction using ESPCN (CPU)")
 
     model = ESPCN(2)
+    upsampler = BicubicUpsample(1)
+
     state = th.load(chkpt, map_location="cpu")
 
-    print("Loading model weights")
+    print(f"Loading model weights: {chkpt}")
     model.load_state_dict(state, strict=True)
 
     model_name = "espcn"
@@ -128,16 +110,24 @@ def run(datafile, chkpt, output, joint):
     # Preserve size, use padding
     demosaicker = None
     if joint:
-        demosaicker = demosaicnet.BayerDemosaick(pad=True)
+        if cheap_demosaicker:
+            model_output_dir = os.path.join(output, model_name + "+gradhalide")
+            demosaicker = GradientHalide(7, 15)
+            weight_file = "/home/karima/bayer-baselines/GRADHALIDE_BASELINES/MODEL-K7F15/model_train/model_v1_epoch2_pytorch"
+            demosaicker.load_state_dict(th.load(weight_file))
+        else:
+            model_output_dir = os.path.join(output, model_name + "+dnet")
+            demosaicker = demosaicnet.BayerDemosaick(pad=True)
+        demosaicker.eval()
     else:
         print("Super-res only, no demosaicking")
+        model_output_dir = os.path.join(output, model_name)
 
-    model_output_dir = os.path.join(output, model_name)
     os.makedirs(model_output_dir, exist_ok=True)
 
     image_files = ids_from_file(datafile)
 
-    is_baseline_dataset = not (args.dataset == "hdrvdp" or args.dataset == "moire")
+    is_baseline_dataset = not args.dataset in ["hdrvdp","moire","kodak","mcm"]
     if is_baseline_dataset:
         dataset = SBaselineDataset(datafile, return_index=True)
     else:
@@ -161,17 +151,21 @@ def run(datafile, chkpt, output, joint):
         if is_baseline_dataset:
             image_id = image_id.replace("LR.png", "HR.png")
 
-        outdir = os.path.join(model_output_dir, subdir)
+        outdir = os.path.join(model_output_dir, args.dataset)
         os.makedirs(outdir, exist_ok=True)
         outfile = os.path.join(outdir, image_id)
 
         # Apply mosaic + demosaick depending on the baseline you want to use
         start = time.time()
         if joint:
-            print("Simulating Bayer mosaic")
-            im = demosaicnet.bayer(lr_img)
-            print("Demosaicking with Demosaicnet")
-            im = demosaicker(im)
+            lr_bayer = demosaicnet.bayer(lr_img)
+            if args.cheap_demosaicker:
+                print("Demosaicking with GradientHalide")
+                flat_lowres_bayer = th.sum(lr_bayer, axis=1, keepdims=True)
+                im = demosaicker((flat_lowres_bayer, lr_bayer))
+            else:
+                print("Demosaicking with Demosaicnet")
+                im = demosaicker(lr_bayer)
             im = tensor2image(im)
         else:
             im = lr_img
@@ -192,18 +186,30 @@ def run(datafile, chkpt, output, joint):
         out_Y = model(Y/255.0)
         out_Y = out_Y*255.0
         out_Y = th.clamp(out_Y, 0, 255).detach().numpy()
-        print("Y", out_Y.min(), out_Y.max())
         out_Y = Image.fromarray(np.uint8(out_Y[0,0]), mode="L")
 
-        # upsample chroma with naive bicu
+        # upsample chroma with bicubic
+        # out_Y = Y.resize((hr_img.shape[3], hr_img.shape[2]), Image.BICUBIC)
         Cb = Cb.resize(out_Y.size, Image.BICUBIC)
         Cr = Cr.resize(out_Y.size, Image.BICUBIC)
+        # Cb = upsampler(th.from_numpy(np.array(Cb)).float().unsqueeze(0)/255.0) * 255.0
+        # Cr = upsampler(th.from_numpy(np.array(Cr)).float().unsqueeze(0)/255.0) * 255.0
 
-        out = Image.merge("YCbCr", [out_Y, Cb, Cr]).convert("RGB")
+        # Cb = th.clamp(Cb, 0, 255).detach().numpy()
+        # Cr = th.clamp(Cr, 0, 255).detach().numpy()
+        # Cb = Image.fromarray(np.uint8(Cb[0]), mode="L")
+        # Cr = Image.fromarray(np.uint8(Cr[0]), mode="L")
+
+        out = Image.merge('YCbCr', [out_Y, Cb, Cr]).convert("RGB")
         out = np.array(out)
-        print(out.min(), out.max())
 
         out_tensor = th.Tensor(np.transpose(out, [2, 0, 1])).unsqueeze(0) / 255.0
+
+        if args.crop > 0:
+            crop = args.crop
+            out_tensor = out_tensor[:,:,crop:-crop,crop:-crop]
+            hr_img = hr_img[:,:,crop:-crop,crop:-crop]
+
         print(out_tensor.shape, hr_img.shape)
 
         per_image_mse = (out_tensor-hr_img).square().mean(-1).mean(-1).mean(-1).mean(-1)
@@ -236,10 +242,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--datafile", type=str)
     parser.add_argument("--output", default="output")
-    parser.add_argument("--model", default="drln.pt")
+    parser.add_argument("--model", help="weights", type=str)
     parser.add_argument("--dataset", type=str)
     parser.add_argument("--crop", type=int, default=0)
     parser.add_argument("--joint", action="store_true")
+    parser.add_argument("--cheap_demosaicker", action="store_true")
     args = parser.parse_args()
-    run(args.datafile, args.model, args.output, args.joint)
+    run(args.datafile, args.model, args.output, args.joint, args.cheap_demosaicker)
 

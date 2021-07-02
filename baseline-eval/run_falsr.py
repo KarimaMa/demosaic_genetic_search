@@ -119,7 +119,7 @@ def run(datafile, model, output, joint):
 
             image_files = ids_from_file(datafile)
 
-            is_baseline_dataset = not (args.dataset == "hdrvdp" or args.dataset == "moire")
+            is_baseline_dataset = not args.dataset in ["hdrvdp","moire","kodak","mcm"]
             if is_baseline_dataset:
                 dataset = SBaselineDataset(datafile, return_index=True)
             else:

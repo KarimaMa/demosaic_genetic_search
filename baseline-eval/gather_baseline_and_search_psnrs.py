@@ -1,6 +1,8 @@
 import csv
 import argparse
 import os
+import numpy as np
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str)
@@ -8,12 +10,21 @@ parser.add_argument("--basedir", type=str, help="directory containing per model 
 parser.add_argument("--outfile", type=str)
 parser.add_argument("--search_experiments", type=str, help="search model experiments to include")
 parser.add_argument("--xtrans", action="store_true")
+parser.add_argument("--superres", action="store_true")
+parser.add_argument("--superres_only", action="store_true")
 
 args = parser.parse_args()
 
 
 if args.xtrans:
 	baseline_models = ["markesteijn"]
+elif args.superres:
+	baseline_models = ["drln+dnet", "FALSR-A+dnet", "FALSR-B+dnet", "FALSR-C+dnet", "prosr+dnet", "rcan+dnet", "tenet"]
+	baseline_models += ["espcn+gradhalide", "srcnn+gradhalide", "bicubic+gradhalide"]
+	baseline_models += ["espcn+dnet", "srcnn+dnet", "bicubic+dnet"]
+
+elif args.superres_only:
+	baseline_models = ["drln", "FALSR-A", "FALSR-B", "FALSR-C", "prosr", "rcan", "raisr", "espcn", "srcnn", "bicubic"]
 else:
 	baseline_models = ["ahd_median", "lmmse", "vng4", "henz"]
 
@@ -23,12 +34,13 @@ with open(args.outfile, "w") as csvf:
 
 	for m in baseline_models:
 		datadir = os.path.join(args.basedir, m)
-		psnr_file = os.path.join(datadir, f"{args.dataset}_avg_psnr.txt")
-		print(psnr_file)
+		psnr_file = os.path.join(datadir, f"{args.dataset}_psnrs.csv")
+		with open(psnr_file, "r") as pf:
+			reader = csv.DictReader(pf)
+			avg_psnr = np.mean([float(r["psnr"]) for r in reader])
+			print(datadir, avg_psnr)
 
-		psnr = [float(l) for l in open(psnr_file, "r")][0]
-		print(psnr)
-		writer.writerow({"model":m, "dataset":args.dataset, "psnr":psnr})
+		writer.writerow({"model":m, "dataset":args.dataset, "psnr":avg_psnr})
 
 	for experiment in args.search_experiments.split(","):
 		search_models_dir = os.path.join(args.basedir, experiment)
@@ -37,10 +49,12 @@ with open(args.outfile, "w") as csvf:
 				continue
 			datadir = os.path.join(search_models_dir, m)
 
-			psnr_file = os.path.join(datadir, f"{args.dataset}_avg_psnr.txt")
+			psnr_file = os.path.join(datadir, f"{args.dataset}_psnrs.csv")
 			if not os.path.exists(psnr_file):
 				continue
-			print(psnr_file)
-			psnr = [float(l) for l in open(psnr_file, "r")][0]
-			print(psnr)
-			writer.writerow({"model":f"{experiment}_{m}", "dataset":args.dataset, "psnr":psnr})
+			with open(psnr_file, "r") as pf:
+				reader = csv.DictReader(pf)
+				avg_psnr = np.mean([float(r["psnr"]) for r in reader])
+				print(datadir, avg_psnr)
+
+			writer.writerow({"model":f"{experiment}_{m}", "dataset":args.dataset, "psnr":avg_psnr})

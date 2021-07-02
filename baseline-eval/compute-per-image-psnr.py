@@ -55,7 +55,6 @@ def get_weight_file(train_dir, training_info_file, search_models=False):
 			weight_file = os.path.join(train_dir, f"model_v{best_version}_epoch{best_epoch}_pytorch")
 		else:
 			weight_file = os.path.join(train_dir, f"model_weights_epoch{best_epoch}")
-		print(weight_file)
 
 	else:
 		weight_file = os.path.join(train_dir, f"model_v{best_version}_epoch{best_epoch}_pytorch")
@@ -66,10 +65,10 @@ def get_weight_file(train_dir, training_info_file, search_models=False):
 	return weight_file, max_psnr
 
 
-def write_dataset_filelist(eval_imagedir, tempfile, is_baseline_dataset):
+def write_dataset_filelist(eval_imagedir, tempfile, is_sr_dataset):
 	with open(tempfile, "w") as tf:
 		for f in os.listdir(args.eval_imagedir):
-			if is_baseline_dataset:
+			if is_sr_dataset:
 				if f.endswith("LR.png"):
 					tf.write(os.path.join(eval_imagedir, f)+"\n")
 			else:
@@ -99,13 +98,14 @@ parser.add_argument("--dnetgrid_search", action="store_true")
 parser.add_argument("--gradienthalide", action="store_true")
 parser.add_argument("--demosaicnet", action="store_true")
 
+parser.add_argument("--save_search_model_images", action="store_true")
+
 args = parser.parse_args()
 
 modeldir = os.path.join(args.rootdir, args.model)
 model_outputdir = os.path.join(modeldir, args.dataset)
 
 os.makedirs(model_outputdir, exist_ok=True)
-print(model_outputdir)
 
 if args.compute:
 	# find the best model weights we have
@@ -170,14 +170,14 @@ if args.compute:
 			args.green_model_weight_files = [l.strip() for l in open(args.green_model_weights)]
 			insert_green_model(model, args.green_model_ast_files, args.green_model_weight_files)
 
-		print(model.dump())
+		# print(model.dump())
 
 		model = model.ast_to_model()
 		model.load_state_dict(torch.load(weight_file))
 
 	perf_data = {"image":[], "psnr":[]}
 
-	is_baseline_dataset = (args.dataset != "hdrvdp") and (args.dataset != "moire")
+	is_baseline_dataset = not args.dataset in ["hdrvdp","moire","kodak","mcm"]
 
 	if args.xtrans_search:
 		DatasetType = XRGBDataset
@@ -199,7 +199,8 @@ if args.compute:
 		DatasetType = NASDataset
 
 	dataset_filelist_f = "_temp.txt"
-	write_dataset_filelist(args.eval_imagedir, dataset_filelist_f, not (args.dataset == "hdrvdp" or args.dataset == "moire"))
+	is_sr_dataset = (args.superres_search or args.superres_only_search) and not args.dataset in ["hdrvdp","moire","kodak","mcm"]
+	write_dataset_filelist(args.eval_imagedir, dataset_filelist_f, is_sr_dataset)
 	image_files = dataset_util.ids_from_file(dataset_filelist_f)
 
 	dataset = DatasetType(dataset_filelist_f, return_index=True)
@@ -214,6 +215,7 @@ if args.compute:
 	with torch.no_grad():
 		for index, input, target in data_queue:
 			image_f = image_files[index]
+			print(image_f)
 			subdir, image_id = dataset_util.get_image_id(image_f)
 
 			if args.xtrans_search:
@@ -246,47 +248,48 @@ if args.compute:
 				assert False, "Unspecified model type"
 
 			is_ast_pytorch_model = is_search_model and (not args.dnetgrid_search)
-			try:
-				if is_ast_pytorch_model:
-					model.reset()
-					output = model.run(model_inputs)
-					# print(f"ran model...")
-					# print(f"model output shape {output.shape}")
-					# print(f"target shape {target.shape}")
-				else:
-					output = model(input)
+			# try:
+			if is_ast_pytorch_model:
+				model.reset()
+				output = model.run(model_inputs)
+				# print(f"ran model...")
+				# print(f"model output shape {output.shape}")
+				# print(f"target shape {target.shape}")
+			else:
+				output = model(input)
 
-				clamped = torch.clamp(output, 0, 1)
+			clamped = torch.clamp(output, 0, 1)
 
-				# can't afford to save all search model outputs, 100 models per search 
-				if not is_search_model:
-					out_img = dataset_util.tensor2image(clamped)
-					outfile = os.path.join(model_outputdir, image_f)
-					print(outfile)
-					imageio.imsave(outfile, out_img)
+			print(f"clamped {clamped.shape} target {target.shape}")
+			clamped = clamped.squeeze(0)
+			target = target.squeeze(0)
+			if args.crop > 0:
+				crop = args.crop
+				clamped = clamped[:,crop:-crop,crop:-crop]
+				target = target[:,crop:-crop,crop:-crop]
 
-				clamped = clamped.squeeze(0)
-				target = target.squeeze(0)
-				if args.crop > 0:
-					crop = args.crop
-					clamped = clamped[:,crop:-crop,crop:-crop]
-					target = target[:,crop:-crop,crop:-crop]
+			# can't afford to save all search model outputs, 100 models per search 
+			if not is_search_model or args.save_search_model_images:
+				out_img = dataset_util.tensor2image(clamped.unsqueeze(0))
+				outfile = os.path.join(model_outputdir, image_id)
+				print(f"saving model output to {outfile} {out_img.shape}")
+				imageio.imsave(outfile, out_img)
 
-				# print(f"after crop img {img.shape} out {clamped.shape}")
-				# print(f"output shape {output.shape}")
+			# print(f"after crop img {img.shape} out {clamped.shape}")
+			# print(f"output shape {output.shape}")
 
-				image_mse = (clamped-target).square().mean(-1).mean(-1).mean(-1)
-				image_psnr = -10.0*torch.log10(image_mse)
+			image_mse = (clamped-target).square().mean(-1).mean(-1).mean(-1)
+			image_psnr = -10.0*torch.log10(image_mse)
 
-				perf_data["image"].append(image_f)
-				perf_data["psnr"].append(image_psnr.item())
-		     
-				print(f"psnr: {image_psnr}")
+			perf_data["image"].append(image_f)
+			perf_data["psnr"].append(image_psnr.item())
+	     
+			print(f"psnr: {image_psnr}")
 
-			except Exception as e:
-				with open("failed_sr_search_models.txt", "a+") as f:
-					f.write(f"{args.model} {args.dataset}")
-					f.write(f"{e}\n")
+			# except Exception as e:
+			# 	with open("failed_sr_search_models.txt", "a+") as f:
+			# 		f.write(f"{args.model} {args.dataset}")
+			# 		f.write(f"{e}\n")
 
 	os.remove(dataset_filelist_f)
 
