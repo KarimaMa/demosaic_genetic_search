@@ -96,24 +96,45 @@ class GradientHalide(nn.Module):
 
   def forward(self, bayers):
     flatbayer, threechan_bayer = bayers
+
+    img_h = flatbayer.shape[-2]
+    img_w = flatbayer.shape[-1]
+    # define masks
+    chromaHBmask = torch.zeros((img_h, img_w))
+    chromaHBmask[1::2,1::2] = 1
+
+    chromaVRmask = chromaHBmask
+
+    chromaHRmask = torch.zeros((img_h, img_w))
+    chromaHRmask[0::2,0::2] = 1
+
+    chromaVBmask = chromaHRmask
+
+    chromaQRmask = torch.zeros((img_h, img_w))
+    chromaQRmask[1::2,0::2] = 1
+    chromaQBmask = torch.zeros((img_h, img_w))
+    chromaQBmask[0::2,1::2] = 1
+
+    Gmask = (chromaQRmask + chromaQBmask)
+
     green = self.Green(flatbayer)
-    green = green * self.Gmask + threechan_bayer[:,1,...].unsqueeze(1)
+    green = green * Gmask + threechan_bayer[:,1,...].unsqueeze(1)
 
     chroma_input = flatbayer - green
     chromav = self.ChromaV(chroma_input) + green
     chromah = self.ChromaH(chroma_input) + green
     chromaq = self.ChromaQ(chroma_input) + green
 
-    red = chromav * self.chromaVRmask \
-          + chromah * self.chromaHRmask \
-          + chromaq * self.chromaQRmask \
+    red = chromav * chromaVRmask \
+          + chromah * chromaHRmask \
+          + chromaq * chromaQRmask \
           + threechan_bayer[:,0,...].unsqueeze(1)
 
-    blue = chromav * self.chromaVBmask \
-          + chromah * self.chromaHBmask \
-          + chromaq * self.chromaQBmask \
+    blue = chromav * chromaVBmask \
+          + chromah * chromaHBmask \
+          + chromaq * chromaQBmask \
           + threechan_bayer[:,2,...].unsqueeze(1)
 
     image = torch.cat([red, green, blue], dim=1)
-
+  
     return image
