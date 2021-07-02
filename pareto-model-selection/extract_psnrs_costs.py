@@ -14,7 +14,7 @@ if __name__ == "__main__":
 	parser.add_argument("--outcsv", type=str, help="output csv file")
 	args = parser.parse_args()
 
-	model_ids, costs, psnrs, best_inits = collect_model_info(args.search_models)
+	model_ids, costs, psnrs, best_inits = collect_model_info(args.search_models, None)
 
 	with open(args.outcsv, "w") as csvf:
 		writer = csv.DictWriter(csvf, fieldnames=["modelid", "cost", "psnr"])
