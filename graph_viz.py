@@ -18,19 +18,23 @@ def vis_ast_helper(root, ids2nodes, graph, node_id, seen=None):
 	else:
 		root_id = node_id
 		seen[id(root)] = root_id
-		if issubclass(type(root), Linear) or issubclass(type(root), UnopIIdiv):
+		if issubclass(type(root), Linear) or issubclass(type(root), UnopIIdiv) or issubclass(type(root), Upsample) or issubclass(type(root), Downsample):
 			in_c = root.in_c
 			out_c = root.out_c
 			if id(root) in ids2nodes:
-				node_label = f"{root.name}_{ids2nodes[id(root)]} {in_c} {out_c}"
+				#node_label = f"{root.name}_{ids2nodes[id(root)]} {in_c} {out_c}"
+				node_label = f"{root.name} ({in_c} {out_c})"
 			else:
-				node_label = f"{root.name} {in_c} {out_c}"
+				node_label = f"{root.name} ({in_c} {out_c})"
 			if hasattr(root, "groups"):
 				node_label += f" g{root.groups}"
+			if hasattr(root, 'factor'):
+				node_label += f" s{root.factor}"
 		else:
 			node_label = root.name
 		graph.node(str(node_id), node_label)
 		node_id += 1
+
 
 		if hasattr(root, 'node'):
 			if id(root.node) in seen:
