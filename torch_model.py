@@ -13,7 +13,6 @@ def extclass(cls):
   return lambda f: (setattr(cls,f.__name__,f) or f)
 
 
-
 class InputOp(nn.Module):
   def __init__(self, input_name, model=None, model_name=None, no_grad=False, weights=None):
     super(InputOp, self).__init__()
@@ -473,7 +472,12 @@ class XFlatRGBExtractorOp(nn.Module):
       self.output = self.forward(operand1, operand2, operand3)
     return self.output 
 
-  def forward(self, green_pred, xtrans, chroma_pred):
+  #def forward(self, green_pred, xtrans, chroma_pred):
+  def forward(self, model_inputs):
+    green_pred = self._operands[0].run(model_inputs)
+    xtrans = self._operands[1].run(model_inputs)
+    chroma_pred = self._operands[2].run(model_inputs)
+
     out_shape = list(xtrans.shape)
     out_shape[1] = 3
 
