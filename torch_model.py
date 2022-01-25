@@ -27,6 +27,9 @@ class InputOp(nn.Module):
 
     self.output = None
 
+  def genfieldname(self):
+    return ""
+
   def _initialize_parameters(self):
     if hasattr(self, "model") and not self.initialized:
       if self.weights:
@@ -47,6 +50,17 @@ class InputOp(nn.Module):
   # unnecessary function, never called but needed by nn.Module
   def foward(self, model_inputs):
     return model_inputs[self.name]
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    if hasattr(self, "model"):
+      op_id1, = ids2inputs[id(self)]
+      op_var1 = inputs2varnames[op_id1]
+      return f"{output_varname} = {op_var1}"
+    else:
+      input_name = self.name.lstrip("Input(").rstrip(")")
+      return f"{output_varname} = {input_name}"
 
   def run(self, model_inputs):
     if self.output is None:
@@ -69,6 +83,20 @@ class InputOp(nn.Module):
       else:
         return model_inputs[self.name]
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+      if hasattr(self, "model"):
+        ids2inputs[id(self)] = [id(self.model)]
+        self.model.get_calling_order(model_inputs, ids2inputs, calling_order)
+      else:
+        ids2inputs[id(self)] = [id(model_inputs[self.name])]
+      calling_order += [(f"input_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
+  
   def to_gpu(self, gpu_id):
     if hasattr(self, "model"):
       self.model.to_gpu(gpu_id)
@@ -79,6 +107,9 @@ class AddOp(nn.Module):
     super(AddOp, self).__init__()
     self._operands = nn.ModuleList([loperand, roperand])
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._AddOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -95,6 +126,18 @@ class AddOp(nn.Module):
       roperand = self._operands[1].run(model_inputs)
       self.output = self.forward(loperand, roperand)
     return self.output 
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1])]
+    calling_order += [(f"add_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   def forward(self, x, y):
     # for handling quad layouts that can't use default pytorch broadcasting:
@@ -111,6 +154,14 @@ class AddOp(nn.Module):
         y = y.repeat(1, factor, 1, 1)
     return x + y
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    lop_id, rop_id = ids2inputs[id(self)]
+    lop_var = inputs2varnames[lop_id]
+    rop_var = inputs2varnames[rop_id]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({lop_var}, {rop_var})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
@@ -121,6 +172,9 @@ class SubOp(nn.Module):
     super(SubOp, self).__init__()
     self._operands = nn.ModuleList([loperand, roperand])
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._SubOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -137,6 +191,18 @@ class SubOp(nn.Module):
       roperand = self._operands[1].run(model_inputs)
       self.output = self.forward(loperand, roperand)
     return self.output 
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1])]
+    calling_order += [(f"sub_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   def forward(self, x, y): 
     # for handling quad layouts that can't use default pytorch broadcasting:
@@ -153,6 +219,14 @@ class SubOp(nn.Module):
         y = y.repeat(1, factor, 1, 1)
     return x - y
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    lop_id, rop_id = ids2inputs[id(self)]
+    lop_var = inputs2varnames[lop_id]
+    rop_var = inputs2varnames[rop_id]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({lop_var}, {rop_var})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
@@ -163,6 +237,9 @@ class MulOp(nn.Module):
     super(MulOp, self).__init__()
     self._operands = nn.ModuleList([loperand, roperand])
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._MulOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -179,6 +256,18 @@ class MulOp(nn.Module):
       roperand = self._operands[1].run(model_inputs)
       self.output = self.forward(loperand, roperand)
     return self.output 
+  
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1])]
+    calling_order += [(f"mul_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   def forward(self, x, y):
     # for handling quad layouts that can't use default pytorch broadcasting:
@@ -194,6 +283,14 @@ class MulOp(nn.Module):
         factor = xc // yc 
         y = y.repeat(1, factor, 1, 1)
     return x * y
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    lop_id, rop_id = ids2inputs[id(self)]
+    lop_var = inputs2varnames[lop_id]
+    rop_var = inputs2varnames[rop_id]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({lop_var}, {rop_var})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -290,6 +387,9 @@ class StackOp(nn.Module):
     self._operands = nn.ModuleList([loperand, roperand])
     self.output = None
 
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._StackOp()"
+
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
     self._operands[1]._initialize_parameters()
@@ -306,8 +406,28 @@ class StackOp(nn.Module):
       self.output = self.forward(loperand, roperand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1])]
+    calling_order += [(f"stack_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
+
   def forward(self, x, y):
     return torch.cat((x, y), 1)
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    lop_id, rop_id = ids2inputs[id(self)]
+    lop_var = inputs2varnames[lop_id]
+    rop_var = inputs2varnames[rop_id]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({lop_var}, {rop_var})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -319,6 +439,9 @@ class SRGBExtractorOp(nn.Module):
     super(SRGBExtractorOp, self).__init__()
     self._operands = nn.ModuleList([green, chromapred])
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._SRGBExtractorOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -336,6 +459,15 @@ class SRGBExtractorOp(nn.Module):
       self.output = self.forward(operand1, operand2)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1])]
+    calling_order += [(f"SRGBExtractor_{id(self)}", self)]
+
   def forward(self, green, chromapred):
     out_shape = list(chromapred.shape)
     out_shape[1] = 3
@@ -348,6 +480,14 @@ class SRGBExtractorOp(nn.Module):
 
     return img 
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    lop_id, rop_id = ids2inputs[id(self)]
+    lop_var = inputs2varnames[lop_id]
+    rop_var = inputs2varnames[rop_id]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({lop_var}, {rop_var})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
@@ -358,6 +498,9 @@ class SExtractorOp(nn.Module):
     super(SExtractorOp, self).__init__()
     self._operands = nn.ModuleList([pred])
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._SExtractorOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -372,8 +515,26 @@ class SExtractorOp(nn.Module):
       self.output = self.forward(operand1)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"SExtractor_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
+
   def forward(self, pred):
     return pred
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -388,6 +549,9 @@ class RGBExtractorOp(nn.Module):
     self._operands = nn.ModuleList([fullgreen, redbluebayer, chromapred])
     self.pixel_shuffle = nn.PixelShuffle(upscale_factor=2)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._RGBExtractorOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -407,6 +571,19 @@ class RGBExtractorOp(nn.Module):
       operand3 = self._operands[2].run(model_inputs)
       self.output = self.forward(operand1, operand2, operand3)
     return self.output 
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[2].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1]), id(self._operands[2])]
+    calling_order += [(f"RGBExtractor_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   def forward(self, fullgreen, redbluebayer, chromapred):
     # fullgreen : 4 channels
@@ -434,6 +611,13 @@ class RGBExtractorOp(nn.Module):
     
     return img 
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, op_id2, op_id3 = ids2inputs[id(self)]
+    op_var1, op_var2, op_var3 = inputs2varnames[op_id1], inputs2varnames[op_id2], inputs2varnames[op_id3]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1}, {op_var2}, {op_var3})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
@@ -452,6 +636,9 @@ class XFlatRGBExtractorOp(nn.Module):
     self._operands = nn.ModuleList([green_pred, xtrans, chroma_pred])
     self.pixel_shuffle = nn.PixelShuffle(upscale_factor=6)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._XFlatRGBExtractorOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -472,12 +659,20 @@ class XFlatRGBExtractorOp(nn.Module):
       self.output = self.forward(operand1, operand2, operand3)
     return self.output 
 
-  #def forward(self, green_pred, xtrans, chroma_pred):
-  def forward(self, model_inputs):
-    green_pred = self._operands[0].run(model_inputs)
-    xtrans = self._operands[1].run(model_inputs)
-    chroma_pred = self._operands[2].run(model_inputs)
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[2].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1]), id(self._operands[2])]
+    calling_order += [(f"XFlatRGBExtractor_{id(self)}", self)]
 
+  def map_node2param(self, calling_id, node2params):
+    return
+
+  def forward(self, green_pred, xtrans, chroma_pred):
     out_shape = list(xtrans.shape)
     out_shape[1] = 3
 
@@ -519,6 +714,13 @@ class XFlatRGBExtractorOp(nn.Module):
 
     return img
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, op_id2, op_id3 = ids2inputs[id(self)]
+    op_var1, op_var2, op_var3 = inputs2varnames[op_id1], inputs2varnames[op_id2], inputs2varnames[op_id3]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1}, {op_var2}, {op_var3})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
@@ -531,6 +733,9 @@ class XRGBExtractorOp(nn.Module):
     self._operands = nn.ModuleList([green_pred, xtrans, chroma_pred])
     self.pixel_shuffle = nn.PixelShuffle(upscale_factor=6)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._XRGBExtractorOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -550,6 +755,19 @@ class XRGBExtractorOp(nn.Module):
       operand3 = self._operands[2].run(model_inputs)
       self.output = self.forward(operand1, operand2, operand3)
     return self.output 
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[2].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1]), id(self._operands[2])]
+    calling_order += [(f"XRGBExtractor_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   def forward(self, green_pred, xtrans, chroma_pred):
     # green_pred : 36 channels
@@ -640,6 +858,13 @@ class XRGBExtractorOp(nn.Module):
     
     return img 
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, op_id2, op_id3 = ids2inputs[id(self)]
+    op_var1, op_var2, op_var3 = inputs2varnames[op_id1], inputs2varnames[op_id2], inputs2varnames[op_id3]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1}, {op_var2}, {op_var3})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
@@ -652,6 +877,9 @@ class RGB8ChanExtractorOp(nn.Module):
     self._operands = nn.ModuleList([operand1, operand2])
     self.pixel_shuffle = nn.PixelShuffle(upscale_factor=2)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._RGB8ChanExtractorOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -668,6 +896,18 @@ class RGB8ChanExtractorOp(nn.Module):
       operand2 = self._operands[1].run(model_inputs)
       self.output = self.forward(operand1, operand2)
     return self.output
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1])]
+    calling_order += [(f"RGB8ChanExtractor_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   """
   Takes bayer quad and 8 channel prediction
@@ -687,23 +927,30 @@ class RGB8ChanExtractorOp(nn.Module):
 
     output = torch.empty(torch.Size(out_shape), device=bayer_quad.device)
     
-    output[:,0,0::2,0::2] =  flat_pred[:,0,0::2,0::2] # R at Gr
+    output[:,0,0::2,0::2] = flat_pred[:,0,0::2,0::2] # R at Gr
     output[:,1,0::2,0::2] = flat_bayer[:,0,0::2,0::2]
-    output[:,2,0::2,0::2] =  flat_pred[:,1,0::2,0::2] # B at Gr
+    output[:,2,0::2,0::2] = flat_pred[:,1,0::2,0::2] # B at Gr
 
     output[:,0,0::2,1::2] = flat_bayer[:,0,0::2,1::2] 
-    output[:,1,0::2,1::2] =  flat_pred[:,0,0::2,1::2] # G at R
-    output[:,2,0::2,1::2] =  flat_pred[:,1,0::2,1::2] # B at R
+    output[:,1,0::2,1::2] = flat_pred[:,0,0::2,1::2] # G at R
+    output[:,2,0::2,1::2] = flat_pred[:,1,0::2,1::2] # B at R
 
-    output[:,0,1::2,0::2] =  flat_pred[:,0,1::2,0::2] # R at B
-    output[:,1,1::2,0::2] =  flat_pred[:,1,1::2,0::2] # G at B
+    output[:,0,1::2,0::2] = flat_pred[:,0,1::2,0::2] # R at B
+    output[:,1,1::2,0::2] = flat_pred[:,1,1::2,0::2] # G at B
     output[:,2,1::2,0::2] = flat_bayer[:,0,1::2,0::2] 
 
-    output[:,0,1::2,1::2] =  flat_pred[:,0,1::2,1::2] # R at Gb
+    output[:,0,1::2,1::2] = flat_pred[:,0,1::2,1::2] # R at Gb
     output[:,1,1::2,1::2] = flat_bayer[:,0,1::2,1::2] 
-    output[:,2,1::2,1::2] =  flat_pred[:,1,1::2,1::2] # B at Gb
+    output[:,2,1::2,1::2] = flat_pred[:,1,1::2,1::2] # B at Gb
 
     return output
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, op_id2 = ids2inputs[id(self)]
+    op_var1, op_var2 = inputs2varnames[op_id1], inputs2varnames[op_id2]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1}, {op_var2})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -715,6 +962,9 @@ class FlatRGB8ChanExtractorOp(nn.Module):
     super(FlatRGB8ChanExtractorOp, self).__init__()
     self._operands = nn.ModuleList([operand1, operand2])
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._FlatRGB8ChanExtractorOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -731,6 +981,18 @@ class FlatRGB8ChanExtractorOp(nn.Module):
       operand2 = self._operands[1].run(model_inputs)
       self.output = self.forward(operand1, operand2)
     return self.output
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1])]
+    calling_order += [(f"FlatRGB8ChanExtractor_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   """
   Takes 3chan bayer and 8 channel prediction
@@ -755,6 +1017,13 @@ class FlatRGB8ChanExtractorOp(nn.Module):
 
     return output
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, op_id2 = ids2inputs[id(self)]
+    op_var1, op_var2 = inputs2varnames[op_id1], inputs2varnames[op_id2]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1}, {op_var2})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
@@ -766,6 +1035,9 @@ class GreenExtractorOp(nn.Module):
     self._operands = nn.ModuleList([operand1, operand2])
     self.pixel_shuffle = nn.PixelShuffle(upscale_factor=2)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._GreenExtractorOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -784,6 +1056,18 @@ class GreenExtractorOp(nn.Module):
     return self.output
 
   """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1])]
+    calling_order += [(f"GreenExtractor_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
+
+  """
   Takes bayer quad and 2 channel green prediction
   Spits out full green channel 
   """
@@ -795,6 +1079,13 @@ class GreenExtractorOp(nn.Module):
     out[:,0,1::2,0::2] = green_pred[:,1,:,:]
     return out
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, op_id2 = ids2inputs[id(self)]
+    op_var1, op_var2 = inputs2varnames[op_id1], inputs2varnames[op_id2]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1}, {op_var2})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
@@ -805,6 +1096,9 @@ class SGreenExtractorOp(nn.Module):
     super(SGreenExtractorOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._SGreenExtractorOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -819,8 +1113,26 @@ class SGreenExtractorOp(nn.Module):
       self.output = self.forward(operand)
     return self.output
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"SGreenExtractor_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
+
   def forward(self, green_pred):
     return green_pred
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -832,6 +1144,9 @@ class XGreenExtractorOp(nn.Module):
     self._operands = nn.ModuleList([operand1, operand2])
     self.pixel_shuffle = nn.PixelShuffle(upscale_factor=6)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._XGreenExtractorOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -848,6 +1163,18 @@ class XGreenExtractorOp(nn.Module):
       operand2 = self._operands[1].run(model_inputs)
       self.output = self.forward(operand1, operand2)
     return self.output
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1])]
+    calling_order += [(f"XGreenExtractor_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   """
   Takes Xtrans mosaic and 16 channel green prediction
@@ -887,10 +1214,16 @@ class XGreenExtractorOp(nn.Module):
 
     return out
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, op_id2 = ids2inputs[id(self)]
+    op_var1, op_var2 = inputs2varnames[op_id1], inputs2varnames[op_id2]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1}, {op_var2})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
-
 
 
 class XFlatGreenExtractorOp(nn.Module):
@@ -899,6 +1232,9 @@ class XFlatGreenExtractorOp(nn.Module):
     self._operands = nn.ModuleList([operand1, operand2])
     self.pixel_shuffle = nn.PixelShuffle(upscale_factor=6)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._XFlatGreenExtractorOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -915,6 +1251,18 @@ class XFlatGreenExtractorOp(nn.Module):
       operand2 = self._operands[1].run(model_inputs)
       self.output = self.forward(operand1, operand2)
     return self.output
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    self._operands[1].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0]), id(self._operands[1])]
+    calling_order += [(f"XFlatGreenExtractor_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   """
   Takes 3 channel flat Xtrans mosaic and 1 channel green prediction
@@ -958,10 +1306,16 @@ class XFlatGreenExtractorOp(nn.Module):
 
     return out
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, op_id2 = ids2inputs[id(self)]
+    op_var1, op_var2 = inputs2varnames[op_id1], inputs2varnames[op_id2]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1}, {op_var2})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
     self._operands[1].to_gpu(gpu_id)
-
 
 
 """
@@ -973,6 +1327,9 @@ class GreenRBExtractorOp(nn.Module):
     super(GreenRBExtractorOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._GreenRBExtractorOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -986,6 +1343,17 @@ class GreenRBExtractorOp(nn.Module):
       operand = self._operands[0].run(model_inputs)
       self.output = self.forward(operand)
     return self.output 
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"GreenRBExtractor_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   def forward(self, flat_green):
     # input: flat green channel 
@@ -1002,9 +1370,15 @@ class GreenRBExtractorOp(nn.Module):
    
     return green_quad
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
-
 
 
 """
@@ -1018,6 +1392,9 @@ class XGreenRBExtractorOp(nn.Module):
     self._operands = nn.ModuleList([operand])
     self.output = None
 
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._XGreenRBExtractorOp()"
+
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
@@ -1030,6 +1407,17 @@ class XGreenRBExtractorOp(nn.Module):
       operand = self._operands[0].run(model_inputs)
       self.output = self.forward(operand)
     return self.output 
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"XGreenRBExtractor_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   def forward(self, flat_green):
     factor = 6
@@ -1059,6 +1447,13 @@ class XGreenRBExtractorOp(nn.Module):
 
     return green_rb
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
 
@@ -1073,6 +1468,9 @@ class Flat2QuadOp(nn.Module):
     self._operands = nn.ModuleList([operand])
     self.output = None
 
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._Flat2QuadOp()"
+
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
@@ -1085,6 +1483,17 @@ class Flat2QuadOp(nn.Module):
       operand = self._operands[0].run(model_inputs)
       self.output = self.forward(operand)
     return self.output 
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"Flat2Quad_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   def forward(self, flat):
     # input: flat green channel 
@@ -1103,6 +1512,13 @@ class Flat2QuadOp(nn.Module):
 
     return quad
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
 
@@ -1113,6 +1529,9 @@ class SoftmaxOp(nn.Module):
     self._operands = nn.ModuleList([operand])
     self.f = nn.Softmax(dim=1)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._SoftmaxOp()"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -1127,8 +1546,26 @@ class SoftmaxOp(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"Softmax_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
+
   def forward(self, x):
     return self.f(x)
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1141,6 +1578,9 @@ class ReluOp(nn.Module):
     self.f = nn.ReLU()
     self.output = None
 
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._ReluOp()"
+
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
@@ -1154,8 +1594,26 @@ class ReluOp(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"Relu_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
+
   def forward(self, x):
     return self.f(x)
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1180,8 +1638,23 @@ class LogOp(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(id(self), self)]
+
   def forward(self, x):
     return torch.log(x)
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1206,8 +1679,23 @@ class ExpOp(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(id(self), self)]
+
   def forward(self, x):
     return torch.exp(x)
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1218,11 +1706,17 @@ class LearnedDownsampleOp(nn.Module):
     super(LearnedDownsampleOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.scale_factor = scale_factor
+    self.groups = groups
+    self.C_in = C_in
+    self.C_out = C_out
     self.downsample_w = scale_factor * 2 + (scale_factor % 2) # use odd kernel width for odd sampling factors 
     downsampler = nn.Conv2d(C_in, C_out, self.downsample_w, stride=scale_factor, groups=groups, padding=math.ceil((self.downsample_w-self.scale_factor)/2), bias=False)
     self.param_name = param_name
     setattr(self, param_name, downsampler)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._LearnedDownsampleOp({self.C_in}, {self.C_out}, {self.scale_factor}, {self.groups})"
 
   def _initialize_parameters(self):
     downsampler = getattr(self, self.param_name)
@@ -1239,6 +1733,18 @@ class LearnedDownsampleOp(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"LearnedDownsample_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    downsampler = getattr(self, self.param_name)
+    node2params[calling_id] = [downsampler.weight, downsampler.bias]
+
   def forward(self, x):
     downsampler = getattr(self, self.param_name)
     out = downsampler(x)
@@ -1246,6 +1752,13 @@ class LearnedDownsampleOp(nn.Module):
       print(f'down input size {x.shape}')
       print(f'output shape {out.shape}')
     return out
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1260,6 +1773,8 @@ class PeriodicConvOp(nn.Module):
     self._operands = nn.ModuleList([operand])
     self.period = period
     self.kwidth = kwidth
+    self.C_in = C_in
+    self.C_out = C_out
     self.param_name = param_name
 
     im2col = nn.Unfold(kwidth, padding=kwidth//2)
@@ -1275,6 +1790,9 @@ class PeriodicConvOp(nn.Module):
 
     self.output = None
 
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._PeriodicConvOp({self.C_in}, {self.C_out}, {self.period}, {self.kwidth})"
+
   def _initialize_parameters(self):
     conv = getattr(self, self.param_name+"_conv")
     nn.init.xavier_normal_(conv.weight)
@@ -1289,6 +1807,18 @@ class PeriodicConvOp(nn.Module):
       operand = self._operands[0].run(model_inputs)
       self.output = self.forward(operand)
     return self.output 
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"PeriodicConv_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    conv = getattr(self, self.param_name+"_conv")
+    node2params[calling_id] = [conv.weight, conv.bias]
 
   def forward(self, x):
     im2col = getattr(self, self.param_name+"_im2col")
@@ -1318,6 +1848,13 @@ class PeriodicConvOp(nn.Module):
     out = unpack(conv_output) # batch_size, c_out, h, w
     return out
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
 
@@ -1329,11 +1866,15 @@ class PeriodicConvV2Op(nn.Module):
     self.period = period
     self.kwidth = kwidth
     self.param_name = param_name
-    self.out_c = C_out 
+    self.C_in = C_in
+    self.C_out = C_out
     conv = nn.Conv2d(C_in, C_out*period**2, kwidth, padding=kwidth//2, bias=False)
     setattr(self, param_name, conv)
 
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._PeriodicConvV2Op({self.C_in}, {self.C_out}, {self.period}, {self.kwidth})"
 
   def _initialize_parameters(self):
     conv = getattr(self, self.param_name)
@@ -1350,8 +1891,19 @@ class PeriodicConvV2Op(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"PeriodicConvV2_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    conv = getattr(self, self.param_name+"_conv")
+    node2params[calling_id] = [conv.weight, conv.bias]
+
   def forward(self, x):
-   
     conv = getattr(self, self.param_name)
     conv_out = conv(x)
 
@@ -1369,6 +1921,13 @@ class PeriodicConvV2Op(nn.Module):
 
     return out
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
 
@@ -1379,6 +1938,9 @@ class PackOp(nn.Module):
     self._operands = nn.ModuleList([operand])
     self.scale_factor = factor
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._PackOp({self.scale_factor})"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -1392,6 +1954,17 @@ class PackOp(nn.Module):
       operand = self._operands[0].run(model_inputs)
       self.output = self.forward(operand)
     return self.output 
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"Pack_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   def forward(self, x):
     factor = self.scale_factor
@@ -1408,6 +1981,13 @@ class PackOp(nn.Module):
           packed[:,outc,:,:] = x[:, c, i::factor, j::factor] 
     return packed
     
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
 
@@ -1417,10 +1997,15 @@ class LearnedPackOp(nn.Module):
     super(LearnedPackOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.scale_factor = factor
+    self.C_in = C_in
+    self.C_out = C_out
     f = nn.Conv2d(C_in, C_out, factor, stride=factor, bias=False, padding=0)
     self.param_name = param_name
     setattr(self, param_name, f)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._LearnedPackOp({self.C_in}, {self.C_out}, {self.scale_factor})"
 
   def _initialize_parameters(self):
     f = getattr(self, self.param_name)
@@ -1437,10 +2022,29 @@ class LearnedPackOp(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"LearnedPack_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    conv = getattr(self, self.param_name)
+    node2params[calling_id] = [conv.weight, conv.bias]
+
   def forward(self, x): 
     f = getattr(self, self.param_name)
     out = f(x)
     return out
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1453,10 +2057,13 @@ class UnpackOp(nn.Module):
   def __init__(self, operand, C_in, factor):
     super(UnpackOp, self).__init__()
     self._operands = nn.ModuleList([operand])
-    self.in_c = C_in
+    self.C_in = C_in
     self.scale_factor = factor
     self.pixel_shuffle = nn.PixelShuffle(upscale_factor=factor)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._UnpackOp({self.C_in}, {self.scale_factor})"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -1471,9 +2078,27 @@ class UnpackOp(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"Unpack_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
+
   def forward(self, x):
     return self.pixel_shuffle(x)
-    
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
 
@@ -1482,12 +2107,15 @@ class BilinearUpsampleOp(nn.Module):
   def __init__(self, operand, C_in, scale_factor, param_name):
     super(BilinearUpsampleOp, self).__init__()
     self._operands = nn.ModuleList([operand])
-    self.in_c = C_in
+    self.C_in = C_in
     self.scale_factor = scale_factor
     self.param_name = param_name
     bilinear = nn.Upsample(scale_factor=scale_factor, mode='bilinear')
     setattr(self, self.param_name, bilinear)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._BilinearUpsampleOp({self.C_in}, {self.scale_factor})"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -1501,6 +2129,17 @@ class BilinearUpsampleOp(nn.Module):
       operand = self._operands[0].run(model_inputs)
       self.output = self.forward(operand)
     return self.output 
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"BilinearUpsample_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
 
   def forward(self, x):
     upsampler = getattr(self, self.param_name)
@@ -1509,7 +2148,14 @@ class BilinearUpsampleOp(nn.Module):
       print(f'up input shape {x.shape}')
       print(f'out shape {out.shape}')
     return out
-    
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
 
@@ -1518,14 +2164,18 @@ class LearnedUpsampleOp(nn.Module):
   def __init__(self, operand, C_in, C_out, scale_factor, groups, param_name):
     super(LearnedUpsampleOp, self).__init__()
     self._operands = nn.ModuleList([operand])
-    self.in_c = C_in
-    self.out_c = C_out
+    self.C_in = C_in
+    self.C_out = C_out
+    self.groups = groups
     self.scale_factor = scale_factor
     self.param_name = param_name
-    upsampler = nn.ConvTranspose2d(self.in_c, self.out_c, scale_factor, groups=groups, stride=scale_factor)
+    upsampler = nn.ConvTranspose2d(self.C_in, self.C_out, scale_factor, groups=groups, stride=scale_factor)
 
     setattr(self, self.param_name, upsampler)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._LearnedUpsampleOp({self.C_in}, {self.C_out}, {self.scale_factor}, {self.groups})"
 
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
@@ -1540,10 +2190,29 @@ class LearnedUpsampleOp(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"LearnedUpsample_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    upsampler = getattr(self, self.param_name)
+    node2params[calling_id] = [upsampler.weight, upsampler.bias]
+
   def forward(self, x):
     upsampler = getattr(self, self.param_name)
     return upsampler(x)
-    
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
+
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
 
@@ -1552,10 +2221,16 @@ class Conv1x1Op(nn.Module):
   def __init__(self, operand, C_in, C_out, groups, param_name):
     super(Conv1x1Op, self).__init__()
     self._operands = nn.ModuleList([operand])
+    self.C_in = C_in
+    self.C_out = C_out
+    self.groups = groups
     f = nn.Conv2d(C_in, C_out, (1, 1), groups=groups, bias=False, padding=0)
     self.param_name = param_name
     setattr(self, param_name, f)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._Conv1x1Op({self.C_in}, {self.C_out}, {self.groups})"
 
   def _initialize_parameters(self):
     f = getattr(self, self.param_name)
@@ -1572,10 +2247,29 @@ class Conv1x1Op(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"Conv1x1_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    conv = getattr(self, self.param_name)
+    node2params[calling_id] = [conv.weight, conv.bias]
+
   def forward(self, x): 
     f = getattr(self, self.param_name)
     out = f(x)
     return out
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1586,9 +2280,15 @@ class DiagLRConv(nn.Module):
   def __init__(self, C_in, C_out, kernel_size, padding, param_name):
     super(DiagLRConv, self).__init__()
     self.padding = padding
+    self.C_in = C_in
+    self.C_out = C_out
+    self.kernel_size = kernel_size
     filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size))
     self.param_name = param_name
     setattr(self, param_name, filter_w)
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._DiagLRConv({self.C_in}, {self.C_out}, {self.kernel_size}, {self.padding})"
 
   def _initialize_parameters(self):
     filter_w = getattr(self, self.param_name)
@@ -1599,14 +2299,24 @@ class DiagLRConv(nn.Module):
     filter_w = getattr(self, self.param_name)
     return nn.functional.conv2d(x, torch.diag_embed(filter_w), padding=padding)
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
+
   def to_gpu(self, gpu_id):
-    pass
+    return
 
 # 1D diagonal convolution from top right corner to bottom left corner
 class DiagRLConv(nn.Module):
   def __init__(self, C_in, C_out, kernel_size, padding, param_name):
     super(DiagRLConv, self).__init__()
     self.padding = padding
+    self.C_in = C_in
+    self.C_out = C_out
+    self.kernel_size = kernel_size
     # self.mask = torch.zeros(C_out, C_in, kernel_size, kernel_size).cuda()
     filter_w = nn.Parameter(torch.zeros(C_out, C_in, kernel_size, kernel_size))
     self.param_name = param_name
@@ -1615,6 +2325,9 @@ class DiagRLConv(nn.Module):
    
     for i in range(kernel_size):
       self.mask[..., i, kernel_size-i-1] = 1.0
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._DiagRLConv({self.C_in}, {self.C_out}, {self.kernel_size}, {self.padding})"
 
   def _initialize_parameters(self):
     filter_w = getattr(self, self.param_name)
@@ -1626,6 +2339,13 @@ class DiagRLConv(nn.Module):
     #   self.mask = self.mask.to(device=f"cuda:{self.gpu_id}")
     return nn.functional.conv2d(x, (filter_w * self.mask), padding=self.padding)
 
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
+
   def to_gpu(self, gpu_id):
     self.mask = self.mask.to(device=f"cuda:{gpu_id}")
 
@@ -1636,7 +2356,10 @@ class Conv1DOp(nn.Module):
     self._operands = nn.ModuleList([operand])
     self.param_name_v = f"{param_name}_v"
     self.param_name_h = f"{param_name}_h"
-
+    self.C_in = C_in
+    self.C_out = C_out
+    self.groups = groups
+    self.kwidth = kwidth
     num_vfilters = C_out // 2
     num_hfilters = C_out - num_vfilters
     v = nn.Conv2d(C_in, num_vfilters, (kwidth, 1), groups=groups, bias=False, padding=(kwidth//2, 0))
@@ -1645,6 +2368,9 @@ class Conv1DOp(nn.Module):
     setattr(self, self.param_name_v, v)
     setattr(self, self.param_name_h, h)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._Conv1DOp({self.C_in}, {self.C_out}, {self.groups}, {self.kwidth})"
 
   def _initialize_parameters(self):
     v = getattr(self, self.param_name_v)
@@ -1664,10 +2390,30 @@ class Conv1DOp(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"Conv1D_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    v = getattr(self, self.param_name_v)
+    h = getattr(self, self.param_name_h)
+    node2params[calling_id] = [v.weight, v.bias, h.weight, h.bias]
+
   def forward(self, x):
     v = getattr(self, self.param_name_v)
     h = getattr(self, self.param_name_h)
     return torch.cat((v(x), h(x)), 1)
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1678,9 +2424,16 @@ class Conv2DOp(nn.Module):
     super(Conv2DOp, self).__init__()
     self._operands = nn.ModuleList([operand])
     self.param_name = param_name
+    self.C_in = C_in
+    self.C_out = C_out
+    self.groups = groups
+    self.kwidth = kwidth
     f = nn.Conv2d(C_in, C_out, (kwidth,kwidth), groups=groups, bias=False, padding=kwidth//2)
     setattr(self, self.param_name, f)
     self.output = None
+
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._Conv2DOp({self.C_in}, {self.C_out}, {self.groups}, {self.kwidth})"
 
   def _initialize_parameters(self):
     f = getattr(self, self.param_name)
@@ -1696,9 +2449,29 @@ class Conv2DOp(nn.Module):
       operand = self._operands[0].run(model_inputs)
       self.output = self.forward(operand)
     return self.output 
+
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"Conv2d_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    conv = getattr(self, self.param_name)
+    node2params[calling_id] = [conv.weight, conv.bias]
+
   def forward(self, x):
     f = getattr(self, self.param_name)
     return f(x)
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1711,6 +2484,9 @@ class GroupedSumOp(nn.Module):
     self._operands = nn.ModuleList([operand])
     self.output = None
 
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._GroupedSumOp({self.C_out})"
+
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
@@ -1724,11 +2500,29 @@ class GroupedSumOp(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"GroupeSum_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
+
   def forward(self, x):
     x_shape = list(x.shape)
     x_reshaped = torch.reshape(x, (x_shape[0], self.C_out, x_shape[1]//self.C_out, x_shape[2], x_shape[3]))
     out = x_reshaped.sum(2, keepdim=False) 
     return out
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
 
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
@@ -1741,6 +2535,9 @@ class InterleavedSumOp(nn.Module):
     self._operands = nn.ModuleList([operand])
     self.output = None
 
+  def genfieldname(self, calling_id):
+    return f"self.{calling_id} = simplified_torch_model._InterleavedSumOp({self.C_out})"
+
   def _initialize_parameters(self):
     self._operands[0]._initialize_parameters()
 
@@ -1754,11 +2551,29 @@ class InterleavedSumOp(nn.Module):
       self.output = self.forward(operand)
     return self.output 
 
+  """
+  for generating torchscript
+  """
+  def get_calling_order(self, model_inputs, ids2inputs, calling_order):
+    self._operands[0].get_calling_order(model_inputs, ids2inputs, calling_order)
+    ids2inputs[id(self)] = [id(self._operands[0])]
+    calling_order += [(f"InterleavedSum_{id(self)}", self)]
+
+  def map_node2param(self, calling_id, node2params):
+    return
+
   def forward(self, x):
     x_shape = list(x.shape)
     x_reshaped = torch.reshape(x, (x_shape[0], x_shape[1]//self.C_out, self.C_out, x_shape[2], x_shape[3]))
     out = x_reshaped.sum(1, keepdim=False) 
     return out
+
+  def genrun(self, calling_id, ids2inputs, inputs2varnames):
+    op_id1, = ids2inputs[id(self)]
+    op_var1 = inputs2varnames[op_id1]
+    output_varname = f"{calling_id}_out"
+    inputs2varnames[id(self)] = output_varname
+    return f"{output_varname} = self.{calling_id}({op_var1})"
     
   def to_gpu(self, gpu_id):
     self._operands[0].to_gpu(gpu_id)
